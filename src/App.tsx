@@ -590,6 +590,7 @@ export default function App() {
                     }}
                     onEditClick={handleStartEditProject}
                     canEdit={canEditProjects}
+                    isAdmin={currentUser.role === 'admin'}
                     onUpdateProjectCoordinates={(id, lat, lng) => {
                       const updated = projects.map(p => {
                         if (p.id === id) {
