@@ -321,4 +321,136 @@ export default function App() {
   // ==========================================
   // مزامنة صلاحيات ومستخدمي النظام مع سوبابيس
   // ==========================================
-  const handleSaveUserPermissions = async (updatedUser:
+  const handleSaveUserPermissions = async (updatedUser: User) => {
+    const payload = {
+      id: updatedUser.id,
+      username: updatedUser.username,
+      name: updatedUser.name,
+      role: updatedUser.role,
+      allowed_regions: updatedUser.allowedRegions,
+      allowed_scopes: updatedUser.allowedScopes,
+      password: updatedUser.password
+    };
+
+    const exists = users.some(u => u.id === updatedUser.id);
+    
+    if (exists) {
+      const { error } = await supabase
+        .from('users')
+        .update(payload)
+        .eq('id', updatedUser.id);
+      if (!error) showNotification(`تم تحديث الصلاحيات بالسيرفر للمهندس: ${updatedUser.name}`);
+    } else {
+      const { error } = await supabase
+        .from('users')
+        .insert([payload]);
+      if (!error) showNotification(`تم إنشاء مستخدم معتمد بالسيرفر: ${updatedUser.name}`);
+    }
+    fetchDataFromSupabase();
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', userId);
+    
+    if (!error) {
+      showNotification('تم إلغاء حساب المستخدم وسحب شهادات الاعتماد من السيرفر.');
+      fetchDataFromSupabase();
+    }
+  };
+
+  // Login form UI local states
+  const [loginTab, setLoginTab] = useState<'nwc' | 'admin'>('nwc');
+  const [nwcEmail, setNwcEmail] = useState('');
+  const [nwcPassword, setNwcPassword] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  if (!isLogged) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden font-sans" id="login-container">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-600/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="w-full max-w-md bg-white border border-slate-200/80 rounded-3xl shadow-2xl p-6 md:p-8 space-y-6 relative z-10">
+          
+          <div className="text-center space-y-3">
+            <div className="mx-auto w-14 h-14 bg-gradient-to-tr from-blue-700 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg text-white">
+              <Compass className="h-8 w-8 animate-spin-slow text-white" />
+            </div>
+            <div>
+              <span className="px-2.5 py-0.5 text-[9.5px] tracking-wide font-extrabold text-blue-800 bg-blue-50 rounded-full uppercase border border-blue-100">
+                شركة المياه الوطنية • NWC
+              </span>
+              <h2 className="text-base font-extrabold text-slate-900 mt-2">البوابة الجغرافية الموحدة للمخططات</h2>
+              <p className="text-[11px] text-slate-400 max-w-xs mx-auto mt-1 leading-relaxed">
+                بوابة التراخيص والمخططات التفاعلية لشبكات المياه والصرف الصحي بمدينة الرياض لموظفي قطاع التخطيط والتشغيل
+              </p>
+            </div>
+          </div>
+
+          {loginError && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3.5 rounded-xl text-xs text-center leading-relaxed">
+              <div className="font-bold flex items-center justify-center gap-1.5 mb-1">
+                <ShieldAlert className="h-4 w-4 shrink-0 text-rose-600" />
+                <span>طابع أمني مفقود</span>
+              </div>
+              <p>{loginError}</p>
+            </div>
+          )}
+
+          <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => { setLoginTab('nwc'); setLoginError(''); }}
+              className={`flex-1 text-center py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                loginTab === 'nwc' ? 'bg-white text-blue-700 shadow-md border border-slate-200/50' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Mail className="h-4 w-4" />
+              <span>موظفو NWC</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLoginTab('admin'); setLoginError(''); }}
+              className={`flex-1 text-center py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                loginTab === 'admin' ? 'bg-white text-blue-700 shadow-md border border-slate-200/50' : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Lock className="h-4 w-4" />
+              <span>مدير النظام</span>
+            </button>
+          </div>
+
+          {loginTab === 'nwc' ? (
+            <form onSubmit={handleNwcSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-700 block">البريد الإلكتروني للشركة:</label>
+                <input
+                  type="email"
+                  required
+                  value={nwcEmail}
+                  onChange={e => setNwcEmail(e.target.value)}
+                  placeholder="username@nwc.com.sa"
+                  className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-slate-800 outline-none font-mono text-left"
+                  dir="ltr"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-700 block">كلمة المرور الخاصة بحسابك:</label>
+                <input
+                  type="password"
+                  required
+                  value={nwcPassword}
+                  onChange={e => setNwcPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none text-slate-800 outline-none font-mono text-center tracking-widest"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full mt-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs py-3.5 px-4 rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+              ></button>
