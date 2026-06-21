@@ -19,9 +19,15 @@ export function DashboardStats({ projects }: DashboardStatsProps) {
   const waterCount = projects.filter(p => p.scope.includes('مياه')).length;
   const otherScopeCount = total - sewageCount - waterCount;
 
-  const currentCount = projects.filter(p => p.status.includes('جاري') && !p.status.includes('الاستلام')).length;
-  const initialHandoverCount = projects.filter(p => p.status.includes('مسلم') || p.status.includes('الاستلام')).length;
-  const withdrawnCount = projects.filter(p => p.status.includes('مسحوب')).length;
+  const currentCount = projects.filter(p => 
+    (p.status.includes('جاري') || p.status.includes('تنفيذ') || p.status.includes('التنفيذ')) && !p.status.includes('الاستلام')
+  ).length;
+  const initialHandoverCount = projects.filter(p => 
+    p.status.includes('مسلم') || p.status.includes('الاستلام') || p.status.includes('مكتمل')
+  ).length;
+  const withdrawnCount = projects.filter(p => 
+    p.status.includes('مسحوب') || p.status.includes('معلق')
+  ).length;
   
   // Contractors breakdown
   const contractorsMap: Record<string, number> = {};
@@ -94,8 +100,8 @@ export function DashboardStats({ projects }: DashboardStatsProps) {
             <span className="text-sm font-medium text-slate-500">مشاريع جاري تنفيذها</span>
             <h3 className="text-3xl font-bold text-amber-600 tracking-tight">{currentCount}</h3>
             <div className="flex items-center gap-3 text-xs text-slate-400">
-              <span className="text-emerald-600 font-medium">{initialHandoverCount} مُسلم</span>
-              <span className="text-rose-600 font-medium">{withdrawnCount} مسحوب</span>
+              <span className="text-emerald-600 font-medium">{initialHandoverCount} مكتمل/مُسلم</span>
+              <span className="text-rose-600 font-medium">{withdrawnCount} معلق/مسحوب</span>
             </div>
           </div>
           <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">

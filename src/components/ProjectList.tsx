@@ -17,6 +17,23 @@ interface ProjectListProps {
 
 const ITEMS_PER_PAGE = 12;
 
+const getStatusBadgeClass = (status: string) => {
+  const norm = status.trim();
+  if (norm === 'مكتمل' || norm.includes('كامل') || norm.includes('مسلم') || norm.includes('الاستلام')) {
+    return 'bg-emerald-50 text-emerald-700 border border-emerald-100';
+  }
+  if (norm === 'قيد التنفيذ' || (norm.includes('جاري') && !norm.includes('الاستلام')) || norm === 'نشط') {
+    return 'bg-amber-50 text-amber-700 border border-amber-100';
+  }
+  if (norm === 'معلق' || norm === 'متوقف') {
+    return 'bg-slate-100 text-slate-600 border border-slate-200';
+  }
+  if (norm.includes('مسحوب') || norm === 'ملغي') {
+    return 'bg-rose-50 text-rose-700 border border-rose-100';
+  }
+  return 'bg-blue-50 text-blue-700 border border-blue-100';
+};
+
 export function ProjectList({ projects, selectedProject, onSelectProject, currentUser, onToggleFavorite }: ProjectListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegion, setSelectedRegion] = useState('الكل');
@@ -309,13 +326,7 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
 
                 {/* Badges / Small Action Button */}
                 <div className="flex items-center justify-between sm:justify-end gap-2.5 pr-3.5 sm:pr-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
-                  <span className={`text-[9px] px-2 py-0.5 rounded font-bold whitespace-nowrap ${
-                    p.status.includes('جاري') && !p.status.includes('الاستلام')
-                      ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                      : p.status.includes('مسلم') || p.status.includes('الاستلام')
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                        : 'bg-rose-50 text-rose-700 border border-rose-100'
-                  }`}>
+                  <span className={`text-[9px] px-2 py-0.5 rounded font-bold whitespace-nowrap ${getStatusBadgeClass(p.status)}`}>
                     {p.status}
                   </span>
 
@@ -370,13 +381,7 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
                         <Star className={`h-3.5 w-3.5 ${p.isFavorite ? 'fill-amber-400 text-amber-500' : 'text-slate-300'}`} />
                       </button>
                     )}
-                    <span className={`text-[9px] px-2 py-0.5 rounded font-bold whitespace-nowrap ${
-                      p.status.includes('جاري') && !p.status.includes('الاستلام')
-                        ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                        : p.status.includes('مسلم') || p.status.includes('الاستلام')
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                          : 'bg-rose-50 text-rose-700 border border-rose-100'
-                    }`}>
+                    <span className={`text-[9px] px-2 py-0.5 rounded font-bold whitespace-nowrap ${getStatusBadgeClass(p.status)}`}>
                       {p.status}
                     </span>
                   </div>
