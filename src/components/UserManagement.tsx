@@ -64,14 +64,21 @@ export function UserManagement({ users, currentUser, onSaveUser, onDeleteUser }:
       name: '',
       role: 'viewer',
       allowedRegions: ['الكل'],
-      allowedScopes: ['الكل']
+      allowedScopes: ['الكل'],
+      password: 'nwc' + Math.floor(1000 + Math.random() * 9000) // Default random password starting with nwc
     });
   };
 
   const handleStartEdit = () => {
     if (!isAdmin || !selectedUser) return;
     setIsEditing(true);
-    setFormData({ ...selectedUser });
+    const displayedUsername = selectedUser.username.includes('@')
+      ? selectedUser.username
+      : `${selectedUser.username}@nwc.com.sa`;
+    setFormData({
+      ...selectedUser,
+      username: displayedUsername
+    });
   };
 
   const handleCheckboxChange = (field: 'allowedRegions' | 'allowedScopes', value: string) => {
@@ -106,17 +113,31 @@ export function UserManagement({ users, currentUser, onSaveUser, onDeleteUser }:
     e.preventDefault();
     if (!isAdmin) return;
     if (!formData.username || !formData.name) {
-      alert('الرجاء تعبئة اسم المستخدم والاسم الثلاثي');
+      alert('الرجاء تعبئة البريد الإلكتروني والاسم الثلاثي');
+      return;
+    }
+
+    const emailInput = formData.username.trim().toLowerCase();
+    const nwcRegex = /^[a-zA-Z0-9._%+-]+@nwc\.com\.sa$/;
+    if (!nwcRegex.test(emailInput)) {
+      alert('خطأ في إدخال البريد: يجب أن ينتهي البريد الإلكتروني الرسمي للمستخدم بنطاق شركة المياه الوطنية @nwc.com.sa');
+      return;
+    }
+
+    const prefix = emailInput.split('@')[0];
+    if (!prefix) {
+      alert('الرجاء كتاية اسم المستخدم (البادئة) بشكل صحيح قبل النطاق.');
       return;
     }
 
     const savedUser: User = {
       id: formData.id || `user_${Date.now()}`,
-      username: formData.username.trim().toLowerCase(),
+      username: prefix,
       name: formData.name.trim(),
       role: formData.role as 'admin' | 'editor' | 'viewer',
       allowedRegions: formData.allowedRegions || ['الكل'],
-      allowedScopes: formData.allowedScopes || ['الكل']
+      allowedScopes: formData.allowedScopes || ['الكل'],
+      password: formData.password ? formData.password.trim() : 'nwc1234'
     };
 
     onSaveUser(savedUser);
@@ -233,7 +254,7 @@ export function UserManagement({ users, currentUser, onSaveUser, onDeleteUser }:
 
             {/* Basic Info */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1">
+              <div className="space-y-1 sm:col-span-2">
                 <label className="text-xs font-semibold text-slate-600">الاسم الثلاثي أو القطاع</label>
                 <input
                   type="text"
@@ -246,14 +267,27 @@ export function UserManagement({ users, currentUser, onSaveUser, onDeleteUser }:
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600">اسم المستخدم (المعرف)</label>
+                <label className="text-xs font-semibold text-slate-600">البريد الإلكتروني للشركة (يجب أن ينتهي بـ @nwc.com.sa)</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="f.mugrin@nwc.com.sa"
+                  className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white font-mono text-left"
+                  dir="ltr"
+                  value={formData.username || ''}
+                  onChange={e => setFormData({ ...formData, username: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-grey-600">كلمة مرور الحساب (لصاحب البريد)</label>
                 <input
                   type="text"
                   required
-                  placeholder="مثال: f.mugrin"
+                  placeholder="مثال: nwc1234"
                   className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white font-mono"
-                  value={formData.username || ''}
-                  onChange={e => setFormData({ ...formData, username: e.target.value })}
+                  value={formData.password || ''}
+                  onChange={e => setFormData({ ...formData, password: e.target.value })}
                 />
               </div>
             </div>
@@ -407,22 +441,30 @@ export function UserManagement({ users, currentUser, onSaveUser, onDeleteUser }:
               </div>
 
               {/* Badges and parameters summary */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 col-span-1">
                   <span className="text-[10px] text-slate-400 font-bold block mb-1">المركبة الأمنية للمستخدم</span>
                   <div className="flex items-center gap-1.5">
-                    <Shield className="h-4 w-4 text-indigo-500" />
-                    <span className="text-sm font-bold text-slate-800">
-                      {selectedUser.role === 'admin' ? 'مدير النظام (كامل الصلاحيات)' : selectedUser.role === 'editor' ? 'محرر خرائط فنية' : 'مستعرض خرائط فقط'}
+                    <Shield className="h-4 w-4 text-indigo-500 shrink-0" />
+                    <span className="text-xs font-bold text-slate-800">
+                      {selectedUser.role === 'admin' ? 'مدير كامل' : selectedUser.role === 'editor' ? 'محرر خرائط فنية' : 'مستعرض خرائط فقط'}
                     </span>
                   </div>
                 </div>
 
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 col-span-1">
                   <span className="text-[10px] text-slate-400 font-bold block mb-1">حالة الحساب بمركز التنسيق</span>
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span className="text-sm font-semibold text-slate-800">نَشِط ومتصل لـ KMZ</span>
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                    <span className="text-xs font-semibold text-slate-800">نَشِط ومتصل لـ KMZ</span>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50/40 p-3.5 rounded-xl border border-blue-100/60 col-span-2 sm:col-span-1">
+                  <span className="text-[10px] text-blue-500 font-bold block mb-1">كلمة المرور المسجلة له</span>
+                  <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-blue-800">
+                    <Key className="h-4 w-4 text-blue-500 shrink-0" />
+                    <span>{selectedUser.password || 'nwc1234'}</span>
                   </div>
                 </div>
               </div>

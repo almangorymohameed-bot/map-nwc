@@ -18,6 +18,7 @@ export interface Project {
   region: string; // شمال الرياض, جنوب الرياض, غرب الرياض, المحافظات الشمالية, المحافظات الجنوبية, المحافظات الغربية, المتفرقات
   subProgram: string;
   mapUrl: string;
+  isFavorite?: boolean;
 }
 
 export interface User {
@@ -27,4 +28,5 @@ export interface User {
   role: 'admin' | 'editor' | 'viewer';
   allowedRegions: string[]; // e.g. ["شمال الرياض"] - empty or ["الكل"] means all regions
   allowedScopes: string[];  // e.g. ["مياه", "صرف صحي"] - empty or ["الكل"] means all scopes
+  password?: string; // كلمة المرور الخاصة بالمستخدم
 }

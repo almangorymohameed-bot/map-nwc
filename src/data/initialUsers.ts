@@ -12,7 +12,8 @@ export const INITIAL_USERS: User[] = [
     name: 'المهندس مدير النظام (الكل)',
     role: 'admin',
     allowedRegions: ['الكل'],
-    allowedScopes: ['الكل']
+    allowedScopes: ['الكل'],
+    password: '20302060'
   },
   {
     id: 'riyadh_eng',
@@ -20,7 +21,8 @@ export const INITIAL_USERS: User[] = [
     name: 'مهندس مشاريع وحدة الرياض',
     role: 'editor',
     allowedRegions: ['شمال الرياض', 'جنوب الرياض', 'غرب الرياض', 'المتفرقات'],
-    allowedScopes: ['الكل']
+    allowedScopes: ['الكل'],
+    password: 'nwc1234'
   },
   {
     id: 'govs_eng',
@@ -28,7 +30,8 @@ export const INITIAL_USERS: User[] = [
     name: 'مهندس مشاريع المحافظات',
     role: 'editor',
     allowedRegions: ['المحافظات الشمالية', 'المحافظات الجنوبية', 'المحافظات الغربية'],
-    allowedScopes: ['الكل']
+    allowedScopes: ['الكل'],
+    password: 'nwc1234'
   },
   {
     id: 'water_monitor',
@@ -36,7 +39,8 @@ export const INITIAL_USERS: User[] = [
     name: 'مراقب عام قطاع المياه',
     role: 'viewer',
     allowedRegions: ['الكل'],
-    allowedScopes: ['مياه']
+    allowedScopes: ['مياه'],
+    password: 'nwc1234'
   },
   {
     id: 'sewage_monitor',
@@ -44,7 +48,8 @@ export const INITIAL_USERS: User[] = [
     name: 'مراقب عام قطاع الصرف الصحي',
     role: 'viewer',
     allowedRegions: ['الكل'],
-    allowedScopes: ['صرف صحي']
+    allowedScopes: ['صرف صحي'],
+    password: 'nwc1234'
   },
   {
     id: 'guest_riyadh',
@@ -52,6 +57,7 @@ export const INITIAL_USERS: User[] = [
     name: 'زائر بلدية الرياض الفرعية',
     role: 'viewer',
     allowedRegions: ['شمال الرياض', 'جنوب الرياض'],
-    allowedScopes: ['الكل']
+    allowedScopes: ['الكل'],
+    password: 'nwc1234'
   }
 ];

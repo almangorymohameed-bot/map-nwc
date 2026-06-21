@@ -5,18 +5,19 @@
 
 import React, { useState, useMemo } from 'react';
 import { Project, User } from '../types';
-import { Search, MapPin, SlidersHorizontal, Droplet, Waves, RefreshCw, AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Eye, Globe, List, LayoutGrid } from 'lucide-react';
+import { Search, MapPin, SlidersHorizontal, Droplet, Waves, RefreshCw, AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Eye, Globe, List, LayoutGrid, Star } from 'lucide-react';
 
 interface ProjectListProps {
   projects: Project[];
   selectedProject: Project | null;
   onSelectProject: (project: Project) => void;
   currentUser: User;
+  onToggleFavorite?: (projectId: number) => void;
 }
 
 const ITEMS_PER_PAGE = 12;
 
-export function ProjectList({ projects, selectedProject, onSelectProject, currentUser }: ProjectListProps) {
+export function ProjectList({ projects, selectedProject, onSelectProject, currentUser, onToggleFavorite }: ProjectListProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegion, setSelectedRegion] = useState('الكل');
   const [selectedClassification, setSelectedClassification] = useState('الكل');
@@ -25,6 +26,7 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
   const [currentPage, setCurrentPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<'compact' | 'cards'>('compact');
+  const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
 
   // Filter lists derived dynamically from active accessible projects
   const uniqueRegions = useMemo(() => {
@@ -62,10 +64,11 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
       const matchesClassification = selectedClassification === 'الكل' || p.classification === selectedClassification;
       const matchesStatus = selectedStatus === 'الكل' || p.status === selectedStatus;
       const matchesScope = selectedScope === 'الكل' || p.scope === selectedScope;
+      const matchesFavorites = !showOnlyFavorites || !!p.isFavorite;
 
-      return matchesSearch && matchesRegion && matchesClassification && matchesStatus && matchesScope;
+      return matchesSearch && matchesRegion && matchesClassification && matchesStatus && matchesScope && matchesFavorites;
     });
-  }, [projects, searchTerm, selectedRegion, selectedClassification, selectedStatus, selectedScope]);
+  }, [projects, searchTerm, selectedRegion, selectedClassification, selectedStatus, selectedScope, showOnlyFavorites]);
 
   // Paginated views
   const totalPages = Math.ceil(filteredProjects.length / ITEMS_PER_PAGE);
@@ -98,9 +101,22 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
             />
           </div>
           <button
+            type="button"
+            onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
+            className={`flex items-center gap-1.5 px-3.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
+              showOnlyFavorites
+                ? 'bg-amber-50 border-amber-300 text-amber-700 shadow-3xs'
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+            title="عرض المشاريع المفضلة فقط"
+          >
+            <Star className={`h-4 w-4 ${showOnlyFavorites ? 'fill-amber-500 text-amber-500' : 'text-slate-400'}`} />
+            <span className="hidden sm:inline">المفضلة فقط</span>
+          </button>
+          <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-1.5 px-3.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
-              showFilters || selectedRegion !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || selectedScope !== 'الكل'
+              showFilters || selectedRegion !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || selectedScope !== 'الكل' || showOnlyFavorites
                 ? 'bg-blue-50 border-blue-200 text-blue-700'
                 : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
             }`}
@@ -206,7 +222,7 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
               </button>
             </div>
           </div>
-          {(selectedRegion !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || selectedScope !== 'الكل' || searchTerm) && (
+          {(selectedRegion !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || selectedScope !== 'الكل' || searchTerm || showOnlyFavorites) && (
             <button
               onClick={() => {
                 setSearchTerm('');
@@ -214,6 +230,7 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
                 setSelectedClassification('الكل');
                 setSelectedStatus('الكل');
                 setSelectedScope('الكل');
+                setShowOnlyFavorites(false);
               }}
               className="text-xs text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer"
             >
@@ -262,8 +279,21 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
                     </span>
                   </div>
 
-                  <h5 className="font-extrabold text-slate-800 text-xs sm:text-[13px] leading-relaxed" title={p.name}>
-                    {p.name}
+                  <h5 className="font-extrabold text-slate-800 text-xs sm:text-[13px] leading-relaxed flex items-center justify-between gap-2" title={p.name}>
+                    <span>{p.name}</span>
+                    {onToggleFavorite && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleFavorite(p.id);
+                        }}
+                        className="p-1 rounded-lg hover:bg-slate-100 text-amber-500 transition-all hover:scale-115 active:scale-90 shrink-0"
+                        title={p.isFavorite ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}
+                      >
+                        <Star className={`h-3.5 w-3.5 ${p.isFavorite ? 'fill-amber-400 text-amber-500' : 'text-slate-300'}`} />
+                      </button>
+                    )}
                   </h5>
 
                   {/* Expanded additional project details comfortably in compact list when selected */}
@@ -326,15 +356,30 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
                   <span className="text-[10px] font-mono text-slate-400 bg-slate-50 px-2 py-0.5 border border-slate-200/60 rounded">
                     Operational No: {p.operationalNumber}
                   </span>
-                  <span className={`text-[9px] px-2 py-0.5 rounded font-bold whitespace-nowrap ${
-                    p.status.includes('جاري') && !p.status.includes('الاستلام')
-                      ? 'bg-amber-50 text-amber-700 border border-amber-100'
-                      : p.status.includes('مسلم') || p.status.includes('الاستلام')
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                        : 'bg-rose-50 text-rose-700 border border-rose-100'
-                  }`}>
-                    {p.status}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {onToggleFavorite && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleFavorite(p.id);
+                        }}
+                        className="p-0.5 rounded hover:bg-slate-100 text-amber-500 transition-all hover:scale-115 active:scale-90 shrink-0"
+                        title={p.isFavorite ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}
+                      >
+                        <Star className={`h-3.5 w-3.5 ${p.isFavorite ? 'fill-amber-400 text-amber-500' : 'text-slate-300'}`} />
+                      </button>
+                    )}
+                    <span className={`text-[9px] px-2 py-0.5 rounded font-bold whitespace-nowrap ${
+                      p.status.includes('جاري') && !p.status.includes('الاستلام')
+                        ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                        : p.status.includes('مسلم') || p.status.includes('الاستلام')
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                          : 'bg-rose-50 text-rose-700 border border-rose-100'
+                    }`}>
+                      {p.status}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Name */}

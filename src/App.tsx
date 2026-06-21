@@ -85,6 +85,16 @@ export default function App() {
   const [successNotification, setSuccessNotification] = useState('');
 
   // 4. Persistent Synchronization effects
+  const [favoriteIds, setFavoriteIds] = useState<number[]>(() => {
+    const savedActive = localStorage.getItem('water_maps_active_user_id');
+    const userId = savedActive || 'admin';
+    const saved = localStorage.getItem(`water_maps_favorites_${userId}`);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { }
+    }
+    return [];
+  });
+
   useEffect(() => {
     localStorage.setItem('water_maps_projects', JSON.stringify(projects));
   }, [projects]);
@@ -96,6 +106,32 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('water_maps_active_user_id', currentUser.id);
   }, [currentUser]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(`water_maps_favorites_${currentUser.id}`);
+    if (saved) {
+      try {
+        setFavoriteIds(JSON.parse(saved));
+      } catch (e) {
+        setFavoriteIds([]);
+      }
+    } else {
+      setFavoriteIds([]);
+    }
+  }, [currentUser.id]);
+
+  useEffect(() => {
+    localStorage.setItem(`water_maps_favorites_${currentUser.id}`, JSON.stringify(favoriteIds));
+  }, [favoriteIds, currentUser.id]);
+
+  const handleToggleFavorite = (projectId: number) => {
+    setFavoriteIds(prev => {
+      const isFav = prev.includes(projectId);
+      const updated = isFav ? prev.filter(id => id !== projectId) : [...prev, projectId];
+      showNotification(isFav ? 'تمت الإزالة من المشاريع المفضلة ⭐️' : 'تمت الإضافة إلى المشاريع المفضلة ⭐');
+      return updated;
+    });
+  };
 
   // 5. Role-based Project Filtering Logic
   const visibleProjects = useMemo(() => {
@@ -112,8 +148,11 @@ export default function App() {
       const isScopeAllowed = isAllScopes || currentUser.allowedScopes.some(scopeType => p.scope.includes(scopeType));
 
       return isRegionAllowed && isScopeAllowed;
-    });
-  }, [projects, currentUser]);
+    }).map(p => ({
+      ...p,
+      isFavorite: favoriteIds.includes(p.id)
+    }));
+  }, [projects, currentUser, favoriteIds]);
 
   // 6. Selected Project Details resolver
   const selectedProject = useMemo(() => {
@@ -136,6 +175,7 @@ export default function App() {
   const [loginTab, setLoginTab] = useState<'nwc' | 'admin'>('nwc');
   const [nwcEmail, setNwcEmail] = useState('');
   const [nwcName, setNwcName] = useState('');
+  const [nwcPassword, setNwcPassword] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [loginError, setLoginError] = useState('');
 
@@ -160,6 +200,11 @@ export default function App() {
     const found = users.find(u => u.username.toLowerCase() === prefix);
 
     if (found) {
+      const correctPassword = found.password || 'nwc1234';
+      if (nwcPassword.trim() !== correctPassword) {
+        setLoginError('كلمة المرور المدخلة غير صحيحة! يرجى التأكد من كلمة المرور أو مراجعة مدير النظام.');
+        return;
+      }
       setCurrentUser(found);
       setIsLogged(true);
       localStorage.setItem('water_maps_is_logged', 'true');
@@ -320,6 +365,22 @@ export default function App() {
                   className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-slate-800 outline-none font-mono text-left"
                   dir="ltr"
                 />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-700 block">كلمة المرور الخاصة بحسابك:</label>
+                <input
+                  type="password"
+                  required
+                  value={nwcPassword}
+                  onChange={e => setNwcPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-slate-800 outline-none font-mono text-center tracking-widest placeholder:tracking-normal"
+                />
+              </div>
+
+              <div className="text-[9.5px] text-slate-400 font-semibold leading-normal text-right">
+                * الدخول مقصور على الحسابات المسجلة والمعتمدة مسبقاً من مدير النظام مع كلمة المرور المعطاة لك.
               </div>
 
               <button
@@ -565,6 +626,7 @@ export default function App() {
                         showNotification(`تم تحديد مشروع: ${proj.name}`);
                       }}
                       currentUser={currentUser}
+                      onToggleFavorite={handleToggleFavorite}
                     />
                   </div>
                 </div>
