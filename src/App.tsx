@@ -46,9 +46,6 @@ export default function App() {
     return localStorage.getItem('water_maps_is_logged') === 'true';
   });
 
-  // سطر تعريف الخطأ حق تسجيل الدخول المصلح
-  const [loginError, setLoginError] = useState<string>('');
-
   // 2. Core State (تبدأ مصفوفات فارغة ويتم تغذيتها لايف من سوبابيس)
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -57,6 +54,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const savedAndActive = localStorage.getItem('water_maps_active_user_id');
     if (savedAndActive) {
+      // سيتم مطابقتها بعد جلب المستخدمين من السيرفر، مرحلياً نضع قيمة افتراضية
       return { id: savedAndActive, username: 'admin', name: 'جاري التحميل...', role: 'admin', allowedRegions: ['الكل'], allowedScopes: ['الكل'], password: '' };
     }
     return INITIAL_USERS[0]; // Admin by default
@@ -71,6 +69,14 @@ export default function App() {
   const [showRoleSwitcherDropdown, setShowRoleSwitcherDropdown] = useState(false);
   const [successNotification, setSuccessNotification] = useState('');
 
+  // 3.1 Login states
+  const [loginTab, setLoginTab] = useState<'nwc' | 'admin'>('nwc');
+  const [nwcEmail, setNwcEmail] = useState('');
+  const [nwcName, setNwcName] = useState('');
+  const [nwcPassword, setNwcPassword] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
   // 4. Persistent Synchronization effects (المشاريع المفضلة)
   const [favoriteIds, setFavoriteIds] = useState<number[]>(() => {
     const savedActive = localStorage.getItem('water_maps_active_user_id');
@@ -82,20 +88,25 @@ export default function App() {
     return [];
   });
 
-  // جلب البيانات من Supabase عند تشغيل الموقع
+  // ==========================================
+  // دالة جلب البيانات من Supabase عند تشغيل الموقع
+  // ==========================================
   const fetchDataFromSupabase = async () => {
     setIsLoading(true);
     try {
+      // 1. جلب المشروعات مرتبة بالأحدث
       const { data: dbProjects, error: projError } = await supabase
         .from('projects')
         .select('*')
         .order('created_at', { ascending: false });
 
+      // 2. جلب المستخدمين المعتمدين
       const { data: dbUsers, error: userError } = await supabase
         .from('users')
         .select('*');
 
       if (!projError && dbProjects) {
+        // مطابقة وتغيير مسميات الحقول لتتوافق مع الـ Frontend إن وجدت
         const mappedProjects = dbProjects.map((p: any) => ({
           id: p.id,
           operationalNumber: p.operational_number,
@@ -114,6 +125,7 @@ export default function App() {
         }));
         setProjects(mappedProjects);
       } else {
+        // fallback للبيانات المحلية في حال عدم توفر داتا في السيرفر بعد
         setProjects(getParsedProjects());
       }
 
@@ -129,6 +141,7 @@ export default function App() {
         }));
         setUsers(mappedUsers);
 
+        // تعيين المستخدم الحالي النشط من السيرفر طالما مسجل دخول
         const savedAndActive = localStorage.getItem('water_maps_active_user_id');
         if (savedAndActive) {
           const found = mappedUsers.find(u => u.id === savedAndActive);
@@ -150,6 +163,7 @@ export default function App() {
     fetchDataFromSupabase();
   }, []);
 
+  // حفظ تعديل المفضلة محلياً
   useEffect(() => {
     localStorage.setItem('water_maps_active_user_id', currentUser.id);
   }, [currentUser]);
@@ -176,6 +190,7 @@ export default function App() {
     });
   };
 
+  // 5. Role-based Project Filtering Logic
   const visibleProjects = useMemo(() => {
     return projects.filter(p => {
       if (currentUser.role === 'admin') return true;
@@ -190,6 +205,7 @@ export default function App() {
     }));
   }, [projects, currentUser, favoriteIds]);
 
+  // 6. Selected Project Details resolver
   const selectedProject = useMemo(() => {
     if (!selectedProjectId) return null;
     const found = visibleProjects.find(p => p.id === selectedProjectId);
@@ -203,6 +219,7 @@ export default function App() {
     setTimeout(() => setSuccessNotification(''), 4000);
   };
 
+  // 7. Login Submission Handler
   const handleNwcSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -255,6 +272,9 @@ export default function App() {
     showNotification('تم تسجيل الخروج بنجاح وسحب ترخيص البوابة المؤقت.');
   };
 
+  // ==========================================
+  // حفظ وإدراج المشاريع الحية في سوبابيس لايف
+  // ==========================================
   const handleSaveProject = async (savedProj: Project) => {
     const payload = {
       operational_number: savedProj.operationalNumber,
@@ -264,7 +284,7 @@ export default function App() {
       contractor: savedProj.contractor,
       consultant: savedProj.consultant,
       status: savedProj.status,
-      scope: savedProj.scope[0],
+      scope: savedProj.scope[0], // تخزين القيمة الأولى كمصطلح نصي بالجدول
       classification: savedProj.classification,
       business_unit: savedProj.businessUnit,
       region: savedProj.region,
@@ -275,17 +295,22 @@ export default function App() {
     const exists = projects.some(p => p.id === savedProj.id);
     
     if (exists) {
+      // تحديث مشروع قائم بالسيرفر
       const { error } = await supabase
         .from('projects')
         .update(payload)
         .eq('id', savedProj.id);
+      
       if (!error) showNotification(`تم تحديث بيانات مشروع بالسيرفر: ${savedProj.name}`);
     } else {
+      // إدراج مشروع جديد كلياً
       const { error } = await supabase
         .from('projects')
         .insert([payload]);
+      
       if (!error) showNotification(`تم إضافة مشروع شبكة جديد بنجاح للسيرفر: ${savedProj.name}`);
     }
+    // إعادة إنعاش البيانات لمطابقتها فوراً
     fetchDataFromSupabase();
   };
 
@@ -301,60 +326,88 @@ export default function App() {
     setIsProjectModalOpen(true);
   };
 
+  // ==========================================
+  // مزامنة صلاحيات ومستخدمي النظام مع سوبابيس
+  // ==========================================
   const handleSaveUserPermissions = async (updatedUser: User) => {
     const payload = {
-      id: updatedUser.id,
       username: updatedUser.username,
       name: updatedUser.name,
       role: updatedUser.role,
       allowed_regions: updatedUser.allowedRegions,
       allowed_scopes: updatedUser.allowedScopes,
-      password: updatedUser.password
+      password: updatedUser.password || 'nwc1234'
     };
 
     const exists = users.some(u => u.id === updatedUser.id);
-    
-    if (exists) {
-      const { error } = await supabase
-        .from('users')
-        .update(payload)
-        .eq('id', updatedUser.id);
-      if (!error) showNotification(`تم تحديث الصلاحيات بالسيرفر للمهندس: ${updatedUser.name}`);
-    } else {
-      const { error } = await supabase
-        .from('users')
-        .insert([payload]);
-      if (!error) showNotification(`تم إنشاء مستخدم معتمد بالسيرفر: ${updatedUser.name}`);
+    try {
+      if (exists) {
+        // تحديث مستخدم قائم
+        const { error } = await supabase
+          .from('users')
+          .update(payload)
+          .eq('id', updatedUser.id);
+        
+        if (!error) {
+          showNotification(`تم حفظ إعداد الصلاحيات للمستخدم: ${updatedUser.name}`);
+        } else {
+          console.error("error updating user", error);
+        }
+      } else {
+        // إدراج مستخدم جديد
+        const { error } = await supabase
+          .from('users')
+          .insert([{
+            id: updatedUser.id,
+            ...payload
+          }]);
+        
+        if (!error) {
+          showNotification(`تم إنشاء مستخدم وصلاحيات جديدة بنجاح: ${updatedUser.name}`);
+        } else {
+          console.error("error inserting user", error);
+        }
+      }
+    } catch (err) {
+      console.error(err);
     }
+    // تحديث البيانات لايف
     fetchDataFromSupabase();
   };
 
   const handleDeleteUser = async (userId: string) => {
-    const { error } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', userId);
-    if (!error) {
-      showNotification('تم إلغاء حساب المستخدم وسحب شهادات الاعتماد من السيرفر.');
-      fetchDataFromSupabase();
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
+      
+      if (!error) {
+        showNotification('تم إلغاء حساب المستخدم وسحب شهادات الاعتماد.');
+      } else {
+        console.error("error deleting user", error);
+      }
+    } catch (err) {
+      console.error(err);
     }
+    fetchDataFromSupabase();
   };
 
-  const [loginTab, setLoginTab] = useState<'nwc' | 'admin'>('nwc');
-  const [nwcEmail, setNwcEmail] = useState('');
-  const [nwcPassword, setNwcPassword] = useState('');
-  const [adminPassword, setAdminPassword] = useState('');
-
+  // Intercept with high-fidelity corporate login if not authenticated
   if (!isLogged) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden font-sans" id="login-container">
+        {/* Decorative elements */}
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-600/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute inset-0 opacity-[0.03] polish-dot-grid pointer-events-none"></div>
+
         <div className="w-full max-w-md bg-white border border-slate-200/80 rounded-3xl shadow-2xl p-6 md:p-8 space-y-6 relative z-10">
           
+          {/* Logo & Vibe */}
           <div className="text-center space-y-3">
             <div className="mx-auto w-14 h-14 bg-gradient-to-tr from-blue-700 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg text-white">
-              <Compass className="h-8 w-8 text-white" />
+              <Compass className="h-8 w-8 animate-spin-slow text-white" />
             </div>
             <div>
               <span className="px-2.5 py-0.5 text-[9.5px] tracking-wide font-extrabold text-blue-800 bg-blue-50 rounded-full uppercase border border-blue-100">
@@ -367,6 +420,7 @@ export default function App() {
             </div>
           </div>
 
+          {/* Error notice */}
           {loginError && (
             <div className="bg-rose-50 border border-rose-200 text-rose-700 p-3.5 rounded-xl text-xs text-center leading-relaxed">
               <div className="font-bold flex items-center justify-center gap-1.5 mb-1">
@@ -377,22 +431,25 @@ export default function App() {
             </div>
           )}
 
-          <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
+          {/* Segmented control tabs */}
+          <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200 animate-pulse-once">
             <button
-              type="button"
               onClick={() => { setLoginTab('nwc'); setLoginError(''); }}
               className={`flex-1 text-center py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                loginTab === 'nwc' ? 'bg-white text-blue-700 shadow-md border border-slate-200/50' : 'text-slate-500 hover:text-slate-800'
+                loginTab === 'nwc' 
+                  ? 'bg-white text-blue-700 shadow-md border border-slate-200/50' 
+                  : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <Mail className="h-4 w-4" />
               <span>موظفو NWC</span>
             </button>
             <button
-              type="button"
               onClick={() => { setLoginTab('admin'); setLoginError(''); }}
               className={`flex-1 text-center py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                loginTab === 'admin' ? 'bg-white text-blue-700 shadow-md border border-slate-200/50' : 'text-slate-500 hover:text-slate-800'
+                loginTab === 'admin' 
+                  ? 'bg-white text-blue-700 shadow-md border border-slate-200/50' 
+                  : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <Lock className="h-4 w-4" />
@@ -400,6 +457,7 @@ export default function App() {
             </button>
           </div>
 
+          {/* Forms */}
           {loginTab === 'nwc' ? (
             <form onSubmit={handleNwcSubmit} className="space-y-4">
               <div className="space-y-1">
@@ -423,8 +481,12 @@ export default function App() {
                   value={nwcPassword}
                   onChange={e => setNwcPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none text-slate-800 outline-none font-mono text-center tracking-widest"
+                  className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-slate-800 outline-none font-mono text-center tracking-widest placeholder:tracking-normal"
                 />
+              </div>
+
+              <div className="text-[9.5px] text-slate-400 font-semibold leading-normal text-right">
+                * الدخول مقصور على الحسابات المسجلة والمعتمدة مسبقاً من مدير النظام مع كلمة المرور المعطاة لك.
               </div>
 
               <button
@@ -432,7 +494,7 @@ export default function App() {
                 className="w-full mt-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs py-3.5 px-4 rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
               >
                 <span>التحقق والدخول للبوابة الجغرافية</span>
-                <Compass className="h-4 w-4" />
+                <Compass className="h-4 w-4 animate-spin-slow" />
               </button>
             </form>
           ) : (
@@ -445,9 +507,13 @@ export default function App() {
                   value={adminPassword}
                   onChange={e => setAdminPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none text-slate-800 outline-none font-mono text-center tracking-widest"
+                  className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-slate-800 outline-none font-mono text-center tracking-widest placeholder:tracking-normal"
                 />
+                <div className="text-[9.5px] text-slate-400 font-semibold leading-normal mt-1 text-right">
+                  * مخصص لمدير النظام لتعديل الهيكل الإداري، والصلاحيات الجغرافية، والمنظومة الفنية للمراقبين.
+                </div>
               </div>
+
               <button
                 type="submit"
                 className="w-full mt-2 bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs py-3.5 px-4 rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
@@ -458,7 +524,7 @@ export default function App() {
             </form>
           )}
 
-          <div className="pt-4 border-t border-slate-100 text-center text-[9.5px] text-slate-400">
+          <div className="pt-4 border-t border-slate-100 text-center text-[9.5px] text-slate-400 leading-normal">
             بوابة آمنة ومحمية بالتنسيق مع شركة المياه الوطنية • 1447هـ / 2026م.
           </div>
         </div>
@@ -469,13 +535,15 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans" id="app-root">
       
+      {/* 1. Header & Navigation Panel */}
       <header className="bg-white border-b border-slate-200 text-slate-800 shadow-xs sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             
+            {/* Logo and App Title */}
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-md text-white">
-                <Compass className="h-6 w-6 text-white" />
+                <Compass className="h-6 w-6 animate-spin-slow text-white" />
               </div>
               <div>
                 <h1 className="text-sm font-extrabold tracking-tight text-slate-900">بوابة الخرائط والمخططات التفاعلية</h1>
@@ -483,6 +551,7 @@ export default function App() {
               </div>
             </div>
 
+            {/* User status badge & Logout */}
             <div className="flex items-center gap-3">
               <div className="hidden sm:block text-right">
                 <span className="text-[10px] text-slate-400 font-bold block">المستخدم الحالي</span>
@@ -491,6 +560,7 @@ export default function App() {
               <button
                 onClick={handleLogout}
                 className="p-2 text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 border border-rose-100 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+                title="تسجيل الخروج من النظام"
               >
                 <LogOut className="h-4 w-4" />
                 <span className="hidden sm:inline">تسجيل الخروج</span>
@@ -501,174 +571,201 @@ export default function App() {
         </div>
       </header>
 
+      {/* 2. Success dynamic alert */}
       {successNotification && (
-        <div className="bg-emerald-600 text-white text-xs px-6 py-3 font-semibold text-center flex items-center justify-center gap-2">
+        <div className="bg-emerald-600 text-white text-xs px-6 py-3 font-semibold shadow-inner text-center animate-pulse flex items-center justify-center gap-2">
           <ShieldCheck className="h-4 w-4" />
           <span>{successNotification}</span>
         </div>
       )}
 
-      {isLoading ? (
-        <div className="flex-1 flex flex-col items-center justify-center bg-white/50 space-y-3 min-h-[400px]">
-          <Compass className="h-10 w-10 text-blue-600 animate-spin" />
-          <p className="text-xs font-bold text-slate-600">جاري مزامنة وسحب مخططات شبكات المياه من سوبابيس لايف...</p>
-        </div>
-      ) : (
-        <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-          
-          <div className="bg-[#1E293B] p-4.5 rounded-2xl border border-slate-700/60 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-md">
-            <div className="flex items-center gap-3">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
-              <div>
-                <div className="text-xs text-slate-200">
-                  أنت تتصفح حالياً بصفة: <span className="font-bold text-blue-400">{currentUser.name}</span> ({
-                    currentUser.role === 'admin' ? 'صلاحية مدير النظام الكاملة' : currentUser.role === 'editor' ? 'صلاحية محرر خرائط وبيانات' : 'صلاحية عرض الخرائط فقط'
-                  })
-                </div>
-                <div className="text-[10px] text-slate-400 font-medium mt-0.5">
-                  الوصول المسموح: <span className="text-slate-300">المناطق [ {currentUser.allowedRegions.join('، ')} ]</span> | <span className="text-slate-300">القطاعات [ {currentUser.allowedScopes.join('، ')} ]</span>
-                </div>
+      {/* 3. Main Dashboard Wrapper */}
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+        
+        {/* Active Security badge */}
+        <div className="bg-slate-900 leading-normal p-4.5 rounded-2xl border border-slate-700/60 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-md relative overflow-hidden">
+          <div className="absolute inset-0 opacity-5 polish-dot-grid pointer-events-none"></div>
+          <div className="flex items-center gap-3 relative z-10">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></div>
+            <div>
+              <div className="text-xs text-slate-200">
+                أنت تتصفح حالياً بصفة: <span className="font-bold text-blue-400">{currentUser.name}</span> ({
+                  currentUser.role === 'admin' ? 'صلاحية مدير النظام الكاملة' : currentUser.role === 'editor' ? 'صلاحية محرر خرائط وبيانات' : 'صلاحية عرض الخرائط فقط'
+                })
+              </div>
+              <div className="text-[10px] text-slate-400 font-medium mt-0.5">
+                الوصول المسموح: <span className="text-slate-300">المناطق [ {currentUser.allowedRegions.join('، ')} ]</span> | <span className="text-slate-300">القطاعات [ {currentUser.allowedScopes.join('، ')} ]</span>
               </div>
             </div>
+          </div>
 
-            <div className="flex items-center gap-2">
-              {canEditProjects && (
+          <div className="flex items-center gap-2 relative z-10">
+            {canEditProjects && (
+              <button
+                onClick={handleStartAddNewProject}
+                className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm hover:shadow-md cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>إدراج مشروع خارطة جديد</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Navigation Tabs bar */}
+        <div className="border-b border-slate-200 flex justify-between items-center bg-white p-2.5 rounded-2xl border border-slate-100 shadow-2xs">
+          <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
+            {[
+              { id: 'maps', label: 'الخرائط والمشاريع التفاعلية', icon: Map },
+              { id: 'stats', label: 'لوحة الإحصائيات والمجملات', icon: Layers },
+              // Admin permission tab only visible to admin
+              ...(currentUser.role === 'admin' ? [{ id: 'users', label: 'إدارة وتوزيع صلاحيات الحسابات', icon: Users }] : [])
+            ].map(tab => {
+              const Icon = tab.icon;
+              const isSelected = activeTab === tab.id;
+              return (
                 <button
-                  onClick={handleStartAddNewProject}
-                  className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm cursor-pointer"
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                    isSelected
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
                 >
-                  <Plus className="h-4 w-4" />
-                  <span>إدراج مشروع خارطة جديد</span>
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span>{tab.label}</span>
                 </button>
-              )}
-            </div>
+              );
+            })}
           </div>
 
-          <div className="border-b border-slate-200 flex justify-between items-center bg-white p-2.5 rounded-2xl border border-slate-100">
-            <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
-              {[
-                { id: 'maps', label: 'الخرائط والمشاريع التفاعلية', icon: Map },
-                { id: 'stats', label: 'لوحة الإحصائيات والمجملات', icon: Layers },
-                ...(currentUser.role === 'admin' ? [{ id: 'users', label: 'إدارة وتوزيع صلاحيات الحسابات', icon: Users }] : [])
-              ].map(tab => {
-                const Icon = tab.icon;
-                const isSelected = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                      isSelected ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+          <div className="hidden md:flex items-center gap-2 text-xs text-slate-400 font-mono">
+            <span>المرجع الفني للبلديات: v1.12.0</span>
           </div>
+        </div>
 
-          <div className="space-y-6">
-            {activeTab === 'maps' && (
-              <div className="flex flex-col space-y-4">
-                <div className="xl:hidden bg-white p-1 rounded-2xl border border-slate-200 shadow-xs flex">
-                  <button
-                    type="button"
-                    onClick={() => setMobileViewMode('map')}
-                    className={`flex-1 text-center py-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                      mobileViewMode === 'map' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Map className="h-4 w-4 shrink-0" />
-                    <span>الخارطة التفاعلية والمسارات</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMobileViewMode('list')}
-                    className={`flex-1 text-center py-3 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                      mobileViewMode === 'list' ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-50'
-                    }`}
-                  >
-                    <FileSpreadsheet className="h-4 w-4 shrink-0" />
-                    <span>قائمة المشاريع والبيانات ({visibleProjects.length})</span>
-                  </button>
+        {/* 4. Tab Views content switch */}
+        <div className="space-y-6">
+          
+          {/* Active Tab: Interactive Maps Core */}
+          {activeTab === 'maps' && (
+            <div className="flex flex-col space-y-4">
+              
+              {/* Mobile Only Selector Card (Simple & friendly for small touch devices) */}
+              <div className="xl:hidden bg-white p-1 rounded-2xl border border-slate-200 shadow-xs flex animate-pulse-once">
+                <button
+                  type="button"
+                  onClick={() => setMobileViewMode('map')}
+                  className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    mobileViewMode === 'map'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <Map className="h-3.5 w-3.5 shrink-0" />
+                  <span>الخارطة التفاعلية</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMobileViewMode('list')}
+                  className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    mobileViewMode === 'list'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+                  <span>قائمة المشاريع ({visibleProjects.length})</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
+                
+                {/* Map Preview Column (Full Interactive embedded Maps Component) */}
+                <div 
+                  className={`xl:col-span-7 ${mobileViewMode === 'map' ? 'block' : 'hidden xl:block'}`} 
+                  id="map-port-view"
+                >
+                  <ProjectMapViewer 
+                    project={selectedProject} 
+                    projects={visibleProjects}
+                    onSelectProject={(proj) => {
+                      setSelectedProjectId(proj.id);
+                      setMobileViewMode('map'); // Switch to map when user selects
+                    }}
+                    onEditClick={handleStartEditProject}
+                    canEdit={canEditProjects}
+                    isAdmin={currentUser.role === 'admin'}
+                    onUpdateProjectCoordinates={(id, lat, lng) => {
+                      const updated = projects.map(p => {
+                        if (p.id === id) {
+                          const newUrl = `https://www.google.com/maps/d/viewer?mid=custom&ll=${lat},${lng}&z=13`;
+                          return { ...p, mapUrl: newUrl };
+                        }
+                        return p;
+                      });
+                      setProjects(updated);
+                    }}
+                  />
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
-                  <div className={`xl:col-span-7 ${mobileViewMode === 'map' ? 'block' : 'hidden xl:block'}`} id="map-port-view">
-                    <ProjectMapViewer 
-                      project={selectedProject} 
+                {/* Projects List & Filters Column */}
+                <div 
+                  className={`xl:col-span-5 flex flex-col ${mobileViewMode === 'list' ? 'block animate-in slide-in-from-bottom duration-250' : 'hidden xl:flex'}`}
+                >
+                  <div className="bg-white p-4 rounded-t-2xl border-t border-r border-l border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="h-4 w-4 text-slate-500 animate-pulse" />
+                      <span className="text-xs font-bold text-slate-800">قائمة عقود المشاريع التفاعلية للمنطقة</span>
+                    </div>
+                    <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
+                      {visibleProjects.length} مشروع مرخّص للتصفح
+                    </span>
+                  </div>
+                  <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-b-2xl max-h-[580px] overflow-y-auto w-full">
+                    <ProjectList 
                       projects={visibleProjects}
+                      selectedProject={selectedProject}
                       onSelectProject={(proj) => {
                         setSelectedProjectId(proj.id);
-                        setMobileViewMode('map');
+                        setMobileViewMode('map'); // Auto switch to map upon selecting a project! Very mobile friendly!
+                        showNotification(`تم تحديد مشروع: ${proj.name}`);
                       }}
-                      onEditClick={handleStartEditProject}
-                      canEdit={canEditProjects}
-                      isAdmin={currentUser.role === 'admin'}
-                      onUpdateProjectCoordinates={async (id, lat, lng) => {
-                        const newUrl = `https://maps.google.com/?q=${lat},${lng}&z=13`;
-                        const { error } = await supabase
-                          .from('projects')
-                          .update({ map_url: newUrl })
-                          .eq('id', id);
-                        if (!error) {
-                          showNotification('تم تحديث إحداثيات المشروع جغرافياً على السيرفر لايف');
-                          fetchDataFromSupabase();
-                        }
-                      }}
+                      currentUser={currentUser}
+                      onToggleFavorite={handleToggleFavorite}
                     />
                   </div>
-
-                  <div className={`xl:col-span-5 flex flex-col ${mobileViewMode === 'list' ? 'block' : 'hidden xl:flex'}`}>
-                    <div className="bg-white p-4 rounded-t-2xl border-t border-r border-l border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <FileSpreadsheet className="h-4 w-4 text-slate-500" />
-                        <span className="text-xs font-bold text-slate-800">قائمة عقود المشاريع التفاعلية للمنطقة</span>
-                      </div>
-                      <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
-                        {visibleProjects.length} مشروع مرخّص
-                      </span>
-                    </div>
-                    <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-b-2xl max-h-[580px] overflow-y-auto">
-                      <ProjectList 
-                        projects={visibleProjects}
-                        selectedProject={selectedProject}
-                        onSelectProject={(proj) => {
-                          setSelectedProjectId(proj.id);
-                          setMobileViewMode('map');
-                          showNotification(`تم تحديد مشروع: ${proj.name}`);
-                        }}
-                        currentUser={currentUser}
-                        onToggleFavorite={handleToggleFavorite}
-                      />
-                    </div>
-                  </div>
                 </div>
-              </div>
-            )}
 
-            {activeTab === 'stats' && (
-              <div className="animate-in fade-in duration-300">
-                <DashboardStats projects={visibleProjects} />
               </div>
-            )}
+            </div>
+          )}
 
-            {activeTab === 'users' && currentUser.role === 'admin' && (
-              <div className="animate-in fade-in duration-300">
-                <UserManagement 
-                  users={users} 
-                  currentUser={currentUser} 
-                  onSaveUser={handleSaveUserPermissions}
-                  onDeleteUser={handleDeleteUser}
-                />
-              </div>
-            )}
-          </div>
-        </main>
-      )}
+          {/* Active Tab: Analytics Dashboard Stats */}
+          {activeTab === 'stats' && (
+            <div className="animate-in fade-in duration-300">
+              <DashboardStats projects={visibleProjects} />
+            </div>
+          )}
 
+          {/* Active Tab: Users security configuration */}
+          {activeTab === 'users' && currentUser.role === 'admin' && (
+            <div className="animate-in fade-in duration-300">
+              <UserManagement 
+                users={users} 
+                currentUser={currentUser} 
+                onSaveUser={handleSaveUserPermissions}
+                onDeleteUser={handleDeleteUser}
+              />
+            </div>
+          )}
+
+        </div>
+
+      </main>
+
+      {/* 5. Modals for Adding / Editing Projects */}
       <ProjectModal 
         isOpen={isProjectModalOpen}
         project={editingProject}
@@ -676,6 +773,7 @@ export default function App() {
         onSave={handleSaveProject}
       />
 
+      {/* 6. Professional Footer */}
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-6 mt-12 text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">

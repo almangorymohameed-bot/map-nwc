@@ -727,7 +727,6 @@ export function ProjectMapViewer({
               allowFullScreen
               loading="lazy"
               referrerPolicy="no-referrer"
-              sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-top-navigation"
             ></iframe>
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-slate-50 space-y-3">
