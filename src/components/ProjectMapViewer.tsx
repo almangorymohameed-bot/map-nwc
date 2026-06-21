@@ -25,7 +25,8 @@ import {
   ShieldCheck,
   Edit,
   MapPin,
-  CheckCircle2
+  CheckCircle2,
+  ExternalLink
 } from 'lucide-react';
 
 interface ProjectMapViewerProps {
@@ -594,6 +595,22 @@ export function ProjectMapViewer({
               تعديل المخطط
             </button>
           )}
+
+          {/* External Map opening button restricted strictly to direct map URLs */}
+          <a
+            href={isMasterMap ? 'https://www.openstreetmap.org/#map=10/24.7136/46.6753' : (
+              mapMode === 'osm' 
+                ? `https://www.openstreetmap.org/?mlat=${getProjectCoordinates(project).lat}&mlon=${getProjectCoordinates(project).lng}#map=15/${getProjectCoordinates(project).lat}/${getProjectCoordinates(project).lng}`
+                : (project.mapUrl || `https://www.google.com/maps/search/?api=1&query=${getProjectCoordinates(project).lat},${getProjectCoordinates(project).lng}`)
+            )}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="فتح الخريطة والإحداثيات في نافذة مستقلة ومحصورة على خرائط ماب"
+            className="flex items-center gap-1.5 p-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-bold transition-all text-white cursor-pointer"
+          >
+            <ExternalLink className="h-3.5 w-3.5 text-indigo-200" />
+            <span>تبويب خارجي</span>
+          </a>
 
           <button
             onClick={() => setIsFullscreen(!isFullscreen)}

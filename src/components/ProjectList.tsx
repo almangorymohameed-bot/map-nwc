@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { Project, User } from '../types';
-import { Search, MapPin, SlidersHorizontal, Droplet, Waves, RefreshCw, AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Eye, Globe } from 'lucide-react';
+import { Search, MapPin, SlidersHorizontal, Droplet, Waves, RefreshCw, AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Eye, Globe, List, LayoutGrid } from 'lucide-react';
 
 interface ProjectListProps {
   projects: Project[];
@@ -24,6 +24,7 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
   const [selectedScope, setSelectedScope] = useState('الكل');
   const [currentPage, setCurrentPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState<'compact' | 'cards'>('compact');
 
   // Filter lists derived dynamically from active accessible projects
   const uniqueRegions = useMemo(() => {
@@ -171,9 +172,39 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
         )}
 
         {/* Filtering status indicator */}
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 pt-1">
-          <div>
-            تم العثور على <span className="font-bold text-blue-600">{filteredProjects.length}</span> من أصل <span className="font-semibold text-slate-800">{projects.length}</span> مشروع مفوض لحسابك
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 pt-1">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span>تم العثور على <span className="font-bold text-blue-600">{filteredProjects.length}</span> من أصل <span className="font-semibold text-slate-800">{projects.length}</span> مشروع مفوض لحسابك</span>
+            
+            {/* High fidelity mode toggle */}
+            <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 select-none shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewMode('compact')}
+                className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                  viewMode === 'compact'
+                    ? 'bg-white text-blue-700 shadow-3xs border border-slate-200/40'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="عرض قائمة مبسطة ذكية للجوال"
+              >
+                <List className="h-3 w-3" />
+                <span>مبسط للجوال</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                  viewMode === 'cards'
+                    ? 'bg-white text-blue-700 shadow-3xs border border-slate-200/40'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="عرض بطاقات تفصيلية"
+              >
+                <LayoutGrid className="h-3 w-3" />
+                <span>بطاقات تفصيلية</span>
+              </button>
+            </div>
           </div>
           {(selectedRegion !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || selectedScope !== 'الكل' || searchTerm) && (
             <button
@@ -193,11 +224,87 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
       </div>
 
       {/* Projects Grid List */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
+      <div className={viewMode === 'compact' ? 'flex flex-col gap-2' : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4'}>
         {paginatedProjects.map(p => {
           const isSelected = selectedProject?.id === p.id;
           const isWater = p.scope.includes('مياه');
           
+          if (viewMode === 'compact') {
+            return (
+              <div
+                key={p.id}
+                onClick={() => onSelectProject(p)}
+                className={`bg-white rounded-xl border p-3.5 cursor-pointer transition-all duration-200 hover:shadow-3xs relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                  isSelected 
+                    ? 'border-blue-500 ring-4 ring-blue-500/10 bg-blue-50/10' 
+                    : 'border-slate-200/80 hover:border-slate-300'
+                }`}
+              >
+                {/* RTL decorative color side-strip */}
+                <div className={`absolute top-0 bottom-0 right-0 w-1 ${
+                  isWater ? 'bg-cyan-500' : 'bg-emerald-500'
+                }`} />
+
+                {/* Info block */}
+                <div className="pr-3.5 flex-1 min-w-0 space-y-1 text-right">
+                  <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
+                    <span className="text-[9px] font-bold font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                      {p.operationalNumber}
+                    </span>
+                    <span className={`text-[9.5px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap ${
+                      isWater ? 'bg-cyan-50 text-cyan-800 border border-cyan-100' : 'bg-emerald-50 text-emerald-800 border border-emerald-100'
+                    }`}>
+                      {p.scope} • {p.classification}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-semibold flex items-center gap-1">
+                      <MapPin className="h-3 w-3 shrink-0 text-slate-300" />
+                      {p.region}
+                    </span>
+                  </div>
+
+                  <h5 className="font-extrabold text-slate-800 text-xs sm:text-[13px] leading-relaxed" title={p.name}>
+                    {p.name}
+                  </h5>
+
+                  {/* Expanded additional project details comfortably in compact list when selected */}
+                  {isSelected && (
+                    <div className="text-[10px] text-slate-600 grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-1.5 pt-2 mt-2 border-t border-slate-100/80 animate-in fade-in duration-200">
+                      <div><strong className="text-slate-400 font-bold">المقاول:</strong> <span className="text-slate-700 font-medium">{p.contractor || 'غير محدد'}</span></div>
+                      <div><strong className="text-slate-400 font-bold">الاستشاري:</strong> <span className="text-slate-700 font-medium">{p.consultant || 'مكتب الياردة'}</span></div>
+                      <div><strong className="text-slate-400 font-bold">رقم PO:</strong> <span className="text-slate-700 font-mono font-bold">{p.po || '-'}</span></div>
+                      <div><strong className="text-slate-400 font-bold">Unifier:</strong> <span className="text-slate-700 font-mono font-bold">{p.unifierNo || '-'}</span></div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Badges / Small Action Button */}
+                <div className="flex items-center justify-between sm:justify-end gap-2.5 pr-3.5 sm:pr-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+                  <span className={`text-[9px] px-2 py-0.5 rounded font-bold whitespace-nowrap ${
+                    p.status.includes('جاري') && !p.status.includes('الاستلام')
+                      ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                      : p.status.includes('مسلم') || p.status.includes('الاستلام')
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                        : 'bg-rose-50 text-rose-700 border border-rose-100'
+                  }`}>
+                    {p.status}
+                  </span>
+
+                  <button
+                    type="button"
+                    className={`flex items-center gap-1 font-bold px-2.5 py-1 rounded-lg transition-colors text-[10px] whitespace-nowrap shrink-0 cursor-pointer ${
+                      isSelected 
+                        ? 'bg-blue-600 text-white shadow-xs' 
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <Eye className="h-3 w-3" />
+                    <span>تحديد</span>
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div
               key={p.id}

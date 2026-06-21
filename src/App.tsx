@@ -156,11 +156,6 @@ export default function App() {
       return;
     }
 
-    if (!nwcName.trim()) {
-      setLoginError('الرجاء كتابة اسمك الكريم لتسجيل الحساب');
-      return;
-    }
-
     const prefix = email.split('@')[0];
     const found = users.find(u => u.username.toLowerCase() === prefix);
 
@@ -171,22 +166,7 @@ export default function App() {
       localStorage.setItem('water_maps_active_user_id', found.id);
       showNotification(`مرحباً بك مجدداً المهندس: ${found.name}`);
     } else {
-      const newUser: User = {
-        id: `user_${Date.now()}`,
-        username: prefix,
-        name: nwcName.trim(),
-        role: 'viewer', // default viewing role
-        allowedRegions: ['الكل'],
-        allowedScopes: ['الكل']
-      };
-      
-      const updatedUsers = [...users, newUser];
-      setUsers(updatedUsers);
-      setCurrentUser(newUser);
-      setIsLogged(true);
-      localStorage.setItem('water_maps_is_logged', 'true');
-      localStorage.setItem('water_maps_active_user_id', newUser.id);
-      showNotification(`تم تسجيل حسابك الجديد كمستعرض للخرائط: ${newUser.name}`);
+      setLoginError('عذراً، هذا البريد غير معتمد ومسجل مسبقاً في النظام. يرجى مراجعة مدير النظام (المشرف) لإضافة حسابك ومنحك الصلاحيات اللازمة قبل محاولة الدخول.');
     }
   };
 
@@ -330,18 +310,6 @@ export default function App() {
           {loginTab === 'nwc' ? (
             <form onSubmit={handleNwcSubmit} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700 block">الاسم الكريم (الكامل):</label>
-                <input
-                  type="text"
-                  required
-                  value={nwcName}
-                  onChange={e => setNwcName(e.target.value)}
-                  placeholder="مثال: المهندس محمد المنجري"
-                  className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-slate-800 outline-none"
-                />
-              </div>
-
-              <div className="space-y-1">
                 <label className="text-[11px] font-bold text-slate-700 block">البريد الإلكتروني للشركة:</label>
                 <input
                   type="email"
@@ -352,9 +320,6 @@ export default function App() {
                   className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-slate-800 outline-none font-mono text-left"
                   dir="ltr"
                 />
-                <div className="text-[9.5px] text-slate-400 font-semibold leading-normal mt-1 text-right">
-                  * يجب انتهاء البريد الإلكتروني بنطاق شركة المياه الوطنية <code className="font-mono bg-slate-100 text-blue-700 px-1 py-0.5 rounded">nwc.com.sa</code> حصراً للتحقق التلقائي.
-                </div>
               </div>
 
               <button
