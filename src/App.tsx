@@ -78,7 +78,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'maps' | 'stats' | 'users'>('maps');
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null); // defaulted to no single selected project
   // State for mobile view mode in maps: 'map' vs 'list'
-  const [mobileViewMode, setMobileViewMode] = useState<'map' | 'list'>('map');
+  const [mobileViewMode, setMobileViewMode] = useState<'map' | 'list'>('list');
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [showRoleSwitcherDropdown, setShowRoleSwitcherDropdown] = useState(false);

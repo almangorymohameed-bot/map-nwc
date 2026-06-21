@@ -26,7 +26,9 @@ import {
   Edit,
   MapPin,
   CheckCircle2,
-  ExternalLink
+  ExternalLink,
+  Lock,
+  Unlock
 } from 'lucide-react';
 
 interface ProjectMapViewerProps {
@@ -183,6 +185,15 @@ export function ProjectMapViewer({
 }: ProjectMapViewerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLeafletReady, setIsLeafletReady] = useState(false);
+
+  // Map Lock state to prevent traps when scrolling on mobile.
+  // Defaults to unlocked on desktop, but locked on mobile/touch screen for safe scrolling.
+  const [isMapUnlocked, setIsMapUnlocked] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1024; // screen size lg is generally desktop
+    }
+    return true;
+  });
   
   // Default map view mode:
   // 'osm': OpenStreetMap with interactive vector points (perfect fallback, respects security)
@@ -192,15 +203,6 @@ export function ProjectMapViewer({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
-
-  // Google Map Sync Authentication Simulated State
-  const [isGoogleAuthenticated, setIsGoogleAuthenticated] = useState<boolean>(() => {
-    return localStorage.getItem('google_maps_sync_auth') === 'true';
-  });
-  const [googleEmail] = useState<string>('almangorymohameed@gmail.com');
-  const [googleName] = useState<string>('م. محمد المنجري');
-  const [showGoogleLoginModal, setShowGoogleLoginModal] = useState(false);
-  const [isSigningInGoogle, setIsSigningInGoogle] = useState(false);
 
   // Live Geographic Inline Editing Mode
   const [isLocationSelectorActive, setIsLocationSelectorActive] = useState(false);
@@ -217,25 +219,6 @@ export function ProjectMapViewer({
   const onMapClickCallbackRef = useRef<(lat: number, lng: number) => void>();
   onMapClickCallbackRef.current = (lat: number, lng: number) => {
     setPendingCoords({ lat, lng });
-  };
-
-  const handleGoogleLogin = () => {
-    setIsSigningInGoogle(true);
-    setTimeout(() => {
-      setIsGoogleAuthenticated(true);
-      localStorage.setItem('google_maps_sync_auth', 'true');
-      setIsSigningInGoogle(false);
-      setShowGoogleLoginModal(false);
-      triggerFeedback('تم ربط حساب Google وتفعيل صلاحيات محرر الخرائط الجغرافية بنجاح!');
-    }, 1200);
-  };
-
-  const handleGoogleLogout = () => {
-    setIsGoogleAuthenticated(false);
-    localStorage.removeItem('google_maps_sync_auth');
-    setIsLocationSelectorActive(false);
-    setPendingCoords(null);
-    triggerFeedback('تم إلغاء ربط حساب Google وسحب ترخيص التوجيه المباشر.');
   };
 
   const triggerFeedback = (msg: string) => {
@@ -297,6 +280,24 @@ export function ProjectMapViewer({
     }
   }, []);
 
+  // Track map state for locking / unlocking dynamically to give smooth mobile pages scroll
+  useEffect(() => {
+    if (mapInstanceRef.current) {
+      const map = mapInstanceRef.current;
+      if (isMapUnlocked) {
+        if (map.dragging) map.dragging.enable();
+        if (map.touchZoom) map.touchZoom.enable();
+        if (map.doubleClickZoom) map.doubleClickZoom.enable();
+        if (map.scrollWheelZoom) map.scrollWheelZoom.enable();
+      } else {
+        if (map.dragging) map.dragging.disable();
+        if (map.touchZoom) map.touchZoom.disable();
+        if (map.doubleClickZoom) map.doubleClickZoom.disable();
+        if (map.scrollWheelZoom) map.scrollWheelZoom.disable();
+      }
+    }
+  }, [isMapUnlocked, isLeafletReady, mapMode]);
+
   // Sync / render open points map
   useEffect(() => {
     if (!isLeafletReady || mapMode !== 'osm' || !mapContainerRef.current) return;
@@ -311,7 +312,11 @@ export function ProjectMapViewer({
         zoom: 11,
         zoomControl: true,
         attributionControl: true,
-        tap: !L.Browser.mobile
+        tap: !L.Browser.mobile,
+        dragging: isMapUnlocked,
+        touchZoom: isMapUnlocked,
+        doubleClickZoom: isMapUnlocked,
+        scrollWheelZoom: isMapUnlocked
       });
 
       // Add high-performance public OpenStreetMap tiles
@@ -445,7 +450,7 @@ export function ProjectMapViewer({
             الموقع المحدد بالنقر المباشر
           </span>
           <h5 class="font-extrabold text-slate-900 text-xs mt-1.5 leading-snug mb-1">تعديل جيو-مكاني مؤقت</h5>
-          <p class="text-[10px] text-slate-500 leading-relaxed mb-2">انقر على زر "حفظ التعديلات" باللوحة لاعتماد التعديل وربطه بـ Google My Maps.</p>
+          <p class="text-[10px] text-slate-500 leading-relaxed mb-2">انقر على زر "اعتماد وحفظ" باللوحة لاعتماد تعديل الإحداثيات مباشرة للمشروع.</p>
           <div class="text-[9px] text-slate-500 font-mono space-y-0.5 mt-2 border-t border-slate-100 pt-1.5">
             <div>خط العرض: <strong class="text-slate-800">${pendingCoords.lat.toFixed(6)}</strong></div>
             <div>خط الطول: <strong class="text-slate-800">${pendingCoords.lng.toFixed(6)}</strong></div>
@@ -623,21 +628,19 @@ export function ProjectMapViewer({
       </div>
 
       {/* Security and authorization info banners */}
-      <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 flex items-center justify-between text-xs text-amber-800">
-        <div className="flex items-center gap-1.5 text-right">
-          <Shield className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-          <span>
-            {isMasterMap ? (
+      {isMasterMap && (
+        <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 flex items-center justify-between text-xs text-amber-800">
+          <div className="flex items-center gap-1.5 text-right w-full">
+            <Shield className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+            <span className="flex-1">
               <strong>مستعرض خرائط ماب المفتوحة (OpenStreetMap) التكاملي: يعرض حالياً {projects?.length || 0} نقطة جغرافية مأذونة تتبع صلاحيات حسابك الحالي.</strong>
-            ) : (
-              <>تأمين جيو-مكاني: نظام تشفير إحداثيات المشروعات قيد التشغيل والتحقق لحماية البيانات العامة.</>
-            )}
-          </span>
+            </span>
+          </div>
+          <div className="hidden lg:flex items-center gap-1 font-mono text-[9px] bg-amber-100 px-2 py-0.5 rounded text-amber-950 shrink-0 uppercase">
+            MAPS: OPENSTREETMAP_ACTIVE
+          </div>
         </div>
-        <div className="hidden lg:flex items-center gap-1 font-mono text-[9px] bg-amber-100 px-2 py-0.5 rounded text-amber-950 shrink-0 uppercase">
-          {isMasterMap ? 'MAPS: OPENSTREETMAP_ACTIVE' : 'SYSTEM: IP_PROXIED'}
-        </div>
-      </div>
+      )}
 
       {/* local notification toast inside map panel */}
       {feedbackMessage && (
@@ -647,126 +650,35 @@ export function ProjectMapViewer({
         </div>
       )}
 
-      {/* Google Sign-in Integration & Interactive Coordinates Editor Drawer Card */}
-      {!isMasterMap && canEdit && (
-        <div className="bg-slate-50 border-b border-slate-200/85 p-3 px-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs text-slate-700 leading-relaxed font-sans">
-          
-          {/* Column 1: Google Account connection status */}
-          <div className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-slate-200/60 shadow-2xs flex-1">
-            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200">
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05" />
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              {isGoogleAuthenticated ? (
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-slate-800 text-xs truncate" dir="ltr">{googleEmail}</span>
-                    <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 text-[8.5px] rounded-sm border border-emerald-100 font-extrabold">مُصادق</span>
-                  </div>
-                  <p className="text-[10.5px] text-slate-500 leading-snug">تم الربط ومزامنته بـ Google My Maps لتعديل مسار المشروع مباشراً.</p>
-                </div>
-              ) : (
-                <div>
-                  <p className="font-bold text-slate-800 text-[11.5px]">تعديل خرائط قوقل My Maps داخل النظام 🔓</p>
-                  <p className="text-[10px] text-slate-400">سجل دخول بقوقل لفتح ترخيص محرر خرائط ماب المفتوحة المطور.</p>
-                </div>
-              )}
-            </div>
-            <div>
-              {isGoogleAuthenticated ? (
-                <button
-                  type="button"
-                  onClick={handleGoogleLogout}
-                  className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-lg text-[10.5px] font-bold transition-all flex items-center gap-1 cursor-pointer"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  <span>فصل Google</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowGoogleLoginModal(true)}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10.5px] font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                >
-                  <LogIn className="h-3.5 w-3.5" />
-                  <span>ربط حساب Google</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Column 2: Interactive Coordinates relocation drawer */}
-          {isGoogleAuthenticated && (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white p-2 rounded-xl border border-slate-200/60 shadow-2xs">
-              {!isLocationSelectorActive ? (
-                <div className="flex items-center gap-1.5 p-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0"></span>
-                  <p className="text-[10 px] font-bold text-slate-700">ترخيص التعديل بالنقر نشط</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsLocationSelectorActive(true);
-                      setPendingCoords(null);
-                    }}
-                    className="mr-2 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-[10.5px] transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <Edit className="h-3 w-3 text-amber-400" />
-                    <span>تغيير موقع المشروع جغرافياً</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2 p-1">
-                  <div className="flex items-center gap-1 text-[10.5px] text-slate-500 font-bold ml-1 bg-amber-50 px-2 py-1 rounded">
-                    <MapPin className="h-3.5 w-3.5 text-amber-600 animate-bounce" />
-                    <span>انقر في أي مكان على الخريطة لتحديد الموقع المقترح:</span>
-                  </div>
-                  
-                  {pendingCoords ? (
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-[9.5px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                        عرض: {pendingCoords.lat.toFixed(5)}
-                      </span>
-                      <span className="font-mono text-[9.5px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">
-                        طول: {pendingCoords.lng.toFixed(5)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleSaveCoordinates}
-                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-[10.5px] transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <Save className="h-3.5 w-3.5" />
-                        <span>اعتماد وحفظ</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="text-[10px] text-amber-600 font-bold animate-pulse">بانتظار نقرة الفأرة على الخريطة...</span>
-                  )}
-                  
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsLocationSelectorActive(false);
-                      setPendingCoords(null);
-                    }}
-                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md font-bold text-[10.5px] transition-all cursor-pointer"
-                  >
-                    إلغاء
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-        </div>
-      )}
-
       {/* Map body */}
       <div className="flex-1 bg-slate-100 relative min-h-0">
+        {/* Floating map lock helper overlay for perfect page scrolling on mobile/touch screens */}
+        {isLeafletReady && mapMode === 'osm' && (
+          <div className="absolute top-3 left-3 z-[1000] flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => setIsMapUnlocked(!isMapUnlocked)}
+              className={`p-2 px-3.5 rounded-xl shadow-lg border text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer select-none active:scale-95 ${
+                isMapUnlocked
+                  ? 'bg-blue-600 border-blue-500 text-white hover:bg-blue-700'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              {isMapUnlocked ? (
+                <>
+                  <Unlock className="h-3.5 w-3.5 shrink-0 text-blue-100" />
+                  <span>تصفح الخريطة نشط (انقر للقفل)</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="h-3.5 w-3.5 shrink-0 text-rose-500" />
+                  <span>تفعيل حركة الخريطة 🗺️</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
         {/* OpenStreetMap dynamic container */}
         <div 
           ref={mapContainerRef} 
@@ -836,99 +748,6 @@ export function ProjectMapViewer({
           </div>
         )}
       </div>
-
-      {/* 7. Google Authenticator Selection Simulation Modal */}
-      {showGoogleLoginModal && (
-        <div 
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans animate-in fade-in duration-200"
-          dir="rtl"
-        >
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full overflow-hidden text-right transform transition-all duration-300 scale-in-center">
-            
-            {/* Modal Header */}
-            <div className="p-6 border-b border-rose-50/10 flex flex-col items-center text-center">
-              {/* Stylized Google Multi-color Logo */}
-              <div className="flex items-center gap-0.5 font-bold text-lg mb-3 select-none" style={{ fontFamily: '"Product Sans", "Inter", sans-serif' }}>
-                <span className="text-blue-500 text-2xl font-extrabold">G</span>
-                <span className="text-red-500 text-2xl font-extrabold">o</span>
-                <span className="text-yellow-500 text-2xl font-extrabold">o</span>
-                <span className="text-blue-500 text-2xl font-extrabold">g</span>
-                <span className="text-green-500 text-2xl font-extrabold">l</span>
-                <span className="text-red-500 text-2xl font-extrabold">e</span>
-              </div>
-              <h3 className="text-sm font-bold text-slate-800">تسجيل الدخول الآمن باستخدام Google</h3>
-              <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                لربط خريطة Google My Maps المجمّعة وتمكين التعديل الجغرافي للمسار والموقع من داخل التطبيق
-              </p>
-            </div>
-
-            {/* Modal Body - Accounts lists */}
-            <div className="p-5 space-y-4">
-              {isSigningInGoogle ? (
-                <div className="py-8 flex flex-col items-center justify-center text-center space-y-4">
-                  <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-bold text-slate-700">جاري الاتصال بخوادم بروتوكول Google Maps...</p>
-                    <p className="text-[10px] text-slate-400">التحقق من الشهادات والترميز الجيو-مكاني الرقمي</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  <p className="text-[10.5px] font-extrabold text-slate-400 block mb-1">اختر حساب مأذون لك للربط:</p>
-                  
-                  {/* Option 1: Current actual user email */}
-                  <button
-                    type="button"
-                    onClick={handleGoogleLogin}
-                    className="w-full text-right p-3 rounded-xl border border-slate-200 hover:border-slate-300 hover:bg-slate-50/50 transition-all flex items-center gap-3 cursor-pointer"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0 border border-blue-200 text-blue-700 font-extrabold text-xs">
-                      م
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-[11px] font-extrabold text-slate-800 block">م. محمد المنجري</span>
-                      <span className="text-[9.5px] text-slate-400 font-mono block truncate" dir="ltr">{googleEmail}</span>
-                    </div>
-                    <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-amber-50 text-amber-700 border border-amber-100">
-                      محرر معتمد
-                    </span>
-                  </button>
-
-                  {/* Option 2: Simulated other account */}
-                  <button
-                    type="button"
-                    className="w-full text-right p-3 rounded-xl border border-slate-100 bg-slate-50/40 text-slate-400 flex items-center gap-3 opacity-60 cursor-not-allowed text-xs"
-                    disabled
-                  >
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0 text-slate-400 font-bold text-xs">
-                      +
-                    </div>
-                    <div className="flex-1 text-right">
-                      <span className="text-[11px] block font-semibold text-slate-400">استخدام حساب قطاع مهندسي مياه الرياض</span>
-                      <span className="text-[9px] block text-slate-400">riyadh-engineers@nwc.com.sa</span>
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            {!isSigningInGoogle && (
-              <div className="bg-slate-50 p-4 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-                <span>تأمين بوابات Google المعتمدة 🛡️</span>
-                <button
-                  type="button"
-                  onClick={() => setShowGoogleLoginModal(false)}
-                  className="px-2.5 py-1 hover:bg-slate-200 text-slate-600 font-bold rounded-lg transition-colors cursor-pointer"
-                >
-                  إلغاء التراجع
-                </button>
-              </div>
-            )}
-
-          </div>
-        </div>
-      )}
 
     </div>
   );
