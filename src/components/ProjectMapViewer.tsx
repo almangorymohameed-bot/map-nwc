@@ -29,7 +29,8 @@ import {
   ExternalLink,
   Lock,
   Unlock,
-  Share2
+  Share2,
+  Globe
 } from 'lucide-react';
 
 interface ProjectMapViewerProps {
@@ -213,6 +214,7 @@ export function ProjectMapViewer({
   // 'osm': OpenStreetMap with interactive vector points (perfect fallback, respects security)
   // 'iframe': Original raw Google map iframe (if project has a valid URL and is not master)
   const [mapMode, setMapMode] = useState<'osm' | 'iframe'>('osm');
+  const [isIframeLoading, setIsIframeLoading] = useState(true);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -249,10 +251,13 @@ export function ProjectMapViewer({
     }
   };
 
-  // Automatically reset to OpenStreetMap mode if master map is selected
+  // Automatically reset map mode based on active project selection
   useEffect(() => {
-    if (project?.id === -1) {
+    setIsIframeLoading(true);
+    if (!project || project.id === -1) {
       setMapMode('osm');
+    } else {
+      setMapMode('iframe');
     }
   }, [project]);
 
@@ -322,8 +327,8 @@ export function ProjectMapViewer({
     // Instantiate map if not loaded
     if (!mapInstanceRef.current) {
       mapInstanceRef.current = L.map(mapContainerRef.current, {
-        center: [24.7136, 46.6753],
-        zoom: 11,
+        center: [23.8859, 45.0792],
+        zoom: 5.5,
         zoomControl: true,
         attributionControl: true,
         tap: !L.Browser.mobile,
@@ -349,6 +354,15 @@ export function ProjectMapViewer({
 
     const map = mapInstanceRef.current;
 
+    // Trigger instant layout size update to prevent gray/white unrendered areas
+    if (map) {
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize({ animate: false });
+        }
+      }, 50);
+    }
+
     // Clear previous vector project points
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
@@ -363,11 +377,21 @@ export function ProjectMapViewer({
       const { lat, lng } = getProjectCoordinates(p);
       const isSelected = p.id === project?.id;
 
-      // Classify color palette: water (cyan/blue) vs. wastewater/sewer (emerald/green)
+      // Classify color palette: water (blue) vs. wastewater/sewer (green)
+      const isSewage = p.scope.includes('صرف') || p.scope.includes('بيئية') || p.scope.includes('حمأة');
       const isWater = p.scope.includes('مياه');
       
-      let strokeColor = isWater ? '#0284c7' : '#059669'; // darker boundary
-      let fillColor = isWater ? '#38bdf8' : '#34d399'; // bright fill
+      let strokeColor = '#475569'; // slate-600 default
+      let fillColor = '#94a3b8'; // slate-400 default
+      
+      if (isSewage) {
+        strokeColor = '#15803d'; // green-700
+        fillColor = '#22c55e'; // green-500
+      } else if (isWater) {
+        strokeColor = '#1d4ed8'; // blue-700
+        fillColor = '#3b82f6'; // blue-500
+      }
+
       let radius = 7.5;
       let weight = 1.5;
       let opacity = 0.85;
@@ -421,6 +445,16 @@ export function ProjectMapViewer({
                     ? 'bg-rose-50 text-rose-700 border border-rose-100'
                     : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
               }">${p.status}</span>
+            </div>
+            <div class="mt-3 pt-2 border-t border-slate-100">
+              <a href="${p.mapUrl || `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`}" 
+                 target="_blank" 
+                 rel="noopener noreferrer" 
+                 class="flex items-center justify-center gap-1.5 w-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] py-1.5 px-3 rounded-lg shadow-2xs transition-all text-center"
+                 style="text-decoration: none; color: white !important;">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:4px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                 الانتقال لخريطة المشروع قوقل ماب 🗺️
+              </a>
             </div>
           </div>
         </div>
@@ -490,13 +524,8 @@ export function ProjectMapViewer({
         const { lat, lng } = getProjectCoordinates(project);
         map.setView([lat, lng], 13, { animate: true, duration: 0.8 });
       } else {
-        // Master view: fit limits of Riyadh perfectly
-        if (markersRef.current.length > 0) {
-          const group = L.featureGroup(markersRef.current);
-          map.fitBounds(group.getBounds(), { padding: [40, 40], maxZoom: 14 });
-        } else {
-          map.setView([24.7136, 46.6753], 10);
-        }
+        // Master view: Open directly centered on the Kingdom of Saudi Arabia
+        map.setView([23.8859, 45.0792], 5.5, { animate: true });
       }
     }
 
@@ -513,7 +542,12 @@ export function ProjectMapViewer({
   }, []);
 
   // Handle traditional embedded google custom url if user toggled and URL exists
-  const embedUrl = project?.mapUrl ? getEmbeddableMapUrl(project.mapUrl) : null;
+  // Fallback to coordinates on google maps if mapUrl is not defined.
+  const embedUrl = project
+    ? (project.mapUrl
+        ? getEmbeddableMapUrl(project.mapUrl)
+        : `https://maps.google.com/maps?q=${getProjectCoordinates(project).lat},${getProjectCoordinates(project).lng}&z=15&output=embed`)
+    : null;
   const isMasterMap = !project; // If no project is selected, treat it as the general overview map
 
   return (
@@ -579,7 +613,7 @@ export function ProjectMapViewer({
 
         {/* View mode toggle and full-screen switch */}
         <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 self-stretch sm:self-auto relative z-10 shrink-0 md:grow-0 justify-end w-full sm:w-auto mt-2 sm:mt-0 select-none">
-          {!isMasterMap && project?.mapUrl && (
+          {!isMasterMap && project && (
             <div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-700/60 shrink-0 shadow-xs">
               <button
                 type="button"
@@ -589,8 +623,9 @@ export function ProjectMapViewer({
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white'
                 }`}
+                title="عرض نقاط المشروع على خريطة ماب الافتراضية المفتوحة"
               >
-                خريطة ماب
+                نقاط ماب (OSM)
               </button>
               <button
                 type="button"
@@ -600,8 +635,9 @@ export function ProjectMapViewer({
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white'
                 }`}
+                title="عرض خريطة قوقل ماب التفاعلية الكاملة"
               >
-                عقد تفصيلي
+                خريطة قوقل ماب (Google Maps) 🗺️
               </button>
             </div>
           )}
@@ -640,21 +676,40 @@ export function ProjectMapViewer({
                 <span>مشاركة</span>
               </button>
 
+              {/* Google Earth Online button */}
+              {isAdmin && (
+                <a
+                  href={isMasterMap 
+                    ? 'https://earth.google.com/web/@24.7136,46.6753,400d,35y,0h,0t,0r' 
+                    : (project ? `https://earth.google.com/web/@${getProjectCoordinates(project).lat},${getProjectCoordinates(project).lng},400d,35y,0h,0t,0r` : 'https://earth.google.com/web/@24.7136,46.6753,400d,35y,0h,0t,0r')
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="مشاهدة الموقع مجسماً عبر قوقل إيرث ثلاثي الأبعاد"
+                  className="flex items-center gap-1 p-1 px-1.5 sm:px-2.5 bg-blue-700 hover:bg-blue-600 rounded-lg text-[9px] sm:text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs"
+                >
+                  <Globe className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 text-blue-200 animate-pulse" />
+                  <span>قوقل إيرث</span>
+                </a>
+              )}
+
               {/* External Map opening button */}
-              <a
-                href={isMasterMap ? 'https://www.openstreetmap.org/#map=10/24.7136/46.6753' : (
-                  mapMode === 'osm' 
-                    ? `https://www.openstreetmap.org/?mlat=${getProjectCoordinates(project).lat}&mlon=${getProjectCoordinates(project).lng}#map=15/${getProjectCoordinates(project).lat}/${getProjectCoordinates(project).lng}`
-                    : (project?.mapUrl || `https://www.google.com/maps/search/?api=1&query=${getProjectCoordinates(project).lat},${getProjectCoordinates(project).lng}`)
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="فتح الخريطة والإحداثيات في نافذة مستقلة"
-                className="flex items-center gap-1 p-1 px-1.5 sm:px-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-[9px] sm:text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs"
-              >
-                <ExternalLink className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 text-indigo-200" />
-                <span>تبويب خارجي</span>
-              </a>
+              {isAdmin && (
+                <a
+                  href={isMasterMap ? 'https://www.openstreetmap.org/#map=10/24.7136/46.6753' : (
+                    mapMode === 'osm' 
+                      ? `https://www.openstreetmap.org/?mlat=${getProjectCoordinates(project).lat}&mlon=${getProjectCoordinates(project).lng}#map=15/${getProjectCoordinates(project).lat}/${getProjectCoordinates(project).lng}`
+                      : (project?.mapUrl || `https://www.google.com/maps/search/?api=1&query=${getProjectCoordinates(project).lat},${getProjectCoordinates(project).lng}`)
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="فتح الخريطة والإحداثيات في نافذة مستقلة"
+                  className="flex items-center gap-1 p-1 px-1.5 sm:px-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-[9px] sm:text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs"
+                >
+                  <ExternalLink className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 text-indigo-200" />
+                  <span>تبويب خارجي</span>
+                </a>
+              )}
             </>
           )}
 
@@ -688,6 +743,44 @@ export function ProjectMapViewer({
         <div className="bg-emerald-600 text-white text-xs px-4 py-2 text-center font-bold animate-in slide-in-from-top duration-300 flex items-center justify-center gap-2">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           <span>{feedbackMessage}</span>
+        </div>
+      )}
+
+      {/* Google My Maps interactive URL banner */}
+      {!isMasterMap && project?.mapUrl && (
+        <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-blue-900 gap-2 font-medium">
+          <div className="flex items-center gap-2 text-right min-w-0 flex-1">
+            <Globe className="h-4 w-4 text-blue-600 shrink-0" />
+            <span className="font-bold text-blue-800 shrink-0">معاينة ومخطط قوقل ماب (Google Maps):</span>
+            <span className="text-slate-500 text-[11px] font-semibold">
+              {isAdmin && "متاحة للملاحة بموجب صلاحيات مدير النظام"}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0 self-auto block">
+            {isAdmin && (
+              <a
+                href={project.mapUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 py-1 bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 hover:border-blue-300 rounded font-bold transition-all text-[10px] inline-flex items-center gap-1 cursor-pointer"
+              >
+                <span>فتح وملاحة ↗️</span>
+              </a>
+            )}
+            {mapMode !== 'iframe' ? (
+              <button
+                onClick={() => setMapMode('iframe')}
+                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-extrabold transition-all text-[10px] animate-pulse cursor-pointer shadow-xs"
+              >
+                تفعيل المعاينة المدمجة 🗺️
+              </button>
+            ) : (
+              <span className="px-2 py-1 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded font-bold text-[10px] flex items-center gap-1 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                المعاينة المدمجة نشطة
+              </span>
+            )}
+          </div>
         </div>
       )}
 
@@ -730,15 +823,35 @@ export function ProjectMapViewer({
         {/* Traditional Iframe viewer fallback if chosen */}
         {mapMode === 'iframe' && (
           embedUrl ? (
-            <iframe
-              key={project.id}
-              src={embedUrl}
-              title={project.name}
-              className="w-full h-full border-0"
-              allowFullScreen
-              loading="lazy"
-              referrerPolicy="no-referrer"
-            ></iframe>
+            <div className="w-full h-full relative overflow-hidden bg-slate-900">
+              {isIframeLoading && (
+                <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center text-center p-6 z-20 transition-all duration-300">
+                  <div className="relative flex items-center justify-center mb-4">
+                    <div className="w-16 h-16 rounded-full border-4 border-slate-700 border-t-blue-500 animate-spin"></div>
+                    <div className="w-10 h-10 rounded-full border-4 border-slate-705 border-t-emerald-500 animate-spin absolute" style={{ animationDirection: 'reverse', animationDuration: '1.2s' }}></div>
+                  </div>
+                  <h4 className="text-sm font-extrabold text-white mb-1.5">جاري جلب تفاصيل المخطط التفاعلي</h4>
+                  <p className="text-[11px] text-slate-400 max-w-sm leading-relaxed">
+                    يتم الآن تزامن وتحميل طبقات خريطة قوقل ماب للمشروع. يرجى الانتظار لتفادي ظهور الشاشة البيضاء ومزامنة البيانات محلياً...
+                  </p>
+                </div>
+              )}
+              {/* Overlay covering only the upper right corner (share & full-screen button) to disable them, leaving sidebar button clickable on the left */}
+              <div 
+                className="absolute top-0 right-0 w-[160px] h-[52px] bg-transparent z-10 pointer-events-auto cursor-default" 
+                title="أدوات الخريطة الإضافية معطلة"
+              />
+              <iframe
+                key={project.id}
+                src={embedUrl}
+                title={project.name}
+                className="w-full h-full border-0 relative z-0"
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onLoad={() => setIsIframeLoading(false)}
+              ></iframe>
+            </div>
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-slate-50 space-y-3">
               <AlertCircle className="h-10 w-10 text-slate-400" />

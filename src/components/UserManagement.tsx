@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import { Users, UserCheck, Shield, HelpCircle, Plus, Trash2, Key, Star, CheckSquare, Square, Settings } from 'lucide-react';
+import { Users, UserCheck, Shield, HelpCircle, Plus, Trash2, Key, Star, CheckSquare, Square, Settings, Eye, EyeOff } from 'lucide-react';
 
 interface UserManagementProps {
   users: User[];
@@ -33,6 +33,7 @@ export function UserManagement({ users, currentUser, onSaveUser, onDeleteUser }:
   const [selectedUser, setSelectedUser] = useState<User | null>(users[0] || null);
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState<Partial<User>>({
@@ -462,9 +463,19 @@ export function UserManagement({ users, currentUser, onSaveUser, onDeleteUser }:
 
                 <div className="bg-blue-50/40 p-3.5 rounded-xl border border-blue-100/60 col-span-2 sm:col-span-1">
                   <span className="text-[10px] text-blue-500 font-bold block mb-1">كلمة المرور المسجلة له</span>
-                  <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-blue-800">
-                    <Key className="h-4 w-4 text-blue-500 shrink-0" />
-                    <span>{selectedUser.password || 'nwc1234'}</span>
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-blue-800">
+                      <Key className="h-4 w-4 text-blue-500 shrink-0" />
+                      <span>{showPassword ? (selectedUser.password || 'nwc1234') : '••••••••'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-100/50 transition-all cursor-pointer shrink-0"
+                      title={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                    >
+                      {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
                   </div>
                 </div>
               </div>

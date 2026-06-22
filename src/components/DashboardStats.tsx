@@ -15,8 +15,21 @@ export function DashboardStats({ projects }: DashboardStatsProps) {
   // Calculations based on the input projects
   const total = projects.length;
   
-  const sewageCount = projects.filter(p => p.scope.includes('صرف') || p.scope.includes('بيئية')).length;
-  const waterCount = projects.filter(p => p.scope.includes('مياه')).length;
+  const sewageCount = projects.filter(p => {
+    const scopeStr = Array.isArray(p.scope) ? p.scope.join(' ') : (p.scope || '');
+    const nameStr = p.name || '';
+    const classStr = p.classification || '';
+    return scopeStr.includes('صرف') || scopeStr.includes('بيئية') || scopeStr.includes('الرفع') || scopeStr.includes('رفع') ||
+           nameStr.includes('الرفع') || nameStr.includes('صرف') || classStr.includes('الرفع') || classStr.includes('صرف');
+  }).length;
+
+  const waterCount = projects.filter(p => {
+    const scopeStr = Array.isArray(p.scope) ? p.scope.join(' ') : (p.scope || '');
+    const nameStr = p.name || '';
+    const classStr = p.classification || '';
+    return scopeStr.includes('مياه') || nameStr.includes('مياه') || classStr.includes('مياه');
+  }).length;
+
   const otherScopeCount = total - sewageCount - waterCount;
 
   const currentCount = projects.filter(p => 
@@ -82,7 +95,7 @@ export function DashboardStats({ projects }: DashboardStatsProps) {
         {/* Sewage Projects */}
         <div id="stat-sewage" className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs flex items-center justify-between transition-all hover:shadow-md">
           <div className="space-y-1">
-            <span className="text-sm font-medium text-slate-500">شبكات ومحطات الصرف</span>
+            <span className="text-sm font-medium text-slate-500">شبكات ومحطات الرفع والصرف</span>
             <h3 className="text-3xl font-bold text-emerald-600 tracking-tight">{sewageCount}</h3>
             <div className="flex items-center gap-1.5 text-xs text-slate-400">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>

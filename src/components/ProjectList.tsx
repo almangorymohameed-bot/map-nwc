@@ -6,6 +6,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Project, User } from '../types';
 import { Search, MapPin, SlidersHorizontal, Droplet, Waves, RefreshCw, AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Eye, Globe, List, LayoutGrid, Star } from 'lucide-react';
+import { getProjectCoordinates } from './ProjectMapViewer';
+import { getEmbeddableMapUrl } from '../data/initialProjects';
 
 interface ProjectListProps {
   projects: Project[]; // All authenticated visible projects
@@ -17,14 +19,12 @@ interface ProjectListProps {
 
   searchTerm: string;
   setSearchTerm: (val: string) => void;
-  selectedRegion: string;
-  setSelectedRegion: (val: string) => void;
+  selectedSubProgram: string;
+  setSelectedSubProgram: (val: string) => void;
   selectedClassification: string;
   setSelectedClassification: (val: string) => void;
   selectedStatus: string;
   setSelectedStatus: (val: string) => void;
-  selectedScope: string;
-  setSelectedScope: (val: string) => void;
   showFilters: boolean;
   setShowFilters: (val: boolean) => void;
   showOnlyFavorites: boolean;
@@ -59,14 +59,12 @@ export function ProjectList({
   onToggleFavorite,
   searchTerm,
   setSearchTerm,
-  selectedRegion,
-  setSelectedRegion,
+  selectedSubProgram,
+  setSelectedSubProgram,
   selectedClassification,
   setSelectedClassification,
   selectedStatus,
   setSelectedStatus,
-  selectedScope,
-  setSelectedScope,
   showFilters,
   setShowFilters,
   showOnlyFavorites,
@@ -74,10 +72,12 @@ export function ProjectList({
 }: ProjectListProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [viewMode, setViewMode] = useState<'compact' | 'cards'>('compact');
+  // Track which project has its inline My Maps viewer toggled on inside the list view
+  const [showListInlineMapId, setShowListInlineMapId] = useState<number | null>(null);
 
   // Filter lists derived dynamically from active accessible projects
-  const uniqueRegions = useMemo(() => {
-    const list = new Set(projects.map(p => p.region).filter(Boolean));
+  const uniqueSubPrograms = useMemo(() => {
+    const list = new Set(projects.map(p => p.subProgram).filter(Boolean));
     return ['الكل', ...Array.from(list)];
   }, [projects]);
 
@@ -91,18 +91,10 @@ export function ProjectList({
     return ['الكل', ...Array.from(list)];
   }, [projects]);
 
-  const uniqueScopes = useMemo(() => {
-    const list = new Set(projects.map(p => {
-      if (Array.isArray(p.scope)) return p.scope[0];
-      return p.scope;
-    }).filter(Boolean));
-    return ['الكل', ...Array.from(list)];
-  }, [projects]);
-
   // Reset page to 1 whenever filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedRegion, selectedClassification, selectedStatus, selectedScope, showOnlyFavorites]);
+  }, [searchTerm, selectedSubProgram, selectedClassification, selectedStatus, showOnlyFavorites]);
 
   // Paginated views
   const totalPages = Math.ceil(filteredProjects.length / ITEMS_PER_PAGE);
@@ -150,7 +142,7 @@ export function ProjectList({
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-1.5 px-3.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
-              showFilters || selectedRegion !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || selectedScope !== 'الكل' || showOnlyFavorites
+              showFilters || selectedSubProgram !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || showOnlyFavorites
                 ? 'bg-blue-50 border-blue-200 text-blue-700'
                 : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
             }`}
@@ -161,39 +153,25 @@ export function ProjectList({
         </div>
 
         {/* Expandable Advanced Filters */}
-        {(showFilters || selectedRegion !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || selectedScope !== 'الكل') && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
-            {/* Region select */}
+        {(showFilters || selectedSubProgram !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل') && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
+            {/* SubProgram select */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 block">تصفية حسب المنطقة</label>
+              <label className="text-[10px] font-bold text-slate-500 block">البرنامج الفرعي</label>
               <select
                 className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                value={selectedRegion}
-                onChange={e => setSelectedRegion(e.target.value)}
+                value={selectedSubProgram}
+                onChange={e => setSelectedSubProgram(e.target.value)}
               >
-                {uniqueRegions.map(r => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Scope select */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 block">تصفية حسب القطاع الفني</label>
-              <select
-                className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                value={selectedScope}
-                onChange={e => setSelectedScope(e.target.value)}
-              >
-                {uniqueScopes.map(s => (
-                  <option key={s} value={s}>{s === 'الكل' ? 'كل القطاعات' : s}</option>
+                {uniqueSubPrograms.map(sp => (
+                  <option key={sp} value={sp}>{sp}</option>
                 ))}
               </select>
             </div>
 
             {/* Classification select */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 block">تصفية حسب تصنيف الشبكة</label>
+              <label className="text-[10px] font-bold text-slate-500 block">تصنيف المشروع</label>
               <select
                 className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
                 value={selectedClassification}
@@ -207,7 +185,7 @@ export function ProjectList({
 
             {/* Status select */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 block">تصفية حسب مرحلة المشروع</label>
+              <label className="text-[10px] font-bold text-slate-500 block">المشروع مرحلة </label>
               <select
                 className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
                 value={selectedStatus}
@@ -256,14 +234,13 @@ export function ProjectList({
               </button>
             </div>
           </div>
-          {(selectedRegion !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || selectedScope !== 'الكل' || searchTerm || showOnlyFavorites) && (
+          {(selectedSubProgram !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || searchTerm || showOnlyFavorites) && (
             <button
               onClick={() => {
                 setSearchTerm('');
-                setSelectedRegion('الكل');
+                setSelectedSubProgram('الكل');
                 setSelectedClassification('الكل');
                 setSelectedStatus('الكل');
-                setSelectedScope('الكل');
                 setShowOnlyFavorites(false);
               }}
               className="text-xs text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer"
@@ -279,6 +256,7 @@ export function ProjectList({
         {paginatedProjects.map(p => {
           const isSelected = selectedProject?.id === p.id;
           const isWater = p.scope.includes('مياه');
+          const isAdmin = currentUser?.role === 'admin';
           
           if (viewMode === 'compact') {
             return (
@@ -337,6 +315,85 @@ export function ProjectList({
                       <div><strong className="text-slate-400 font-bold">الاستشاري:</strong> <span className="text-slate-700 font-medium">{p.consultant || 'مكتب الياردة'}</span></div>
                       <div><strong className="text-slate-400 font-bold">رقم PO:</strong> <span className="text-slate-700 font-mono font-bold">{p.po || '-'}</span></div>
                       <div><strong className="text-slate-400 font-bold">Unifier:</strong> <span className="text-slate-700 font-mono font-bold">{p.unifierNo || '-'}</span></div>
+                      
+                      <div className="col-span-full pt-1.5 mt-1 border-t border-dashed border-slate-100 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <strong className="text-slate-400 font-bold text-[9px]">أدوات الخرائط والولوج البصري:</strong>
+                          {p.mapUrl && isAdmin && (
+                            <a
+                              href={p.mapUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors text-[9px] font-bold"
+                            >
+                              <Globe className="h-2.5 w-2.5 text-blue-600" />
+                              <span>فتح بنظام ملاحي ↗️</span>
+                            </a>
+                          )}
+                          {isAdmin && (
+                            <a
+                              href={`https://earth.google.com/web/@${getProjectCoordinates(p).lat},${getProjectCoordinates(p).lng},400d,35y,0h,0t,0r`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded hover:bg-indigo-100 transition-colors text-[9px] font-bold"
+                            >
+                              <Globe className="h-2.5 w-2.5 text-indigo-500 animate-pulse" />
+                              <span>عرض مجسم (قوقل إيرث)</span>
+                            </a>
+                          )}
+                          
+                          {p.mapUrl && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowListInlineMapId(showListInlineMapId === p.id ? null : p.id);
+                              }}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border transition-all text-[9.5px] font-semibold cursor-pointer ${
+                                showListInlineMapId === p.id
+                                  ? 'bg-blue-600 border-blue-500 text-white hover:bg-blue-700'
+                                  : 'bg-emerald-50 text-emerald-800 border-emerald-100 hover:bg-emerald-100'
+                              }`}
+                            >
+                              <Globe className={`h-2.5 w-2.5 ${showListInlineMapId === p.id ? 'text-white' : 'text-emerald-600 animate-pulse'}`} />
+                              <span>{showListInlineMapId === p.id ? 'إخفاء المعاينة' : 'معاينة خريطة قوقل التفاعلية مدمجة 🗺️'}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {showListInlineMapId === p.id && p.mapUrl && (
+                        <div className="col-span-full mt-2 rounded-lg overflow-hidden border border-slate-200 shadow-xs bg-white animate-in zoom-in-95 duration-200">
+                          <div className="bg-slate-800 text-slate-250 px-2.5 py-1.5 flex items-center justify-between text-[9px] font-bold">
+                            <span className="flex items-center gap-1">
+                              <Globe className="h-3 w-3 text-blue-400" />
+                              <span>عرض خريطة قوقل التفاعلية (Google My Maps)</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowListInlineMapId(null);
+                              }}
+                              className="text-slate-400 hover:text-white cursor-pointer font-bold"
+                            >
+                              إغلاق ✕
+                            </button>
+                          </div>
+                          <div className="h-72 w-full bg-slate-50 relative overflow-hidden">
+                            <iframe
+                              src={getEmbeddableMapUrl(p.mapUrl)}
+                              className="w-full h-full border-0 relative z-0"
+                              title={`Google My Maps list preview ${p.name}`}
+                              allowFullScreen
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                            ></iframe>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -434,6 +491,83 @@ export function ProjectList({
                     <span className="text-slate-700 font-semibold font-mono truncate text-right mt-0.5" title={p.unifierNo}>{p.unifierNo || '-'}</span>
                   </div>
                 </div>
+
+                {isSelected && (
+                  <div className="pt-2.5 mt-2 border-t border-slate-100 flex flex-col gap-2 animate-in fade-in duration-200">
+                    <span className="text-[9px] font-bold text-slate-400 text-right">الخرائط ثلاثية الأبعاد والملاحة:</span>
+                    <div className="flex flex-wrap gap-1.5 justify-end">
+                      {p.mapUrl && isAdmin && (
+                        <a
+                          href={p.mapUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors text-[9px] font-bold"
+                        >
+                          <Globe className="h-2.5 w-2.5 text-blue-600" />
+                          <span>فتح بنظام ملاحي ↗️</span>
+                        </a>
+                      )}
+                      {isAdmin && (
+                        <a
+                          href={`https://earth.google.com/web/@${getProjectCoordinates(p).lat},${getProjectCoordinates(p).lng},400d,35y,0h,0t,0r`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded hover:bg-indigo-100 transition-colors text-[9px] font-bold"
+                        >
+                          <Globe className="h-2.5 w-2.5 text-indigo-500 animate-pulse" />
+                          <span>قوقل إيرث</span>
+                        </a>
+                      )}
+                      {p.mapUrl && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowListInlineMapId(showListInlineMapId === p.id ? null : p.id);
+                          }}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border transition-all text-[9px] font-bold cursor-pointer ${
+                            showListInlineMapId === p.id
+                              ? 'bg-blue-600 border-blue-500 text-white hover:bg-blue-700'
+                              : 'bg-emerald-50 text-emerald-800 border-emerald-100 hover:bg-emerald-100'
+                          }`}
+                        >
+                          <Globe className={`h-2.5 w-2.5 ${showListInlineMapId === p.id ? 'text-white' : 'text-emerald-600 animate-pulse'}`} />
+                          <span>{showListInlineMapId === p.id ? 'إخفاء المعاينة' : 'بث مدمج 🗺️'}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {showListInlineMapId === p.id && p.mapUrl && (
+                      <div className="w-full mt-2 rounded-lg overflow-hidden border border-slate-200 shadow-xs bg-white animate-in zoom-in-95 duration-200">
+                        <div className="bg-slate-800 text-slate-250 px-2 py-1 flex items-center justify-between text-[9px] font-bold">
+                          <span>عرض خريطة قوقل التفاعلية مدمجة</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowListInlineMapId(null);
+                            }}
+                            className="text-slate-400 hover:text-white cursor-pointer font-bold"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="h-60 w-full bg-slate-50 relative overflow-hidden">
+                          <iframe
+                            src={getEmbeddableMapUrl(p.mapUrl)}
+                            className="w-full h-full border-0 relative z-0"
+                            title={`Google My Maps card preview ${p.name}`}
+                            allowFullScreen
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                          ></iframe>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Action area */}
@@ -473,10 +607,9 @@ export function ProjectList({
             <button
               onClick={() => {
                 setSearchTerm('');
-                setSelectedRegion('الكل');
+                setSelectedSubProgram('الكل');
                 setSelectedClassification('الكل');
                 setSelectedStatus('الكل');
-                setSelectedScope('الكل');
               }}
               className="text-xs bg-slate-100 hover:bg-slate-200 px-3.5 py-2 rounded-xl transition-colors font-semibold"
             >

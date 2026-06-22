@@ -46,9 +46,29 @@ export default function App() {
     return localStorage.getItem('water_maps_is_logged') === 'true';
   });
 
-  // 2. Core State (تبدأ مصفوفات فارغة ويتم تغذيتها لايف من سوبابيس)
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  // 2. Core State (تبدأ محلياً من الكاش لضمان عدم حدوث شاشة بيضاء في وضع عدم الاتصال، ويتم تحديثها لايف من سوبابيس)
+  const [projects, setProjects] = useState<Project[]>(() => {
+    try {
+      const cached = localStorage.getItem('water_maps_cached_projects');
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return getParsedProjects();
+  });
+  const [users, setUsers] = useState<User[]>(() => {
+    try {
+      const cached = localStorage.getItem('water_maps_cached_users');
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_USERS;
+  });
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const [currentUser, setCurrentUser] = useState<User>(() => {
@@ -68,6 +88,20 @@ export default function App() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [showRoleSwitcherDropdown, setShowRoleSwitcherDropdown] = useState(false);
   const [successNotification, setSuccessNotification] = useState('');
+
+  // 3.0. Offline/Online Status Monitor
+  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // 3.1 Login states
   const [loginTab, setLoginTab] = useState<'nwc' | 'admin'>('nwc');
@@ -116,7 +150,7 @@ export default function App() {
           contractor: p.contractor,
           consultant: p.consultant,
           status: p.status,
-          scope: [p.scope],
+          scope: p.scope || '',
           classification: p.classification,
           businessUnit: p.business_unit,
           region: p.region,
@@ -126,9 +160,15 @@ export default function App() {
           y: p.y !== undefined && p.y !== null ? Number(p.y) : null
         }));
         setProjects(mappedProjects);
+        try {
+          localStorage.setItem('water_maps_cached_projects', JSON.stringify(mappedProjects));
+        } catch (cacheErr) {
+          console.error("خطأ في حفظ كاش المشاريع:", cacheErr);
+        }
       } else {
         // fallback للبيانات المحلية في حال عدم توفر داتا في السيرفر بعد
-        setProjects(getParsedProjects());
+        const localProjs = getParsedProjects();
+        setProjects(localProjs);
       }
 
       if (!userError && dbUsers) {
@@ -142,6 +182,11 @@ export default function App() {
           password: u.password
         }));
         setUsers(mappedUsers);
+        try {
+          localStorage.setItem('water_maps_cached_users', JSON.stringify(mappedUsers));
+        } catch (cacheErr) {
+          console.error("خطأ في حفظ كاش المستخدمين:", cacheErr);
+        }
 
         // تعيين المستخدم الحالي النشط من السيرفر طالما مسجل دخول
         const savedAndActive = localStorage.getItem('water_maps_active_user_id');
@@ -155,7 +200,21 @@ export default function App() {
         setUsers(INITIAL_USERS);
       }
     } catch (err) {
-      console.error("خطأ في الاتصال بسوبابيس:", err);
+      console.warn("حدثت مشكلة بالاتصال بموقع السيرفر، تم تحميل كاش العمل المحلي بنجاح لتجنب انقطاع العمل:", err);
+      // Fallback in case of extreme errors, try to read from cache immediately
+      try {
+        const cachedProj = localStorage.getItem('water_maps_cached_projects');
+        if (cachedProj) {
+          setProjects(JSON.parse(cachedProj));
+        }
+        const cachedUsr = localStorage.getItem('water_maps_cached_users');
+        if (cachedUsr) {
+          const mappedUsers = JSON.parse(cachedUsr);
+          setUsers(mappedUsers);
+        }
+      } catch (cacheFetchErr) {
+        console.error("تعذر استرداد الكاش التالف:", cacheFetchErr);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -168,7 +227,10 @@ export default function App() {
   // حفظ تعديل المفضلة محلياً
   useEffect(() => {
     localStorage.setItem('water_maps_active_user_id', currentUser.id);
-  }, [currentUser]);
+    if (currentUser.role !== 'admin' && activeTab === 'users') {
+      setActiveTab('maps');
+    }
+  }, [currentUser, activeTab]);
 
   useEffect(() => {
     const saved = localStorage.getItem(`water_maps_favorites_${currentUser.id}`);
@@ -209,10 +271,9 @@ export default function App() {
 
   // 5.1 Lifted Advanced Search / Filter States for Global Synchrony
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRegion, setSelectedRegion] = useState('الكل');
+  const [selectedSubProgram, setSelectedSubProgram] = useState('الكل');
   const [selectedClassification, setSelectedClassification] = useState('الكل');
   const [selectedStatus, setSelectedStatus] = useState('الكل');
-  const [selectedScope, setSelectedScope] = useState('الكل');
   const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -230,18 +291,14 @@ export default function App() {
         (p.classification || '').toLowerCase().includes(query) ||
         (p.status || '').toLowerCase().includes(query);
 
-      const matchesRegion = selectedRegion === 'الكل' || p.region === selectedRegion;
+      const matchesSubProgram = selectedSubProgram === 'الكل' || p.subProgram === selectedSubProgram;
       const matchesClassification = selectedClassification === 'الكل' || p.classification === selectedClassification;
       const matchesStatus = selectedStatus === 'الكل' || p.status === selectedStatus;
-      
-      const matchesScope = selectedScope === 'الكل' || 
-        (Array.isArray(p.scope) ? p.scope.some(s => s.includes(selectedScope)) : p.scope.includes(selectedScope));
-        
       const matchesFavorites = !showOnlyFavorites || !!p.isFavorite;
 
-      return matchesSearch && matchesRegion && matchesClassification && matchesStatus && matchesScope && matchesFavorites;
+      return matchesSearch && matchesSubProgram && matchesClassification && matchesStatus && matchesFavorites;
     });
-  }, [visibleProjects, searchTerm, selectedRegion, selectedClassification, selectedStatus, selectedScope, showOnlyFavorites]);
+  }, [visibleProjects, searchTerm, selectedSubProgram, selectedClassification, selectedStatus, showOnlyFavorites]);
 
   // 6. Selected Project Details resolver
   const selectedProject = useMemo(() => {
@@ -322,7 +379,7 @@ export default function App() {
       contractor: savedProj.contractor,
       consultant: savedProj.consultant,
       status: savedProj.status,
-      scope: savedProj.scope[0], // تخزين القيمة الأولى كمصطلح نصي بالجدول
+      scope: typeof savedProj.scope === 'string' ? savedProj.scope : (Array.isArray(savedProj.scope) ? savedProj.scope[0] : 'صرف صحي'), // تخزين القيمة كمصطلح نصي بالجدول
       classification: savedProj.classification,
       business_unit: savedProj.businessUnit,
       region: savedProj.region,
@@ -611,6 +668,14 @@ export default function App() {
         </div>
       </header>
 
+      {/* Offline dynamic warning banner */}
+      {!isOnline && (
+        <div className="bg-amber-600 text-white text-xs px-6 py-2.5 font-bold shadow-inner text-center flex items-center justify-center gap-2 animate-pulse">
+          <span className="w-2 h-2 rounded-full bg-white animate-ping shrink-0"></span>
+          <span>وضع تصفح غير متصل بالإنترنت نشط (Offline) | تم تحميل كافة مشاريع شبكات المياه ومحطات الرفع محلياً لضمان سرعة الاستجابة ومنع الشاشة البيضاء.</span>
+        </div>
+      )}
+
       {/* 2. Success dynamic alert */}
       {successNotification && (
         <div className="bg-emerald-600 text-white text-xs px-6 py-3 font-semibold shadow-inner text-center animate-pulse flex items-center justify-center gap-2">
@@ -780,14 +845,12 @@ export default function App() {
                       onToggleFavorite={handleToggleFavorite}
                       searchTerm={searchTerm}
                       setSearchTerm={setSearchTerm}
-                      selectedRegion={selectedRegion}
-                      setSelectedRegion={setSelectedRegion}
+                      selectedSubProgram={selectedSubProgram}
+                      setSelectedSubProgram={setSelectedSubProgram}
                       selectedClassification={selectedClassification}
                       setSelectedClassification={setSelectedClassification}
                       selectedStatus={selectedStatus}
                       setSelectedStatus={setSelectedStatus}
-                      selectedScope={selectedScope}
-                      setSelectedScope={setSelectedScope}
                       showFilters={showFilters}
                       setShowFilters={setShowFilters}
                       showOnlyFavorites={showOnlyFavorites}
