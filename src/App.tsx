@@ -121,7 +121,9 @@ export default function App() {
           businessUnit: p.business_unit,
           region: p.region,
           subProgram: p.sub_program || '',
-          mapUrl: p.map_url || ''
+          mapUrl: p.map_url || '',
+          x: p.x !== undefined && p.x !== null ? Number(p.x) : null,
+          y: p.y !== undefined && p.y !== null ? Number(p.y) : null
         }));
         setProjects(mappedProjects);
       } else {
@@ -204,6 +206,42 @@ export default function App() {
       isFavorite: favoriteIds.includes(p.id)
     }));
   }, [projects, currentUser, favoriteIds]);
+
+  // 5.1 Lifted Advanced Search / Filter States for Global Synchrony
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedRegion, setSelectedRegion] = useState('الكل');
+  const [selectedClassification, setSelectedClassification] = useState('الكل');
+  const [selectedStatus, setSelectedStatus] = useState('الكل');
+  const [selectedScope, setSelectedScope] = useState('الكل');
+  const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+
+  // 5.2 Compute filteredProjects based on active filtering criteria
+  const filteredProjects = useMemo(() => {
+    return visibleProjects.filter(p => {
+      const query = searchTerm.toLowerCase().trim();
+      const matchesSearch = !query ||
+        p.name.toLowerCase().includes(query) ||
+        p.operationalNumber.toLowerCase().includes(query) ||
+        (p.contractor || '').toLowerCase().includes(query) ||
+        (p.consultant || '').toLowerCase().includes(query) ||
+        (p.po || '').toLowerCase().includes(query) ||
+        (p.unifierNo || '').toLowerCase().includes(query) ||
+        (p.classification || '').toLowerCase().includes(query) ||
+        (p.status || '').toLowerCase().includes(query);
+
+      const matchesRegion = selectedRegion === 'الكل' || p.region === selectedRegion;
+      const matchesClassification = selectedClassification === 'الكل' || p.classification === selectedClassification;
+      const matchesStatus = selectedStatus === 'الكل' || p.status === selectedStatus;
+      
+      const matchesScope = selectedScope === 'الكل' || 
+        (Array.isArray(p.scope) ? p.scope.some(s => s.includes(selectedScope)) : p.scope.includes(selectedScope));
+        
+      const matchesFavorites = !showOnlyFavorites || !!p.isFavorite;
+
+      return matchesSearch && matchesRegion && matchesClassification && matchesStatus && matchesScope && matchesFavorites;
+    });
+  }, [visibleProjects, searchTerm, selectedRegion, selectedClassification, selectedStatus, selectedScope, showOnlyFavorites]);
 
   // 6. Selected Project Details resolver
   const selectedProject = useMemo(() => {
@@ -289,7 +327,9 @@ export default function App() {
       business_unit: savedProj.businessUnit,
       region: savedProj.region,
       sub_program: savedProj.subProgram,
-      map_url: savedProj.mapUrl
+      map_url: savedProj.mapUrl,
+      x: savedProj.x !== undefined && savedProj.x !== null ? Number(savedProj.x) : null,
+      y: savedProj.y !== undefined && savedProj.y !== null ? Number(savedProj.y) : null
     };
 
     const exists = projects.some(p => p.id === savedProj.id);
@@ -676,7 +716,7 @@ export default function App() {
                   }`}
                 >
                   <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
-                  <span>قائمة المشاريع ({visibleProjects.length})</span>
+                  <span>قائمة المشاريع ({filteredProjects.length})</span>
                 </button>
               </div>
 
@@ -689,7 +729,7 @@ export default function App() {
                 >
                   <ProjectMapViewer 
                     project={selectedProject} 
-                    projects={visibleProjects}
+                    projects={filteredProjects}
                     onSelectProject={(proj) => {
                       setSelectedProjectId(proj.id);
                       setMobileViewMode('map'); // Switch to map when user selects
@@ -701,7 +741,10 @@ export default function App() {
                       const updated = projects.map(p => {
                         if (p.id === id) {
                           const newUrl = `https://www.google.com/maps/d/viewer?mid=custom&ll=${lat},${lng}&z=13`;
-                          return { ...p, mapUrl: newUrl };
+                          const updatedProj = { ...p, mapUrl: newUrl, x: lng, y: lat };
+                          // Auto write back to Supabase database!
+                          handleSaveProject(updatedProj);
+                          return updatedProj;
                         }
                         return p;
                       });
@@ -720,12 +763,13 @@ export default function App() {
                       <span className="text-xs font-bold text-slate-800">قائمة عقود المشاريع التفاعلية للمنطقة</span>
                     </div>
                     <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
-                      {visibleProjects.length} مشروع مرخّص للتصفح
+                      {filteredProjects.length} مشروع مرخّص للتصفح
                     </span>
                   </div>
                   <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-b-2xl max-h-[580px] overflow-y-auto w-full">
                     <ProjectList 
                       projects={visibleProjects}
+                      filteredProjects={filteredProjects}
                       selectedProject={selectedProject}
                       onSelectProject={(proj) => {
                         setSelectedProjectId(proj.id);
@@ -734,6 +778,20 @@ export default function App() {
                       }}
                       currentUser={currentUser}
                       onToggleFavorite={handleToggleFavorite}
+                      searchTerm={searchTerm}
+                      setSearchTerm={setSearchTerm}
+                      selectedRegion={selectedRegion}
+                      setSelectedRegion={setSelectedRegion}
+                      selectedClassification={selectedClassification}
+                      setSelectedClassification={setSelectedClassification}
+                      selectedStatus={selectedStatus}
+                      setSelectedStatus={setSelectedStatus}
+                      selectedScope={selectedScope}
+                      setSelectedScope={setSelectedScope}
+                      showFilters={showFilters}
+                      setShowFilters={setShowFilters}
+                      showOnlyFavorites={showOnlyFavorites}
+                      setShowOnlyFavorites={setShowOnlyFavorites}
                     />
                   </div>
                 </div>
@@ -745,7 +803,7 @@ export default function App() {
           {/* Active Tab: Analytics Dashboard Stats */}
           {activeTab === 'stats' && (
             <div className="animate-in fade-in duration-300">
-              <DashboardStats projects={visibleProjects} />
+              <DashboardStats projects={filteredProjects} />
             </div>
           )}
 

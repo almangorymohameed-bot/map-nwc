@@ -44,6 +44,17 @@ interface ProjectMapViewerProps {
 
 // Robust fallback coordinate resolver to map projects of Riyadh & provinces beautifully
 export function getProjectCoordinates(p: Project): { lat: number; lng: number } {
+  // 0. Prioritize manually specified x (longitude) and y (latitude) coordinates if available and valid
+  const hasY = p.y !== undefined && p.y !== null && p.y !== 0;
+  const hasX = p.x !== undefined && p.x !== null && p.x !== 0;
+  if (hasY && hasX) {
+    const parseFloatY = typeof p.y === 'string' ? parseFloat(p.y) : p.y;
+    const parseFloatX = typeof p.x === 'string' ? parseFloat(p.x) : p.x;
+    if (!isNaN(parseFloatY) && !isNaN(parseFloatX) && parseFloatY > 10 && parseFloatY < 35 && parseFloatX > 30 && parseFloatX < 60) {
+      return { lat: parseFloatY, lng: parseFloatX };
+    }
+  }
+
   if (p.mapUrl) {
     try {
       // 1. Try URL object parsing

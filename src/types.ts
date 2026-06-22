@@ -19,6 +19,8 @@ export interface Project {
   subProgram: string;
   mapUrl: string;
   isFavorite?: boolean;
+  x?: number | null; // خط الطول (X)
+  y?: number | null; // خط العرض (Y)
 }
 
 export interface User {

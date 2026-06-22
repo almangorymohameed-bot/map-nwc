@@ -3,16 +3,32 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Project, User } from '../types';
 import { Search, MapPin, SlidersHorizontal, Droplet, Waves, RefreshCw, AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Eye, Globe, List, LayoutGrid, Star } from 'lucide-react';
 
 interface ProjectListProps {
-  projects: Project[];
+  projects: Project[]; // All authenticated visible projects
+  filteredProjects: Project[]; // Precomputed filtered projects based on active filter choices
   selectedProject: Project | null;
   onSelectProject: (project: Project) => void;
   currentUser: User;
   onToggleFavorite?: (projectId: number) => void;
+
+  searchTerm: string;
+  setSearchTerm: (val: string) => void;
+  selectedRegion: string;
+  setSelectedRegion: (val: string) => void;
+  selectedClassification: string;
+  setSelectedClassification: (val: string) => void;
+  selectedStatus: string;
+  setSelectedStatus: (val: string) => void;
+  selectedScope: string;
+  setSelectedScope: (val: string) => void;
+  showFilters: boolean;
+  setShowFilters: (val: boolean) => void;
+  showOnlyFavorites: boolean;
+  setShowOnlyFavorites: (val: boolean) => void;
 }
 
 const ITEMS_PER_PAGE = 12;
@@ -34,16 +50,30 @@ const getStatusBadgeClass = (status: string) => {
   return 'bg-blue-50 text-blue-700 border border-blue-100';
 };
 
-export function ProjectList({ projects, selectedProject, onSelectProject, currentUser, onToggleFavorite }: ProjectListProps) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRegion, setSelectedRegion] = useState('الكل');
-  const [selectedClassification, setSelectedClassification] = useState('الكل');
-  const [selectedStatus, setSelectedStatus] = useState('الكل');
-  const [selectedScope, setSelectedScope] = useState('الكل');
+export function ProjectList({
+  projects,
+  filteredProjects,
+  selectedProject,
+  onSelectProject,
+  currentUser,
+  onToggleFavorite,
+  searchTerm,
+  setSearchTerm,
+  selectedRegion,
+  setSelectedRegion,
+  selectedClassification,
+  setSelectedClassification,
+  selectedStatus,
+  setSelectedStatus,
+  selectedScope,
+  setSelectedScope,
+  showFilters,
+  setShowFilters,
+  showOnlyFavorites,
+  setShowOnlyFavorites
+}: ProjectListProps) {
   const [currentPage, setCurrentPage] = useState(1);
-  const [showFilters, setShowFilters] = useState(false);
   const [viewMode, setViewMode] = useState<'compact' | 'cards'>('compact');
-  const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
 
   // Filter lists derived dynamically from active accessible projects
   const uniqueRegions = useMemo(() => {
@@ -62,30 +92,17 @@ export function ProjectList({ projects, selectedProject, onSelectProject, curren
   }, [projects]);
 
   const uniqueScopes = useMemo(() => {
-    const list = new Set(projects.map(p => p.scope).filter(Boolean));
+    const list = new Set(projects.map(p => {
+      if (Array.isArray(p.scope)) return p.scope[0];
+      return p.scope;
+    }).filter(Boolean));
     return ['الكل', ...Array.from(list)];
   }, [projects]);
 
-  // Handle actual filtering
-  const filteredProjects = useMemo(() => {
-    setCurrentPage(1); // reset to page 1 on filter
-    return projects.filter(p => {
-      const matchesSearch = 
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.operationalNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.contractor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.consultant.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.po.toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesRegion = selectedRegion === 'الكل' || p.region === selectedRegion;
-      const matchesClassification = selectedClassification === 'الكل' || p.classification === selectedClassification;
-      const matchesStatus = selectedStatus === 'الكل' || p.status === selectedStatus;
-      const matchesScope = selectedScope === 'الكل' || p.scope === selectedScope;
-      const matchesFavorites = !showOnlyFavorites || !!p.isFavorite;
-
-      return matchesSearch && matchesRegion && matchesClassification && matchesStatus && matchesScope && matchesFavorites;
-    });
-  }, [projects, searchTerm, selectedRegion, selectedClassification, selectedStatus, selectedScope, showOnlyFavorites]);
+  // Reset page to 1 whenever filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedRegion, selectedClassification, selectedStatus, selectedScope, showOnlyFavorites]);
 
   // Paginated views
   const totalPages = Math.ceil(filteredProjects.length / ITEMS_PER_PAGE);

@@ -66,14 +66,20 @@ export function ProjectModal({ isOpen, project, onClose, onSave }: ProjectModalP
     businessUnit: 'وحدة أعمال الرياض',
     region: 'شمال الرياض',
     subProgram: '',
-    mapUrl: ''
+    mapUrl: '',
+    x: null,
+    y: null
   });
 
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (project) {
-      setFormData(project);
+      setFormData({
+        ...project,
+        x: project.x !== undefined && project.x !== null ? project.x : null,
+        y: project.y !== undefined && project.y !== null ? project.y : null,
+      });
     } else {
       setFormData({
         operationalNumber: '',
@@ -88,7 +94,9 @@ export function ProjectModal({ isOpen, project, onClose, onSave }: ProjectModalP
         businessUnit: 'وحدة أعمال الرياض',
         region: 'شمال الرياض',
         subProgram: 'شمال الرياض - صرف',
-        mapUrl: ''
+        mapUrl: '',
+        x: null,
+        y: null
       });
     }
     setError('');
@@ -122,7 +130,9 @@ export function ProjectModal({ isOpen, project, onClose, onSave }: ProjectModalP
       businessUnit: formData.businessUnit || 'وحدة أعمال الرياض',
       region: formData.region || 'شمال الرياض',
       subProgram: formData.subProgram || '',
-      mapUrl: formData.mapUrl || ''
+      mapUrl: formData.mapUrl || '',
+      x: formData.x !== undefined && formData.x !== null ? Number(formData.x) : null,
+      y: formData.y !== undefined && formData.y !== null ? Number(formData.y) : null,
     };
 
     onSave(savedProject);
@@ -311,6 +321,43 @@ export function ProjectModal({ isOpen, project, onClose, onSave }: ProjectModalP
               />
               <span className="text-[10px] text-slate-400 block">
                 يقبل روابط خريطة قوقل للتحرير (My Maps edit) أو العرض (My Maps viewer). يقوم النظام بفلترتها وعرضها بآمان.
+              </span>
+            </div>
+
+            {/* Latitude (Y) & Longitude (X) Coordinates */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">إحداثي خط الطول (Coordinate X - Longitude)</label>
+              <input
+                type="number"
+                step="any"
+                placeholder="مثال: 46.6753"
+                className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white font-mono"
+                value={formData.x !== undefined && formData.x !== null ? formData.x : ''}
+                onChange={e => {
+                  const val = e.target.value === '' ? null : parseFloat(e.target.value);
+                  setFormData({ ...formData, x: val });
+                }}
+              />
+              <span className="text-[10px] text-slate-400 block">
+                القيمة الاختيارية لمحور الشرق (Easting / Longitude).
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">إحداثي خط العرض (Coordinate Y - Latitude)</label>
+              <input
+                type="number"
+                step="any"
+                placeholder="مثال: 24.7136"
+                className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white font-mono"
+                value={formData.y !== undefined && formData.y !== null ? formData.y : ''}
+                onChange={e => {
+                  const val = e.target.value === '' ? null : parseFloat(e.target.value);
+                  setFormData({ ...formData, y: val });
+                }}
+              />
+              <span className="text-[10px] text-slate-400 block">
+                القيمة الاختيارية لمحور الشمال (Northing / Latitude).
               </span>
             </div>
 
