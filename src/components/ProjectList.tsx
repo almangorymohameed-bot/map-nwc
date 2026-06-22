@@ -385,7 +385,11 @@ export function ProjectList({
                           <div className="h-72 w-full bg-slate-50 relative overflow-hidden">
                             <iframe
                               src={getEmbeddableMapUrl(p.mapUrl)}
-                              className="w-full h-full border-0 relative z-0"
+                              className="absolute left-0 w-full border-0 z-0"
+                              style={{
+                                top: '-56px',
+                                height: 'calc(100% + 56px)'
+                              }}
                               title={`Google My Maps list preview ${p.name}`}
                               allowFullScreen
                               loading="lazy"
@@ -557,7 +561,11 @@ export function ProjectList({
                         <div className="h-60 w-full bg-slate-50 relative overflow-hidden">
                           <iframe
                             src={getEmbeddableMapUrl(p.mapUrl)}
-                            className="w-full h-full border-0 relative z-0"
+                            className="absolute left-0 w-full border-0 z-0"
+                            style={{
+                              top: '-56px',
+                              height: 'calc(100% + 56px)'
+                            }}
                             title={`Google My Maps card preview ${p.name}`}
                             allowFullScreen
                             loading="lazy"

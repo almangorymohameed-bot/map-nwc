@@ -901,16 +901,16 @@ export function ProjectMapViewer({
                   </p>
                 </div>
               )}
-              {/* Overlay covering only the top-left corner part of the Google Maps iframe to block 'Share' and 'View larger map' (fullscreen) buttons, leaving the Sidebar Toggle button clickable on the right */}
-              <div 
-                className="absolute top-0 left-0 w-[130px] h-[52px] bg-transparent z-30 pointer-events-auto cursor-default" 
-                title="تم تعطيل الزر لتجنب فتح نافذة خارجية، تفضل باستخدام تبويب الخريطة الداخلي"
-              />
+              {/* Visual Crop overlay covering the top: The top header is pushed up by -56px and hidden by overflow-hidden */}
               <iframe
                 key={project.id}
                 src={embedUrl}
                 title={project.name}
-                className="w-full h-full border-0 relative z-0"
+                className="absolute left-0 w-full border-0 z-0"
+                style={{
+                  top: '-56px',
+                  height: 'calc(100% + 56px)'
+                }}
                 allowFullScreen
                 loading="lazy"
                 referrerPolicy="no-referrer"
