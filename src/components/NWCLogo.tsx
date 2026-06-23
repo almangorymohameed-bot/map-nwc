@@ -32,10 +32,10 @@ export const NWCLogo: React.FC<NWCLogoProps> = ({ className = '', size = 'md' })
           fill="url(#skyBlueGrad)"
         />
 
-        {/* White core that creates the negative space curved crescent */}
+        {/* White core that creates the negative space curved crescent with a glossy 3D sphere gradient */}
         <path
           d="M 72,12 A 38,38 0 0,1 102,50 A 38,38 0 0,1 64,88 C 88,86 100,70 98,50 C 96,30 84,16 72,12 Z"
-          fill="#FFFFFF"
+          fill="url(#whiteSphereGrad)"
         />
 
         {/* Elegant Deep Ocean Blue Crescent Sweep */}
@@ -74,6 +74,12 @@ export const NWCLogo: React.FC<NWCLogoProps> = ({ className = '', size = 'md' })
           <radialGradient id="nwcGlow" cx="60" cy="50" r="45" gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor="#0EA5E9" />
             <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id="whiteSphereGrad" cx="80" cy="38" r="32" fx="78" fy="34" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#FFFFFF" />
+            <stop offset="60%" stopColor="#F8FAFC" />
+            <stop offset="85%" stopColor="#DFE7EC" />
+            <stop offset="100%" stopColor="#C4D3DC" />
           </radialGradient>
           <linearGradient id="skyBlueGrad" x1="15" y1="50" x2="105" y2="50" gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor="#E0F2FE" />
