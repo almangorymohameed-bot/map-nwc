@@ -17,6 +17,7 @@ import { ProjectMapViewer } from './components/ProjectMapViewer';
 import { UserManagement } from './components/UserManagement';
 import { ProjectModal } from './components/ProjectModal';
 import { ProjectList } from './components/ProjectList';
+import { NWCLogo } from './components/NWCLogo';
 
 // Icons
 import { 
@@ -172,15 +173,53 @@ export default function App() {
       }
 
       if (!userError && dbUsers) {
-        const mappedUsers = dbUsers.map((u: any) => ({
-          id: u.id,
-          username: u.username,
-          name: u.name,
-          role: u.role,
-          allowedRegions: u.allowed_regions || ['الكل'],
-          allowedScopes: u.allowed_scopes || ['الكل'],
-          password: u.password
-        }));
+        const mappedUsers = dbUsers.map((u: any) => {
+          let allowedRegions: string[] = ['الكل'];
+          if (u.allowed_regions) {
+            if (Array.isArray(u.allowed_regions)) {
+              allowedRegions = u.allowed_regions;
+            } else if (typeof u.allowed_regions === 'string') {
+              try {
+                const cleaned = u.allowed_regions.trim();
+                if (cleaned.startsWith('[') && cleaned.endsWith(']')) {
+                  allowedRegions = JSON.parse(cleaned);
+                } else {
+                  allowedRegions = cleaned.split(',').map((x: string) => x.trim()).filter(Boolean);
+                }
+              } catch (e) {
+                allowedRegions = u.allowed_regions.split(',').map((x: string) => x.trim()).filter(Boolean);
+              }
+            }
+          }
+
+          let allowedScopes: string[] = ['الكل'];
+          if (u.allowed_scopes) {
+            if (Array.isArray(u.allowed_scopes)) {
+              allowedScopes = u.allowed_scopes;
+            } else if (typeof u.allowed_scopes === 'string') {
+              try {
+                const cleaned = u.allowed_scopes.trim();
+                if (cleaned.startsWith('[') && cleaned.endsWith(']')) {
+                  allowedScopes = JSON.parse(cleaned);
+                } else {
+                  allowedScopes = cleaned.split(',').map((x: string) => x.trim()).filter(Boolean);
+                }
+              } catch (e) {
+                allowedScopes = u.allowed_scopes.split(',').map((x: string) => x.trim()).filter(Boolean);
+              }
+            }
+          }
+
+          return {
+            id: u.id,
+            username: u.username,
+            name: u.name,
+            role: u.role,
+            allowedRegions: allowedRegions.length > 0 ? allowedRegions : ['الكل'],
+            allowedScopes: allowedScopes.length > 0 ? allowedScopes : ['الكل'],
+            password: u.password
+          };
+        });
         setUsers(mappedUsers);
         try {
           localStorage.setItem('water_maps_cached_users', JSON.stringify(mappedUsers));
@@ -256,14 +295,79 @@ export default function App() {
 
   // 5. Role-based Project Filtering Logic
   const visibleProjects = useMemo(() => {
+    // Helper to determine the actual effective scope of a project (resolving any data classification discrepancies)
+    const getActualProjectScope = (proj: Project): string => {
+      const name = (proj.name || '').trim();
+      const scope = (proj.scope || '').trim();
+      const classification = (proj.classification || '').trim();
+      const subProgram = (proj.subProgram || '').trim();
+      
+      // If the project mentions "صرف صحي" or "الصرف الصحي" or sewage treatment/environmental elements in its name, classification, or subprogram,
+      // it MUST be classified as sewage/wastewater (صرف صحي) to protect users from permission data-entry errors.
+      if (
+        name.includes('صرف') || 
+        name.includes('الصرف') || 
+        classification.includes('صرف') || 
+        classification.includes('معالجة') || 
+        classification.includes('بيئية') || 
+        subProgram.includes('صرف')
+      ) {
+        return 'صرف صحي';
+      }
+      
+      if (scope.includes('صرف')) {
+        return 'صرف صحي';
+      }
+      
+      if (scope.includes('مياه')) {
+        return 'مياه';
+      }
+      
+      return scope || 'مياه';
+    };
+
     return projects.filter(p => {
       if (currentUser.role === 'admin') return true;
-      const isAllRegions = currentUser.allowedRegions.includes('الكل');
-      const isRegionAllowed = isAllRegions || 
-        currentUser.allowedRegions.includes(p.region) || 
-        (p.businessUnit && currentUser.allowedRegions.includes(p.businessUnit));
+      const uRegions = (currentUser.allowedRegions || []).map(r => r.trim());
+      const isAllRegions = uRegions.includes('الكل');
+      
+      let isRegionAllowed = isAllRegions;
+      if (!isRegionAllowed) {
+        const pr = (p.region || '').trim();
+        const pb = (p.businessUnit || '').trim();
+        const ps = (p.subProgram || '').trim();
+        
+        // 1. Direct match on region or business unit
+        if (uRegions.includes(pr) || uRegions.includes(pb) || uRegions.includes(ps)) {
+          isRegionAllowed = true;
+        }
+        
+        // 2. Map-based fallbacks for Governorate classifications to be absolutely perfect
+        if (!isRegionAllowed) {
+          const northGovs = ['المجمعة', 'رماح', 'الزلفي', 'ثادق', 'حريملاء', 'الغاط', 'ثادق وحريملاء'];
+          const southGovs = ['السليل', 'وادي الدواسر', 'الأفلاج', 'حوطة بني تميم', 'الحريق', 'السيح', 'الخرج', 'تمرة', 'خيران', 'السيح والخرج'];
+          const westGovs = ['المزاحمية', 'شقراء', 'عفيف', 'القويعية', 'البجاديه', 'البجادية', 'ضرما', 'ضرماء', 'الدوادمي', 'شقراء ومرات', 'عفيف والدوادمي', 'المزاحمية و ضرماء'];
+          
+          if (uRegions.includes('المحافظات الشمالية') && (northGovs.includes(pr) || pr.includes('المجمعة') || pr.includes('رماح') || pr.includes('الزلفي') || pr.includes('حريملاء') || pr.includes('الغاط') || pr.includes('ثادق'))) {
+            isRegionAllowed = true;
+          }
+          if (uRegions.includes('المحافظات الجنوبية') && (southGovs.includes(pr) || pr.includes('السليل') || pr.includes('الدواسر') || pr.includes('الأفلاج') || pr.includes('تميم') || pr.includes('الخرج') || pr.includes('الحريق') || pr.includes('السيح'))) {
+            isRegionAllowed = true;
+          }
+          if (uRegions.includes('المحافظات الغربية') && (westGovs.includes(pr) || pr.includes('عفيف') || pr.includes('الدوادمي') || pr.includes('المزاحمية') || pr.includes('شقراء') || pr.includes('القويعية') || pr.includes('البجادية') || pr.includes('البجاديه') || pr.includes('ضرما') || pr.includes('ضرماء'))) {
+            isRegionAllowed = true;
+          }
+        }
+      }
+
       const isAllScopes = currentUser.allowedScopes.includes('الكل');
-      const isScopeAllowed = isAllScopes || currentUser.allowedScopes.some(scopeType => p.scope.includes(scopeType));
+      const actualScope = getActualProjectScope(p);
+      const isScopeAllowed = isAllScopes || currentUser.allowedScopes.some(scopeType => {
+        const uScope = scopeType.trim();
+        if (!uScope) return false;
+        return actualScope === uScope;
+      });
+
       return isRegionAllowed && isScopeAllowed;
     }).map(p => ({
       ...p,
@@ -505,16 +609,16 @@ export default function App() {
           
           {/* Logo & Vibe */}
           <div className="text-center space-y-3">
-            <div className="mx-auto w-14 h-14 bg-gradient-to-tr from-blue-700 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg text-white">
-              <Compass className="h-8 w-8 animate-spin-slow text-white" />
+            <div className="mx-auto flex justify-center pb-2">
+              <NWCLogo size="lg" className="h-20 w-auto" />
             </div>
             <div>
               <span className="px-2.5 py-0.5 text-[9.5px] tracking-wide font-extrabold text-blue-800 bg-blue-50 rounded-full uppercase border border-blue-100">
                 شركة المياه الوطنية • NWC
               </span>
-              <h2 className="text-base font-extrabold text-slate-900 mt-2">البوابة الجغرافية الموحدة للمخططات</h2>
+              <h2 className="text-base font-extrabold text-slate-900 mt-2">الخرائط التفاعلية بالقطاع الاوسط</h2>
               <p className="text-[11px] text-slate-400 max-w-xs mx-auto mt-1 leading-relaxed">
-                بوابة التراخيص والمخططات التفاعلية لشبكات المياه والصرف الصحي بمدينة الرياض لموظفي قطاع التخطيط والتشغيل
+                المنصة الموحدة لعرض وتتبع مخططات شبكات ومشاريع المياه والصرف الصحي بالقطاع الأوسط لموظفي قطاع التخطيط والتشغيل
               </p>
             </div>
           </div>
@@ -641,12 +745,10 @@ export default function App() {
             
             {/* Logo and App Title */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-md text-white">
-                <Compass className="h-6 w-6 animate-spin-slow text-white" />
-              </div>
+              <NWCLogo size="sm" className="h-11 w-auto" />
               <div>
-                <h1 className="text-sm font-extrabold tracking-tight text-slate-900">بوابة الخرائط والمخططات التفاعلية</h1>
-                <p className="text-[10px] text-slate-500">شبكات المياه، الصرف الصحي، الخزانات ومحطات المعالجة بالرياض</p>
+                <h1 className="text-sm font-extrabold tracking-tight text-slate-900">الخرائط التفاعلية بالقطاع الاوسط</h1>
+                <p className="text-[10px] text-slate-500 font-medium">شركة المياه الوطنية • مشروعات المياه والصرف الصحي بالقطاع الأوسط</p>
               </div>
             </div>
 

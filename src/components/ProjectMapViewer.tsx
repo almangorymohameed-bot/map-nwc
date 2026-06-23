@@ -239,6 +239,15 @@ export function ProjectMapViewer({
   const activeProjectRef = useRef<any>(null);
   activeProjectRef.current = project;
 
+  const projectsRef = useRef<any[]>([]);
+  projectsRef.current = projects || [];
+
+  const onSelectProjectRef = useRef<any>(null);
+  onSelectProjectRef.current = onSelectProject;
+
+  const setMapModeRef = useRef<any>(null);
+  setMapModeRef.current = setMapMode;
+
   const onMapClickCallbackRef = useRef<(lat: number, lng: number) => void>();
   onMapClickCallbackRef.current = (lat: number, lng: number) => {
     setPendingCoords({ lat, lng });
@@ -536,6 +545,44 @@ export function ProjectMapViewer({
           onMapClickCallbackRef.current?.(e.latlng.lat, e.latlng.lng);
         }
       });
+
+      // Listen to popup open to bind handlers cleanly without breaking CSP or throwing Script errors
+      mapInstanceRef.current.on('popupopen', (e: any) => {
+        const popup = e.popup;
+        const container = popup.getElement();
+        if (!container) return;
+        
+        // Find inspect button in the opened popup
+        const switchBtn = container.querySelector('.switch-to-iframe-btn');
+        if (switchBtn) {
+          const id = parseInt(switchBtn.getAttribute('data-project-id') || '', 10);
+          switchBtn.onclick = () => {
+            const foundProject = projectsRef.current.find(p => p.id === id);
+            if (foundProject) {
+              if (onSelectProjectRef.current) {
+                onSelectProjectRef.current(foundProject);
+              }
+              if (setMapModeRef.current) {
+                setMapModeRef.current('iframe');
+              }
+            }
+          };
+        }
+        
+        const openMapsBtn = container.querySelector('.open-maps-btn');
+        if (openMapsBtn) {
+          const mapUrl = openMapsBtn.getAttribute('data-map-url') || '';
+          openMapsBtn.onclick = () => {
+            if (mapUrl) {
+              try {
+                window.open(mapUrl, '_blank');
+              } catch (err) {
+                console.error("Popup window.open failed", err);
+              }
+            }
+          };
+        }
+      });
     }
 
     const map = mapInstanceRef.current;
@@ -626,22 +673,31 @@ export function ProjectMapViewer({
             <div class="mt-2 flex items-center justify-between">
               <span class="text-slate-400 font-mono text-[9px]">${p.subProgram}</span>
               <span class="px-1.5 py-0.5 rounded text-[9.5px] font-bold ${
-                p.status.includes('جاري') 
+                (p.status || '').includes('جاري') 
                   ? 'bg-amber-50 text-amber-700 border border-amber-100' 
-                  : p.status.includes('مسحوب')
+                  : (p.status || '').includes('مسحوب')
                     ? 'bg-rose-50 text-rose-700 border border-rose-100'
                     : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-              }">${p.status}</span>
+              }">${p.status || ''}</span>
             </div>
-            <div class="mt-3 pt-2 border-t border-slate-100">
+            <div class="mt-3 pt-2 border-t border-slate-100 space-y-1.5">
               <button 
-                onclick="if(window.switchToIframeMap){ window.switchToIframeMap(${p.id}); } else { window.open('${p.mapUrl || `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`}', '_blank'); }"
                 type="button"
-                class="flex items-center justify-center gap-1.5 w-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] py-1.5 px-3 rounded-lg shadow-2xs transition-all text-center cursor-pointer font-bold border-0"
+                data-project-id="${p.id}"
+                class="switch-to-iframe-btn flex items-center justify-center gap-1.5 w-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] py-1.5 px-3 rounded-lg shadow-2xs transition-all text-center cursor-pointer font-bold border-0"
                 style="text-decoration: none; color: white !important;"
               >
-                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:4px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                 المعاينة في خريطة قوقل ماب الداخلية 🗺️
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:4px;"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+                المعاينة التفصيلية والتفاعلية 🗺️
+              </button>
+              <button 
+                type="button"
+                data-map-url="${p.mapUrl || `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`}"
+                class="open-maps-btn flex items-center justify-center gap-1.5 w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9.5px] py-1 px-3 rounded-lg border border-slate-200 transition-all text-center cursor-pointer font-semibold shadow-2xs"
+                style="text-decoration: none;"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:4px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                الذهاب مباشرة لقوقل ماب 🌐
               </button>
             </div>
           </div>
@@ -765,6 +821,13 @@ export function ProjectMapViewer({
           0% { stroke-width: 3px; fill-opacity: 0.8; }
           100% { stroke-width: 5px; fill-opacity: 1.0; }
         }
+        @media (max-width: 639px) {
+          .leaflet-top.leaflet-left {
+            top: auto !important;
+            bottom: 124px !important;
+            left: 12px !important;
+          }
+        }
       `}</style>
 
       {/* Header Panel */}
@@ -782,7 +845,7 @@ export function ProjectMapViewer({
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap ${
                 isMasterMap
                   ? 'bg-indigo-950/70 text-indigo-200 border border-indigo-700'
-                  : project?.scope.includes('مياه') 
+                  : (project?.scope || '').includes('مياه') 
                     ? 'bg-cyan-950/60 text-cyan-200 border border-cyan-800' 
                     : 'bg-emerald-950/60 text-emerald-200 border border-emerald-800'
               }`}>
@@ -921,19 +984,6 @@ export function ProjectMapViewer({
       </div>
 
       {/* Security and authorization info banners */}
-      {isMasterMap && (
-        <div className="bg-amber-50 border-b border-amber-100 px-4 py-2 flex items-center justify-between text-xs text-amber-800">
-          <div className="flex items-center gap-1.5 text-right w-full">
-            <Shield className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-            <span className="flex-1">
-              <strong>مستعرض خرائط ماب المفتوحة (OpenStreetMap) التكاملي: يعرض حالياً {projects?.length || 0} نقطة جغرافية مأذونة تتبع صلاحيات حسابك الحالي.</strong>
-            </span>
-          </div>
-          <div className="hidden lg:flex items-center gap-1 font-mono text-[9px] bg-amber-100 px-2 py-0.5 rounded text-amber-950 shrink-0 uppercase">
-            MAPS: OPENSTREETMAP_ACTIVE
-          </div>
-        </div>
-      )}
 
       {/* local notification toast inside map panel */}
       {feedbackMessage && (
@@ -1105,7 +1155,7 @@ export function ProjectMapViewer({
 
         {/* Floating map lock helper overlay for perfect page scrolling on mobile/touch screens */}
         {isLeafletReady && mapMode === 'osm' && (
-          <div className="absolute top-3 left-3 z-[1000] flex flex-col gap-2">
+          <div className="absolute top-[72px] sm:top-3 left-3 z-[1000] flex flex-col gap-2">
             <button
               type="button"
               onClick={() => setIsMapUnlocked(!isMapUnlocked)}
@@ -1210,14 +1260,18 @@ export function ProjectMapViewer({
 
       {/* Footer statistics and metadata indicators */}
       <div className="bg-slate-50 p-3.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-500 gap-2 font-medium">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-slate-700">
-            {isMasterMap ? 'بروتوكول البوابة المجمَّعة:' : 'الاستشاري الهندسي المشرف:'}
-          </span>
-          <span className="text-slate-600 truncate max-w-[200px]">
-            {isMasterMap ? 'خرائط ماب المفتوحة المشتركة' : project?.consultant}
-          </span>
-        </div>
+        {!isMasterMap ? (
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-700">
+              الاستشاري الهندسي المشرف:
+            </span>
+            <span className="text-slate-600 truncate max-w-[200px]">
+              {project?.consultant}
+            </span>
+          </div>
+        ) : (
+          <div />
+        )}
         
         {isMasterMap ? (
           <div className="flex items-center gap-1.5 text-blue-700 font-bold text-[11px] bg-blue-50 border border-blue-100 px-3 py-1 rounded-lg">

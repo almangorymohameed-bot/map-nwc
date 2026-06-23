@@ -34,7 +34,7 @@ interface ProjectListProps {
 const ITEMS_PER_PAGE = 12;
 
 const getStatusBadgeClass = (status: string) => {
-  const norm = status.trim();
+  const norm = (status || '').trim();
   if (norm === 'مكتمل' || norm.includes('كامل') || norm.includes('مسلم') || norm.includes('الاستلام')) {
     return 'bg-emerald-50 text-emerald-700 border border-emerald-100';
   }
@@ -255,7 +255,7 @@ export function ProjectList({
       <div className={viewMode === 'compact' ? 'flex flex-col gap-2' : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4'}>
         {paginatedProjects.map(p => {
           const isSelected = selectedProject?.id === p.id;
-          const isWater = p.scope.includes('مياه');
+          const isWater = (p.scope || '').includes('مياه');
           const isAdmin = currentUser?.role === 'admin';
           
           if (viewMode === 'compact') {

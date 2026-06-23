@@ -32,15 +32,18 @@ export function DashboardStats({ projects }: DashboardStatsProps) {
 
   const otherScopeCount = total - sewageCount - waterCount;
 
-  const currentCount = projects.filter(p => 
-    (p.status.includes('جاري') || p.status.includes('تنفيذ') || p.status.includes('التنفيذ')) && !p.status.includes('الاستلام')
-  ).length;
-  const initialHandoverCount = projects.filter(p => 
-    p.status.includes('مسلم') || p.status.includes('الاستلام') || p.status.includes('مكتمل')
-  ).length;
-  const withdrawnCount = projects.filter(p => 
-    p.status.includes('مسحوب') || p.status.includes('معلق')
-  ).length;
+  const currentCount = projects.filter(p => {
+    const statusStr = p.status || '';
+    return (statusStr.includes('جاري') || statusStr.includes('تنفيذ') || statusStr.includes('التنفيذ')) && !statusStr.includes('الاستلام');
+  }).length;
+  const initialHandoverCount = projects.filter(p => {
+    const statusStr = p.status || '';
+    return statusStr.includes('مسلم') || statusStr.includes('الاستلام') || statusStr.includes('مكتمل');
+  }).length;
+  const withdrawnCount = projects.filter(p => {
+    const statusStr = p.status || '';
+    return statusStr.includes('مسحوب') || statusStr.includes('معلق');
+  }).length;
   
   // Contractors breakdown
   const contractorsMap: Record<string, number> = {};
