@@ -1170,7 +1170,7 @@ export function ProjectMapViewer({
               {isMapUnlocked ? (
                 <>
                   <Unlock className="h-3.5 w-3.5 shrink-0 text-blue-100" />
-                  <span>تصفح الخريطة نشط (انقر للقفل)</span>
+                  <span>(قفل التحريك)</span>
                 </>
               ) : (
                 <>

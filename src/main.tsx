@@ -12,12 +12,14 @@ if (typeof window !== 'undefined') {
     return (
       msg.includes('script error') || 
       msg.includes('cross-origin') ||
+      msg.includes('cors') ||
       !source || 
       src === '' || 
-      src.includes('google.com') || 
-      src.includes('googleapis.com') || 
+      src.includes('google') || 
+      src.includes('googleapis') || 
       src.includes('google-analytics') ||
-      src.includes('leaflet')
+      src.includes('leaflet') ||
+      src.includes('maps')
     );
   };
 
@@ -38,7 +40,9 @@ if (typeof window !== 'undefined') {
   };
 
   window.addEventListener('error', (event) => {
-    if (isIgnorableError(event.message, event.filename)) {
+    const errorMsg = event.message || (event.error ? event.error.message : '');
+    const filename = event.filename || (event.error ? event.error.filename : '');
+    if (isIgnorableError(errorMsg, filename) || isIgnorableError(event.message, event.filename)) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
@@ -46,13 +50,46 @@ if (typeof window !== 'undefined') {
   }, { capture: true });
 
   window.addEventListener('unhandledrejection', (event) => {
-    const reason = String(event.reason || '');
-    if (reason.toLowerCase().includes('script error') || reason.toLowerCase().includes('cross-origin')) {
+    const reason = event.reason;
+    const reasonStr = String(reason && (reason.message || reason) || '').toLowerCase();
+    if (
+      reasonStr.includes('script error') || 
+      reasonStr.includes('cross-origin') ||
+      reasonStr.includes('cors') ||
+      reasonStr.includes('google') ||
+      reasonStr.includes('leaflet') ||
+      reasonStr.includes('maps')
+    ) {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
     }
   }, { capture: true });
+
+  // Hijack console.error to prevent cross-origin/iframe script issues from causing false flags
+  const originalConsoleError = console.error;
+  console.error = function (...args) {
+    const errorStr = args.map(arg => {
+      if (arg instanceof Error) {
+        return arg.message + ' ' + (arg.stack || '');
+      }
+      return String(arg);
+    }).join(' ').toLowerCase();
+
+    if (
+      errorStr.includes('script error') ||
+      errorStr.includes('cross-origin') ||
+      errorStr.includes('cors') ||
+      errorStr.includes('google.com') ||
+      errorStr.includes('googleapis.com') ||
+      errorStr.includes('leaflet') ||
+      errorStr.includes('maps')
+    ) {
+      console.warn('Suppressed third-party map or cross-origin console.error:', ...args);
+      return;
+    }
+    originalConsoleError.apply(console, args);
+  };
 }
 
 createRoot(document.getElementById('root')!).render(

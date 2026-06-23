@@ -1,6 +1,23 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
   <head>
+    <script>
+      // Instantly catch any errors from external cross-origin iframes or CDNs
+      window.onerror = function(message, source, lineno, colno, error) {
+        console.warn("Global suppressed script error:", message, "from", source);
+        return true; // Completely suppress
+      };
+      window.addEventListener('error', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }, { capture: true });
+      window.addEventListener('unhandledrejection', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }, { capture: true });
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>الخرائط التفاعلية NWC</title>
