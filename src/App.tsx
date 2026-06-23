@@ -259,7 +259,9 @@ export default function App() {
     return projects.filter(p => {
       if (currentUser.role === 'admin') return true;
       const isAllRegions = currentUser.allowedRegions.includes('الكل');
-      const isRegionAllowed = isAllRegions || currentUser.allowedRegions.includes(p.region);
+      const isRegionAllowed = isAllRegions || 
+        currentUser.allowedRegions.includes(p.region) || 
+        (p.businessUnit && currentUser.allowedRegions.includes(p.businessUnit));
       const isAllScopes = currentUser.allowedScopes.includes('الكل');
       const isScopeAllowed = isAllScopes || currentUser.allowedScopes.some(scopeType => p.scope.includes(scopeType));
       return isRegionAllowed && isScopeAllowed;
