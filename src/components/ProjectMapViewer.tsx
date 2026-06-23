@@ -4,8 +4,14 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { Project } from '../types';
 import { getEmbeddableMapUrl } from '../data/initialProjects';
+
+if (typeof window !== 'undefined') {
+  (window as any).L = L;
+}
 import { 
   Map, 
   Maximize2, 
@@ -199,7 +205,8 @@ export function ProjectMapViewer({
   isAdmin = false
 }: ProjectMapViewerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isLeafletReady, setIsLeafletReady] = useState(false);
+  const [isLeafletReady, setIsLeafletReady] = useState(true);
+  const hasWriteAccess = isAdmin || canEdit;
 
   // Map Lock state to prevent traps when scrolling on mobile.
   // Defaults to unlocked on desktop, but locked on mobile/touch screen for safe scrolling.
@@ -242,6 +249,162 @@ export function ProjectMapViewer({
     setTimeout(() => setFeedbackMessage(''), 4000);
   };
 
+  // Local/Geographic search states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [matchingProjects, setMatchingProjects] = useState<Project[]>([]);
+  const [searchError, setSearchError] = useState('');
+  const [activeSearchMarkerCoords, setActiveSearchMarkerCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const searchMarkerRef = useRef<any>(null);
+
+  const clearSearchMarker = () => {
+    if (searchMarkerRef.current) {
+      searchMarkerRef.current.remove();
+      searchMarkerRef.current = null;
+    }
+    setActiveSearchMarkerCoords(null);
+    setSearchResults([]);
+    setMatchingProjects([]);
+    setSearchQuery('');
+    setSearchError('');
+  };
+
+  const focusOnCoordinates = (lat: number, lng: number, popupLabel: string, optProject?: Project) => {
+    const L = (window as any).L;
+    const map = mapInstanceRef.current;
+    if (!L || !map) return;
+
+    // Direct OSM mode if user switches
+    setMapMode('osm');
+
+    // Remove any older search marker
+    if (searchMarkerRef.current) {
+      searchMarkerRef.current.remove();
+    }
+
+    map.setView([lat, lng], 14, { animate: true, duration: 1.0 });
+
+    const searchIcon = L.divIcon({
+      html: `
+        <div class="flex items-center justify-center w-8 h-8 rounded-full bg-red-600 text-white shadow-lg animate-bounce border-2 border-white relative z-50">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+      `,
+      className: 'bg-transparent border-0',
+      iconSize: [32, 32],
+      iconAnchor: [16, 32]
+    });
+
+    const popupHtml = `
+      <div dir="rtl" class="text-right p-1.5 font-sans min-w-[200px]">
+        <div class="flex items-center gap-1.5 mb-1.5 align-right">
+          <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-100">الموقع المحدد للبحث</span>
+          <span class="px-1.5 py-0.5 rounded text-[8.5px] bg-slate-100 text-slate-600 font-mono">GPS_MATCH</span>
+        </div>
+        <div class="font-extrabold text-slate-900 text-xs mb-1">${popupLabel}</div>
+        <div class="text-[9px] text-slate-400 font-mono flex items-center justify-between bg-slate-50 p-1 rounded mt-2 border border-slate-100">
+          <span>خط العرض: ${lat.toFixed(6)}</span>
+          <span class="text-slate-300">|</span>
+          <span>خط الطول: ${lng.toFixed(6)}</span>
+        </div>
+      </div>
+    `;
+
+    searchMarkerRef.current = L.marker([lat, lng], { icon: searchIcon })
+      .bindPopup(popupHtml, { maxWidth: 260, closeButton: true })
+      .addTo(map);
+
+    setActiveSearchMarkerCoords({ lat, lng });
+
+    setTimeout(() => {
+      if (searchMarkerRef.current) {
+        searchMarkerRef.current.openPopup();
+      }
+    }, 200);
+
+    // If an associated project exists, select it
+    if (optProject && onSelectProject) {
+      onSelectProject(optProject);
+    }
+  };
+
+  const handleMapSearch = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSearchError('');
+    setSearchResults([]);
+    setMatchingProjects([]);
+
+    const cleanQuery = searchQuery.trim();
+    if (!cleanQuery) return;
+
+    // 1. Check if the input is direct coordinates: e.g. "24.7136, 46.6753"
+    const coordRegEx = /^\s*([+-]?\d+(?:\.\d+)?)\s*[\s,;:\/]\s*([+-]?\d+(?:\.\d+)?)\s*$/;
+    const coordMatch = cleanQuery.match(coordRegEx);
+
+    if (coordMatch) {
+      const lat = parseFloat(coordMatch[1]);
+      const lng = parseFloat(coordMatch[2]);
+      
+      // Confirm standard geographic limits for Saudi Arabia
+      if (lat >= 15 && lat <= 35 && lng >= 30 && lng <= 60) {
+        focusOnCoordinates(lat, lng, `الإحداثيات المدخلة: ${lat.toFixed(5)}، ${lng.toFixed(5)}`);
+        triggerFeedback('📍 تم الانتقال للإحداثيات المعطاة على الخريطة مباشرة!');
+        return;
+      } else {
+        setSearchError('الرجاء التأكد من نطاق الإحداثيات الجغرافية الصحيحة للرياض والمملكة العربية السعودية (lat: 15~35, lng: 30~60).');
+        return;
+      }
+    }
+
+    // 2. Local Projects Match
+    const normalisedQuery = cleanQuery.toLowerCase();
+    const localMatches = (projects || []).filter(p => {
+      if (p.id === -1) return false;
+      return (
+        p.name.toLowerCase().includes(normalisedQuery) ||
+        (p.operationalNumber && p.operationalNumber.toLowerCase().includes(normalisedQuery)) ||
+        (p.contractor && p.contractor.toLowerCase().includes(normalisedQuery)) ||
+        (p.consultant && p.consultant.toLowerCase().includes(normalisedQuery)) ||
+        (p.region && p.region.toLowerCase().includes(normalisedQuery))
+      );
+    });
+    
+    if (localMatches.length > 0) {
+      setMatchingProjects(localMatches);
+    }
+
+    // 3. Web Geocoding match using OSM Nominatim free API
+    setIsSearching(true);
+    try {
+      let apiQuery = cleanQuery;
+      if (!apiQuery.toLowerCase().includes('رياض') && !apiQuery.toLowerCase().includes('riyadh') && !apiQuery.includes('السعودية')) {
+        apiQuery += ', الرياض, السعودية';
+      }
+
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(apiQuery)}&limit=5&accept-language=ar`
+      );
+      if (!response.ok) {
+        throw new Error('فشل جلب البيانات من المزود الخارجي الجغرافي.');
+      }
+      
+      const data = await response.json();
+      if (data && data.length > 0) {
+        setSearchResults(data);
+      } else if (localMatches.length === 0) {
+        setSearchError('لم يتم العثور على أي نتائج مطابقة للاسم أو الإحداثيات. يرجى توضيح المعلمات أو المحاولة مجدداً.');
+      }
+    } catch (err: any) {
+      console.error('Nominatim query error:', err);
+      if (localMatches.length === 0) {
+        setSearchError('عذراً، حدث خطأ أثناء الاتصال بمزود خرائط العنونة. يرجى تكرار المحاولة لاحقاً أو البحث بالإيجاز.');
+      }
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   const handleSaveCoordinates = () => {
     if (project && pendingCoords && onUpdateProjectCoordinates) {
       onUpdateProjectCoordinates(project.id, pendingCoords.lat, pendingCoords.lng);
@@ -254,12 +417,27 @@ export function ProjectMapViewer({
   // Automatically reset map mode based on active project selection
   useEffect(() => {
     setIsIframeLoading(true);
-    if (!project || project.id === -1) {
-      setMapMode('osm');
-    } else {
-      setMapMode('iframe');
+    // Keep mapMode on 'osm' first so they see the interactive Leaflet popup card on the map!
+    setMapMode('osm');
+
+    // Clean up temporary search when standard selection shifts
+    if (searchMarkerRef.current) {
+      searchMarkerRef.current.remove();
+      searchMarkerRef.current = null;
     }
+    setActiveSearchMarkerCoords(null);
+    setSearchResults([]);
+    setMatchingProjects([]);
   }, [project]);
+
+  // Clean search marker on unmount
+  useEffect(() => {
+    return () => {
+      if (searchMarkerRef.current) {
+        searchMarkerRef.current.remove();
+      }
+    };
+  }, []);
 
   // Register global callback for Leaflet popup button click to switch map tab mode dynamically on the same page
   useEffect(() => {
@@ -302,42 +480,9 @@ export function ProjectMapViewer({
     };
   }, [isLeafletReady, mapMode]);
 
-  // Dynamically load Leaflet.js and Leaflet.css from CDN
+  // Leaflet is now statically imported and ready
   useEffect(() => {
-    // If Leaflet is already loaded onto the window object
-    if ((window as any).L) {
-      setIsLeafletReady(true);
-      return;
-    }
-
-    // Append standard OSM Leaflet stylesheet
-    const cssId = 'leaflet-css-cdn';
-    if (!document.getElementById(cssId)) {
-      const link = document.createElement('link');
-      link.id = cssId;
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      link.crossOrigin = '';
-      document.head.appendChild(link);
-    }
-
-    // Append Leaflet library script
-    const jsId = 'leaflet-js-cdn';
-    if (!document.getElementById(jsId)) {
-      const script = document.createElement('script');
-      script.id = jsId;
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.crossOrigin = '';
-      script.onload = () => {
-        setIsLeafletReady(true);
-      };
-      document.body.appendChild(script);
-    } else {
-      const script = document.getElementById(jsId);
-      if (script) {
-        script.addEventListener('load', () => setIsLeafletReady(true));
-      }
-    }
+    setIsLeafletReady(true);
   }, []);
 
   // Track map state for locking / unlocking dynamically to give smooth mobile pages scroll
@@ -368,8 +513,8 @@ export function ProjectMapViewer({
     // Instantiate map if not loaded
     if (!mapInstanceRef.current) {
       mapInstanceRef.current = L.map(mapContainerRef.current, {
-        center: [23.8859, 45.0792],
-        zoom: 5.5,
+        center: [24.4, 46.4],
+        zoom: 7,
         zoomControl: true,
         attributionControl: true,
         tap: !L.Browser.mobile,
@@ -419,16 +564,17 @@ export function ProjectMapViewer({
       const isSelected = p.id === project?.id;
 
       // Classify color palette: water (blue) vs. wastewater/sewer (green)
-      const isSewage = p.scope.includes('صرف') || p.scope.includes('بيئية') || p.scope.includes('حمأة');
-      const isWater = p.scope.includes('مياه');
+      const textToScan = ((p.scope || '') + ' ' + (p.classification || '') + ' ' + (p.name || '')).toLowerCase();
+      const isSewage = textToScan.includes('صرف') || textToScan.includes('بيئية') || textToScan.includes('حمأة') || textToScan.includes('معالجة') || textToScan.includes('مياه معالجة');
+      const isWater = !isSewage || textToScan.includes('مياه') || textToScan.includes('شرب') || textToScan.includes('خزانات') || textToScan.includes('خزان');
       
-      let strokeColor = '#475569'; // slate-600 default
-      let fillColor = '#94a3b8'; // slate-400 default
+      let strokeColor = '#1d4ed8'; // Default blue-700
+      let fillColor = '#3b82f6'; // Default blue-500
       
       if (isSewage) {
         strokeColor = '#15803d'; // green-700
-        fillColor = '#22c55e'; // green-500
-      } else if (isWater) {
+        fillColor = '#10b981'; // emerald-500
+      } else {
         strokeColor = '#1d4ed8'; // blue-700
         fillColor = '#3b82f6'; // blue-500
       }
@@ -439,12 +585,12 @@ export function ProjectMapViewer({
       let fillOpacity = 0.7;
 
       if (isSelected) {
-        strokeColor = '#4f46e5'; // Indigo selection
-        fillColor = '#818cf8';
-        radius = 11;
-        weight = 3;
+        radius = 12;
+        weight = 3.5;
         opacity = 1.0;
         fillOpacity = 0.95;
+        // Keep classification fillColor, but make high-contrast dark slate outline border
+        strokeColor = '#1e293b';
       }
 
       const markerOptions = {
@@ -566,18 +712,8 @@ export function ProjectMapViewer({
         const { lat, lng } = getProjectCoordinates(project);
         map.setView([lat, lng], 13, { animate: true, duration: 0.8 });
       } else {
-        // Master view: Auto fit camera viewport to encapsulate all actual projects flawlessly
-        const validCoords = (projects || [])
-          .filter(p => p.id !== -1)
-          .map(p => {
-            const { lat, lng } = getProjectCoordinates(p);
-            return [lat, lng] as [number, number];
-          });
-        if (validCoords.length > 0) {
-          map.fitBounds(validCoords, { padding: [40, 40], maxZoom: 11, animate: true, duration: 0.6 });
-        } else {
-          map.setView([24.7136, 46.6753], 6.5, { animate: true });
-        }
+        // Master view: Center perfectly on the Central Sector [القطاع الأوسط] as shown in the picture
+        map.setView([24.4, 46.4], 7, { animate: true });
       }
     }
 
@@ -694,7 +830,7 @@ export function ProjectMapViewer({
             </div>
           )}
 
-          {!isMasterMap && project && project.mapUrl && (
+          {hasWriteAccess && !isMasterMap && project && project.mapUrl && (
             <a
               href={project.mapUrl}
               target="_blank"
@@ -707,7 +843,7 @@ export function ProjectMapViewer({
             </a>
           )}
 
-          {canEdit && onEditClick && !isMasterMap && project && (
+          {hasWriteAccess && onEditClick && !isMasterMap && project && (
             <button
               onClick={() => onEditClick(project)}
               className="flex items-center gap-1 p-1 px-1.5 sm:px-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-[9px] sm:text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs"
@@ -718,8 +854,8 @@ export function ProjectMapViewer({
             </button>
           )}
 
-          {/* Admin features: External map opening (تبويب خارجي) and share link (مشاركة) */}
-          {isAdmin && (
+          {/* Admin & Editor features: External map opening (تبويب خارجي) and share link (مشاركة) */}
+          {hasWriteAccess && (
             <>
               {/* Share map link */}
               <button
@@ -742,39 +878,35 @@ export function ProjectMapViewer({
               </button>
 
               {/* Google Earth Online button */}
-              {isAdmin && (
-                <a
-                  href={isMasterMap 
-                    ? 'https://earth.google.com/web/@24.7136,46.6753,400d,35y,0h,0t,0r' 
-                    : (project ? `https://earth.google.com/web/@${getProjectCoordinates(project).lat},${getProjectCoordinates(project).lng},400d,35y,0h,0t,0r` : 'https://earth.google.com/web/@24.7136,46.6753,400d,35y,0h,0t,0r')
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="مشاهدة الموقع مجسماً عبر قوقل إيرث ثلاثي الأبعاد"
-                  className="flex items-center gap-1 p-1 px-1.5 sm:px-2.5 bg-blue-700 hover:bg-blue-600 rounded-lg text-[9px] sm:text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs"
-                >
-                  <Globe className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 text-blue-200 animate-pulse" />
-                  <span>قوقل إيرث</span>
-                </a>
-              )}
+              <a
+                href={isMasterMap 
+                  ? 'https://earth.google.com/web/@24.7136,46.6753,400d,35y,0h,0t,0r' 
+                  : (project ? `https://earth.google.com/web/@${getProjectCoordinates(project).lat},${getProjectCoordinates(project).lng},400d,35y,0h,0t,0r` : 'https://earth.google.com/web/@24.7136,46.6753,400d,35y,0h,0t,0r')
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                title="مشاهدة الموقع مجسماً عبر قوقل إيرث ثلاثي الأبعاد"
+                className="flex items-center gap-1 p-1 px-1.5 sm:px-2.5 bg-blue-700 hover:bg-blue-600 rounded-lg text-[9px] sm:text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs"
+              >
+                <Globe className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 text-blue-200 animate-pulse" />
+                <span>قوقل إيرث</span>
+              </a>
 
               {/* External Map opening button */}
-              {isAdmin && (
-                <a
-                  href={isMasterMap ? 'https://www.openstreetmap.org/#map=10/24.7136/46.6753' : (
-                    mapMode === 'osm' 
-                      ? `https://www.openstreetmap.org/?mlat=${getProjectCoordinates(project).lat}&mlon=${getProjectCoordinates(project).lng}#map=15/${getProjectCoordinates(project).lat}/${getProjectCoordinates(project).lng}`
-                      : (project?.mapUrl || `https://www.google.com/maps/search/?api=1&query=${getProjectCoordinates(project).lat},${getProjectCoordinates(project).lng}`)
-                  )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="فتح الخريطة والإحداثيات في نافذة مستقلة"
-                  className="flex items-center gap-1 p-1 px-1.5 sm:px-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-[9px] sm:text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs"
-                >
-                  <ExternalLink className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 text-indigo-200" />
-                  <span>تبويب خارجي</span>
-                </a>
-              )}
+              <a
+                href={isMasterMap ? 'https://www.openstreetmap.org/#map=10/24.7136/46.6753' : (
+                  mapMode === 'osm' 
+                    ? `https://www.openstreetmap.org/?mlat=${getProjectCoordinates(project).lat}&mlon=${getProjectCoordinates(project).lng}#map=15/${getProjectCoordinates(project).lat}/${getProjectCoordinates(project).lng}`
+                    : (project?.mapUrl || `https://www.google.com/maps/search/?api=1&query=${getProjectCoordinates(project).lat},${getProjectCoordinates(project).lng}`)
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="فتح الخريطة والإحداثيات في نافذة مستقلة"
+                className="flex items-center gap-1 p-1 px-1.5 sm:px-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-[9px] sm:text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs"
+              >
+                <ExternalLink className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 text-indigo-200" />
+                <span>تبويب خارجي</span>
+              </a>
             </>
           )}
 
@@ -851,6 +983,126 @@ export function ProjectMapViewer({
 
       {/* Map body */}
       <div className="flex-1 bg-slate-100 relative min-h-0">
+        {/* Floating map search bar panel */}
+        {isLeafletReady && mapMode === 'osm' && (
+          <div className="absolute top-3 right-3 z-[1001] w-[290px] sm:w-[350px] max-w-[calc(100vw-32px)] text-right font-sans">
+            <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden flex flex-col transition-all duration-300">
+              <form onSubmit={handleMapSearch} className="flex items-center gap-1.5 p-2 bg-slate-50 border-b border-slate-100">
+                <div className="relative flex-1 min-w-0">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="ابحث بالاسم، الشارع، الحي، أو الإحداثيات..."
+                    className="w-full text-right text-xs pr-2.5 pl-7 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-800 font-bold placeholder-slate-400"
+                    dir="rtl"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={clearSearchMarker}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 cursor-pointer transition-colors"
+                      title="مسح البحث والرجوع"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSearching}
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400 text-white text-xs font-black rounded-lg cursor-pointer shrink-0 transition-colors shadow-xs flex items-center justify-center gap-1 border-0"
+                >
+                  {isSearching ? (
+                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  ) : (
+                    <span>بحث</span>
+                  )}
+                </button>
+              </form>
+
+              {/* Error indicator */}
+              {searchError && (
+                <div className="p-2.5 px-3 bg-rose-50 border-b border-rose-100 text-[10px] text-rose-700 font-bold flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                  <p className="flex-1 leading-normal text-right">{searchError}</p>
+                </div>
+              )}
+
+              {/* Quick info if active search marker */}
+              {activeSearchMarkerCoords && !searchResults.length && !matchingProjects.length && !searchError && (
+                <div className="p-2 px-3 bg-purple-50 text-[10px] text-purple-700 font-bold flex items-center justify-between">
+                  <span>تم تحديد الإحداثيات على الخريطة</span>
+                  <button 
+                    type="button" 
+                    onClick={clearSearchMarker} 
+                    className="text-purple-900 underline font-bold cursor-pointer hover:text-purple-950 border-0 bg-transparent text-[10px]"
+                  >
+                    إلغاء التحديد ✖
+                  </button>
+                </div>
+              )}
+
+              {/* Local projects matched results */}
+              {matchingProjects.length > 0 && (
+                <div className="flex flex-col max-h-[145px] overflow-y-auto divide-y divide-slate-100 border-b border-slate-105">
+                  <div className="p-1 px-2.5 bg-blue-50 text-[9.5px] font-black text-blue-800 text-right">
+                    المشاريع التابعة للمطابقة المحلّية ({matchingProjects.length})
+                  </div>
+                  {matchingProjects.map((proj) => (
+                    <button
+                      key={`local-search-${proj.id}`}
+                      type="button"
+                      onClick={() => {
+                        const { lat, lng } = getProjectCoordinates(proj);
+                        focusOnCoordinates(lat, lng, proj.name, proj);
+                      }}
+                      className="p-2 px-3 text-right hover:bg-[#F8FAFC] transition-colors flex flex-col w-full text-xs font-semibold text-slate-705 cursor-pointer border-0 bg-transparent"
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span className="truncate text-[11px] leading-tight text-right flex-1 text-slate-800 font-extrabold">{proj.name}</span>
+                        <span className="text-[8.5px] shrink-0 font-bold px-1.5 bg-blue-100 text-blue-700 rounded-sm mr-2">{proj.classification}</span>
+                      </div>
+                      <span className="text-[9.5px] text-slate-400 font-bold mt-1 text-right">الجهة: {proj.region} | فئة: {proj.scope}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Nominatim dynamic Geocoding API results */}
+              {searchResults.length > 0 && (
+                <div className="flex flex-col max-h-[165px] overflow-y-auto divide-y divide-slate-100">
+                  <div className="p-1 px-2.5 bg-emerald-50 text-[9.5px] font-black text-emerald-800 text-right">
+                    نتائج العنونة ومطابقة الشوارع والأحياء العامة ({searchResults.length})
+                  </div>
+                  {searchResults.map((result: any, idx: number) => (
+                    <button
+                      key={`geo-search-${idx}`}
+                      type="button"
+                      onClick={() => {
+                        const lat = parseFloat(result.lat);
+                        const lng = parseFloat(result.lon);
+                        focusOnCoordinates(lat, lng, result.display_name.split(',')[0] || searchQuery);
+                      }}
+                      className="p-2 px-3 text-right hover:bg-[#F8FAFC] transition-colors flex items-start gap-2 w-full text-xs text-slate-700 cursor-pointer border-0 bg-transparent"
+                    >
+                      <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-500 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-extrabold truncate text-[11px] text-slate-800 text-right leading-tight">
+                          {result.display_name.split(',')[0]}
+                        </p>
+                        <p className="text-[9.5px] text-slate-400 truncate text-right font-medium leading-none mt-1">
+                          {result.display_name.split(',').slice(1, 4).join(', ')}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Floating map lock helper overlay for perfect page scrolling on mobile/touch screens */}
         {isLeafletReady && mapMode === 'osm' && (
           <div className="absolute top-3 left-3 z-[1000] flex flex-col gap-2">
@@ -884,6 +1136,21 @@ export function ProjectMapViewer({
           className={`w-full h-full ${mapMode === 'osm' ? 'block' : 'hidden'}`}
           style={{ minHeight: '100%' }}
         />
+
+        {/* Floating map classification legend block */}
+        {isLeafletReady && mapMode === 'osm' && (
+          <div className="absolute bottom-4 left-4 z-[999] bg-white/95 backdrop-blur-xs p-2.5 px-3 rounded-xl shadow-lg border border-slate-200/80 text-xs font-bold text-slate-700 flex flex-col gap-1.5 pointer-events-auto text-right" dir="rtl">
+            <div className="text-[10px] text-slate-400 font-extrabold pb-1 border-b border-slate-100 mb-0.5">تصنيف مشروعات القطاع</div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#3b82f6] border border-blue-700 flex-shrink-0"></span>
+              <span className="text-[11px] text-slate-800">مشروعات قطاع المياه 💧</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] border border-green-700 flex-shrink-0"></span>
+              <span className="text-[11px] text-slate-800">مشروعات الصرف الصحي 🌿</span>
+            </div>
+          </div>
+        )}
 
         {/* Traditional Iframe viewer fallback if chosen */}
         {mapMode === 'iframe' && (

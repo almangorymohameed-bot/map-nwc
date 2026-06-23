@@ -350,13 +350,12 @@ export function UserManagement({ users, currentUser, onSaveUser, onDeleteUser }:
                     <button
                       type="button"
                       key={reg}
-                      disabled={isAllChecked}
                       onClick={() => handleCheckboxChange('allowedRegions', reg)}
-                      className={`flex items-center gap-2 p-1.5 rounded text-right text-xs transition-colors ${
+                      className={`flex items-center gap-2 p-1.5 rounded text-right text-xs transition-colors cursor-pointer ${
                         isChecked 
                           ? 'bg-white text-blue-700 font-bold border border-blue-200 shadow-xs' 
                           : 'text-slate-500 hover:bg-slate-100'
-                      } ${isAllChecked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                      }`}
                     >
                       {isChecked ? <CheckSquare className="h-4 w-4 text-blue-600" /> : <Square className="h-4 w-4 text-slate-300" />}
                       <span className="truncate">{reg}</span>
@@ -390,13 +389,12 @@ export function UserManagement({ users, currentUser, onSaveUser, onDeleteUser }:
                     <button
                       type="button"
                       key={scope}
-                      disabled={isAllChecked}
                       onClick={() => handleCheckboxChange('allowedScopes', scope)}
-                      className={`flex items-center gap-2 p-1.5 rounded text-right text-xs transition-colors ${
+                      className={`flex items-center gap-2 p-1.5 rounded text-right text-xs transition-colors cursor-pointer ${
                         isChecked 
                           ? 'bg-white text-emerald-700 font-bold border border-emerald-200 shadow-xs' 
                           : 'text-slate-500 hover:bg-slate-100'
-                      } ${isAllChecked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                      }`}
                     >
                       {isChecked ? <CheckSquare className="h-4 w-4 text-emerald-600" /> : <Square className="h-4 w-4 text-slate-300" />}
                       <span>{scope}</span>
