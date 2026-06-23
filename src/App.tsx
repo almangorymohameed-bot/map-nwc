@@ -89,6 +89,7 @@ export default function App() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [showRoleSwitcherDropdown, setShowRoleSwitcherDropdown] = useState(false);
   const [successNotification, setSuccessNotification] = useState('');
+  const [showExitModal, setShowExitModal] = useState(false);
 
   // 3.0. Offline/Online Status Monitor
   const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -283,6 +284,59 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(`water_maps_favorites_${currentUser.id}`, JSON.stringify(favoriteIds));
   }, [favoriteIds, currentUser.id]);
+
+  // دمج ميزة الرجوع الذكي باستخدام زر الرجوع للجوال والمتصفح لضمان عدم إغلاق التطبيق فجأة
+  useEffect(() => {
+    if (!isLogged) return;
+
+    // تهيئة حالة أولية في تاريخ المتصفح
+    if (!window.history.state || window.history.state.step !== 'app') {
+      window.history.replaceState({ step: 'root' }, '');
+      window.history.pushState({ step: 'app' }, '');
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      // إذا كانت نافذة الخروج النشطة معروضة، يتم إغلاقها بدلاً من المغادرة
+      if (showExitModal) {
+        setShowExitModal(false);
+        window.history.pushState({ step: 'app' }, '');
+        return;
+      }
+
+      let handled = false;
+
+      // 1. إغلاق نافذة تعديل أو إضافة مشروع إذا كانت مفتوحة
+      if (isProjectModalOpen) {
+        setIsProjectModalOpen(false);
+        handled = true;
+      }
+      // 2. إلغاء تحديد المشروع النشط على الخارطة والرجوع للقائمة
+      else if (selectedProjectId !== null) {
+        setSelectedProjectId(null);
+        setMobileViewMode('list');
+        handled = true;
+      }
+      // 3. الرجوع لتبويب الخرائط إن كان المستخدم يتصفح الإحصائيات أو الحسابات
+      else if (activeTab !== 'maps') {
+        setActiveTab('maps');
+        handled = true;
+      }
+
+      if (handled) {
+        // إعادة تعبئة الـ History Stack لتظل الميزة فعالة في المرة القادمة
+        window.history.pushState({ step: 'app' }, '');
+      } else {
+        // إذا كان المستخدم في الصفحة الرئيسية ومطبّق عليه قائمة المشاريع، نعرض رسالة تأكيد الخروج
+        setShowExitModal(true);
+        window.history.pushState({ step: 'app' }, '');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isLogged, isProjectModalOpen, selectedProjectId, activeTab, showExitModal]);
 
   const handleToggleFavorite = (projectId: number) => {
     setFavoriteIds(prev => {
@@ -997,6 +1051,50 @@ export default function App() {
         onClose={() => setIsProjectModalOpen(false)}
         onSave={handleSaveProject}
       />
+
+      {/* 5.1 Exit Confirmation Modal */}
+      {showExitModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div dir="rtl" className="bg-white rounded-3xl p-6 max-w-sm w-full border border-slate-200 shadow-2xl flex flex-col gap-4 text-center animate-in zoom-in-95 duration-200">
+            <div className="mx-auto bg-amber-50 text-amber-600 p-3.5 rounded-full border border-amber-100 flex items-center justify-center shrink-0">
+              <AlertCircle className="h-8 w-8 stroke-[2.5]" />
+            </div>
+            
+            <div className="space-y-1.5Packed text-right">
+              <h3 className="text-base font-extrabold text-slate-900 text-center">هل أنت متأكد من رغبتك بالخروج؟</h3>
+              <p className="text-xs text-slate-500 leading-relaxed text-center">
+                سيؤدي هذا لتسجيل الخروج الآمن وإغلاق جلستك النشطة في نظام الخرائط التفاعلية NWC.
+              </p>
+            </div>
+
+            <div className="flex gap-3 mt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExitModal(false);
+                  // Push state back so we can intercept physical back clicks again
+                  window.history.pushState({ step: 'app' }, '');
+                }}
+                className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-2xl border border-slate-200 transition-all cursor-pointer"
+              >
+                الاستمرار في التصفح
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExitModal(false);
+                  setIsLogged(false);
+                  localStorage.removeItem('water_maps_is_logged');
+                  // Let the back chain finish
+                }}
+                className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-2xl shadow-xs transition-all cursor-pointer"
+              >
+                تأكيد الخروج الآمن
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 6. Professional Footer */}
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-6 mt-12 text-xs">

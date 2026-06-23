@@ -652,62 +652,68 @@ export function ProjectMapViewer({
 
       // Clean RTL styling inside Leaflet popups
       const popupHtml = `
-        <div dir="rtl" class="text-right font-sans p-1 min-w-[210px]">
-          <div class="flex items-center gap-1.5 mb-2">
-            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${
-              isWater ? 'bg-blue-50 text-blue-700 border border-blue-100' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+        <div dir="rtl" class="text-right font-sans p-0.5 min-w-[250px] max-w-[310px] flex flex-col gap-2">
+          <div class="flex flex-wrap items-center gap-1.5 mb-1.5 justify-start">
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold shadow-3xs ${
+              isWater ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
             }">
               ${p.scope}
             </span>
-            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200 shadow-3xs">
               ${p.classification}
             </span>
+            <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold shadow-3xs ${
+              (p.status || '').includes('جاري') 
+                ? 'bg-amber-50 text-amber-700 border border-amber-200' 
+                : (p.status || '').includes('مسحوب')
+                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+            }">
+              ${p.status || ''}
+            </span>
           </div>
-          <h5 class="font-extrabold text-slate-900 text-xs leading-normal mb-1">${p.name}</h5>
+          <h5 class="font-extrabold text-[#0F172A] text-sm leading-snug tracking-tight mb-2 text-right">${p.name}</h5>
           
-          <div class="text-[10px] text-slate-500 space-y-1 mt-2 border-t border-slate-100 pt-2 leading-relaxed">
-            <div><strong class="text-slate-600">الرقم التشغيلي:</strong> <span class="font-mono text-slate-800">${p.operationalNumber}</span></div>
-            <div><strong class="text-slate-600">المقاول:</strong> <span class="text-slate-700">${p.contractor}</span></div>
-            <div><strong class="text-slate-600">الاستشاري:</strong> <span class="text-slate-700">${p.consultant}</span></div>
-            <div><strong class="text-slate-600">النطاق:</strong> <span class="text-slate-700">${p.region}</span></div>
-            <div class="mt-2 flex items-center justify-between">
-              <span class="text-slate-400 font-mono text-[9px]">${p.subProgram}</span>
-              <span class="px-1.5 py-0.5 rounded text-[9.5px] font-bold ${
-                (p.status || '').includes('جاري') 
-                  ? 'bg-amber-50 text-amber-700 border border-amber-100' 
-                  : (p.status || '').includes('مسحوب')
-                    ? 'bg-rose-50 text-rose-700 border border-rose-100'
-                    : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-              }">${p.status || ''}</span>
-            </div>
-            <div class="mt-3 pt-2 border-t border-slate-100 space-y-1.5">
-              <button 
-                type="button"
-                data-project-id="${p.id}"
-                class="switch-to-iframe-btn flex items-center justify-center gap-1.5 w-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] py-1.5 px-3 rounded-lg shadow-2xs transition-all text-center cursor-pointer font-bold border-0"
-                style="text-decoration: none; color: white !important;"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:4px;"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
-                المعاينة التفصيلية والتفاعلية 🗺️
-              </button>
-              ${hasWriteAccess ? `
-              <button 
-                type="button"
-                data-map-url="${p.mapUrl || `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`}"
-                class="open-maps-btn flex items-center justify-center gap-1.5 w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[9.5px] py-1 px-3 rounded-lg border border-slate-200 transition-all text-center cursor-pointer font-semibold shadow-2xs"
-                style="text-decoration: none;"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:4px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                الذهاب مباشرة لقوقل ماب 🌐
-              </button>
-              ` : ''}
-            </div>
+          <div class="text-[10.5px] text-slate-500 space-y-1.5 mt-1 border-t border-slate-100 pt-2.5 leading-relaxed">
+            <div class="flex justify-between items-start gap-2 pb-1 border-b border-dashed border-slate-100"><strong class="text-slate-500 shrink-0 font-bold">الرقم التشغيلي:</strong> <span class="font-mono text-slate-800 font-extrabold text-left break-all select-all">${p.operationalNumber}</span></div>
+            <div class="flex justify-between items-start gap-2 pb-1 border-b border-dashed border-slate-100"><strong class="text-slate-500 shrink-0 font-bold">المقاول:</strong> <span class="text-slate-800 font-extrabold text-left leading-normal">${p.contractor}</span></div>
+            <div class="flex justify-between items-start gap-2 pb-1 border-b border-dashed border-slate-100"><strong class="text-slate-500 shrink-0 font-bold">الاستشاري:</strong> <span class="text-slate-800 font-extrabold text-left leading-normal">${p.consultant}</span></div>
+            <div class="flex justify-between items-start gap-2"><strong class="text-slate-500 shrink-0 font-bold">النطاق:</strong> <span class="text-slate-800 font-extrabold text-left">${p.region}</span></div>
+          </div>
+          
+          <div class="mt-3 pt-2 border-t border-slate-100 space-y-2">
+            <button 
+              type="button"
+              data-project-id="${p.id}"
+              class="switch-to-iframe-btn flex items-center justify-center gap-1.5 w-full bg-blue-600 hover:bg-blue-500 text-white text-[11px] py-2 px-3 rounded-xl shadow-xs transition-all text-center cursor-pointer font-bold border-0"
+              style="text-decoration: none; color: white !important;"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:4px;"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+              المعاينة والتفاصيل 🔍
+            </button>
+            ${hasWriteAccess ? `
+            <button 
+              type="button"
+              data-map-url="${p.mapUrl || `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`}"
+              class="open-maps-btn flex items-center justify-center gap-1.5 w-full bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] py-1.5 px-3 rounded-xl border border-slate-200 transition-all text-center cursor-pointer font-bold shadow-2xs"
+              style="text-decoration: none;"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:4px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              فتح في قوقل ماب 🌐
+            </button>
+            ` : ''}
           </div>
         </div>
       `;
 
       const marker = L.circleMarker([lat, lng], markerOptions)
-        .bindPopup(popupHtml, { maxWidth: 280, closeButton: false })
+        .bindPopup(popupHtml, { 
+          maxWidth: 320, 
+          minWidth: 260, 
+          closeButton: false,
+          autoPan: true,
+          autoPanPadding: [24, 110]
+        })
         .addTo(map);
 
       // Bind interactive click handler so users click on markers to sync sidebar/app details immediately!
@@ -807,10 +813,20 @@ export function ProjectMapViewer({
           font-family: inherit;
         }
         .leaflet-popup-content-wrapper {
-          border-radius: 14px !important;
-          border: 1px solid #E2E8F0 !important;
-          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1) !important;
-          padding: 3px;
+          border-radius: 18px !important;
+          border: 2px solid #94A3B8 !important; /* Elegant high-contrast border representing premium card container */
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.1) !important;
+          padding: 0 !important;
+          background: #FFFFFF !important;
+        }
+        .leaflet-popup-content {
+          margin: 14px 16px !important;
+          width: auto !important;
+        }
+        .leaflet-popup-tip {
+          background: #FFFFFF !important;
+          border: 1px solid #94A3B8 !important;
+          box-shadow: none !important;
         }
         .leaflet-popup-tip-container {
           display: block;
