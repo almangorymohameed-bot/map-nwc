@@ -825,8 +825,8 @@ export default function App() {
         <div className="border-b border-slate-200 flex justify-between items-center bg-white p-2.5 rounded-2xl border border-slate-100 shadow-2xs">
           <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
             {[
-              { id: 'maps', label: 'الخرائط والمشاريع التفاعلية', icon: Map },
-              { id: 'stats', label: 'لوحة الإحصائيات والمجملات', icon: Layers },
+              { id: 'maps', label: 'الخرائط التفاعلية', icon: Map },
+              { id: 'stats', label: ' الإحصائيات ', icon: Layers },
               // Admin permission tab only visible to admin
               ...(currentUser.role === 'admin' ? [{ id: 'users', label: 'إدارة وتوزيع صلاحيات الحسابات', icon: Users }] : [])
             ].map(tab => {
@@ -850,7 +850,7 @@ export default function App() {
           </div>
 
           <div className="hidden md:flex items-center gap-2 text-xs text-slate-400 font-mono">
-            <span>المرجع الفني للبلديات: v1.12.0</span>
+            <span></span>
           </div>
         </div>
 
@@ -929,10 +929,10 @@ export default function App() {
                   <div className="bg-white p-4 rounded-t-2xl border-t border-r border-l border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <FileSpreadsheet className="h-4 w-4 text-slate-500 animate-pulse" />
-                      <span className="text-xs font-bold text-slate-800">قائمة عقود المشاريع التفاعلية للمنطقة</span>
+                      <span className="text-xs font-bold text-slate-800">قائمة المشاريع</span>
                     </div>
                     <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
-                      {filteredProjects.length} مشروع مرخّص للتصفح
+                      {filteredProjects.length} عدد المشاريع  
                     </span>
                   </div>
                   <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-b-2xl max-h-[580px] overflow-y-auto w-full">

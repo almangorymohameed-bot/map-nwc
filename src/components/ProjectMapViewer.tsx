@@ -1000,7 +1000,7 @@ export function ProjectMapViewer({
         <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-blue-900 gap-2 font-medium">
           <div className="flex items-center gap-2 text-right min-w-0 flex-1">
             <Globe className="h-4 w-4 text-blue-600 shrink-0" />
-            <span className="font-bold text-blue-800 shrink-0">معاينة ومخطط قوقل ماب (Google Maps):</span>
+            <span className="font-bold text-blue-800 shrink-0">معاينة تقاصيل المشروع:</span>
             <span className="text-slate-500 text-[11px] font-semibold">
               {isAdmin && ""}
             </span>
@@ -1265,7 +1265,7 @@ export function ProjectMapViewer({
         {!isMasterMap ? (
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-700">
-              الاستشاري الهندسي المشرف:
+              الاستشاري المشرف:
             </span>
             <span className="text-slate-600 truncate max-w-[200px]">
               {project?.consultant}
@@ -1283,7 +1283,7 @@ export function ProjectMapViewer({
         ) : (
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-            <span>تصنيف العقد: {project?.classification}</span>
+            <span>التصنيف : {project?.classification}</span>
             <span className="w-1 h-1 rounded-full bg-slate-300"></span>
             <span>الحالة: <span className="text-emerald-700 font-bold">{project?.status}</span></span>
           </div>

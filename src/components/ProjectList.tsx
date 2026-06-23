@@ -148,7 +148,7 @@ export function ProjectList({
             }`}
           >
             <SlidersHorizontal className="h-4 w-4" />
-            <span className="hidden sm:inline">أدوات تصفية متقدمة</span>
+            <span className="hidden sm:inline">أدوات تصفية</span>
           </button>
         </div>
 
@@ -202,7 +202,7 @@ export function ProjectList({
         {/* Filtering status indicator */}
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 pt-1">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span>تم العثور على <span className="font-bold text-blue-600">{filteredProjects.length}</span> من أصل <span className="font-semibold text-slate-800">{projects.length}</span> مشروع مفوض لحسابك</span>
+            <span>تم العثور على <span className="font-bold text-blue-600">{filteredProjects.length}</span> من أصل <span className="font-semibold text-slate-800">{projects.length}</span></span>
             
             {/* High fidelity mode toggle */}
             <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 select-none shrink-0">
@@ -217,7 +217,7 @@ export function ProjectList({
                 title="عرض قائمة مبسطة ذكية للجوال"
               >
                 <List className="h-3 w-3" />
-                <span>مبسط للجوال</span>
+                <span>مبسط</span>
               </button>
               <button
                 type="button"
@@ -230,7 +230,7 @@ export function ProjectList({
                 title="عرض بطاقات تفصيلية"
               >
                 <LayoutGrid className="h-3 w-3" />
-                <span>بطاقات تفصيلية</span>
+                <span>بطاقات</span>
               </button>
             </div>
           </div>
