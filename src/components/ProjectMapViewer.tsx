@@ -1002,7 +1002,7 @@ export function ProjectMapViewer({
             <Globe className="h-4 w-4 text-blue-600 shrink-0" />
             <span className="font-bold text-blue-800 shrink-0">معاينة ومخطط قوقل ماب (Google Maps):</span>
             <span className="text-slate-500 text-[11px] font-semibold">
-              {isAdmin && "متاحة للملاحة بموجب صلاحيات مدير النظام"}
+              {isAdmin && ""}
             </span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0 self-auto block">
@@ -1021,12 +1021,12 @@ export function ProjectMapViewer({
                 onClick={() => setMapMode('iframe')}
                 className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-extrabold transition-all text-[10px] animate-pulse cursor-pointer shadow-xs"
               >
-                تفعيل المعاينة المدمجة 🗺️
+                تفعيل المعاينة🗺️
               </button>
             ) : (
               <span className="px-2 py-1 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded font-bold text-[10px] flex items-center gap-1 shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                المعاينة المدمجة نشطة
+                المعاينة نشطة
               </span>
             )}
           </div>
@@ -1175,7 +1175,7 @@ export function ProjectMapViewer({
               ) : (
                 <>
                   <Lock className="h-3.5 w-3.5 shrink-0 text-rose-500" />
-                  <span>تفعيل حركة الخريطة 🗺️</span>
+                  <span>اضغط للتحريك   🗺️</span>
                 </>
               )}
             </button>
@@ -1192,14 +1192,14 @@ export function ProjectMapViewer({
         {/* Floating map classification legend block */}
         {isLeafletReady && mapMode === 'osm' && (
           <div className="absolute bottom-4 left-4 z-[999] bg-white/95 backdrop-blur-xs p-2.5 px-3 rounded-xl shadow-lg border border-slate-200/80 text-xs font-bold text-slate-700 flex flex-col gap-1.5 pointer-events-auto text-right" dir="rtl">
-            <div className="text-[10px] text-slate-400 font-extrabold pb-1 border-b border-slate-100 mb-0.5">تصنيف مشروعات القطاع</div>
+            <div className="text-[10px] text-slate-400 font-extrabold pb-1 border-b border-slate-100 mb-0.5"></div>
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-[#3b82f6] border border-blue-700 flex-shrink-0"></span>
-              <span className="text-[11px] text-slate-800">مشروعات قطاع المياه 💧</span>
+              <span className="text-[11px] text-slate-800">مشاريع المياه 💧</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] border border-green-700 flex-shrink-0"></span>
-              <span className="text-[11px] text-slate-800">مشروعات الصرف الصحي 🌿</span>
+              <span className="text-[11px] text-slate-800">مشاريع الصرف 🌿</span>
             </div>
           </div>
         )}
@@ -1216,7 +1216,7 @@ export function ProjectMapViewer({
                   </div>
                   <h4 className="text-sm font-extrabold text-white mb-1.5">جاري جلب تفاصيل المخطط التفاعلي</h4>
                   <p className="text-[11px] text-slate-400 max-w-sm leading-relaxed">
-                    يتم الآن تزامن وتحميل طبقات خريطة قوقل ماب للمشروع. يرجى الانتظار لتفادي ظهور الشاشة البيضاء ومزامنة البيانات محلياً...
+                    جاري المعالجة...
                   </p>
                 </div>
               )}
@@ -1278,7 +1278,7 @@ export function ProjectMapViewer({
         {isMasterMap ? (
           <div className="flex items-center gap-1.5 text-blue-700 font-bold text-[11px] bg-blue-50 border border-blue-100 px-3 py-1 rounded-lg">
             <Sparkles className="h-3.5 w-3.5 animate-pulse text-indigo-600" />
-            <span>معاينة جماعية حية - تحكُّم متعدد عبر الضغط الفوري على النقاط</span>
+            <span>مشاريع القطاع الاوسط</span>
           </div>
         ) : (
           <div className="flex items-center gap-1.5">

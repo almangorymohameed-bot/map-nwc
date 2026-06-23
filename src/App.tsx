@@ -798,7 +798,7 @@ export default function App() {
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></div>
             <div>
               <div className="text-xs text-slate-200">
-                أنت تتصفح حالياً بصفة: <span className="font-bold text-blue-400">{currentUser.name}</span> ({
+                مرحباً: <span className="font-bold text-blue-400">{currentUser.name}</span> ({
                   currentUser.role === 'admin' ? 'صلاحية مدير النظام الكاملة' : currentUser.role === 'editor' ? 'صلاحية محرر خرائط وبيانات' : 'صلاحية عرض الخرائط فقط'
                 })
               </div>
