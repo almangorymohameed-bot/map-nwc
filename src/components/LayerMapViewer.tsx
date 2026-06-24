@@ -5,7 +5,8 @@ import { KMZLayer, KMZFeature, Project } from '../types';
 import { parseKMZFile } from '../utils/kmzParser';
 import { 
   Plus, Trash2, Layers, Upload, Download, Eye, EyeOff, Edit, Check, X, 
-  MapPin, Share2, Award, Info, RefreshCw, FolderOpen, Save, FileCode, CheckSquare, Link
+  MapPin, Share2, Award, Info, RefreshCw, FolderOpen, Save, FileCode, CheckSquare, Link,
+  Image, UploadCloud
 } from 'lucide-react';
 
 interface LayerMapViewerProps {
@@ -135,9 +136,14 @@ export default function LayerMapViewer({ hasWriteAccess, onFeedback, projects = 
   const [drawingPoints, setDrawingPoints] = useState<[number, number][]>([]);
   const [tempFeatureName, setTempFeatureName] = useState('');
   const [tempFeatureDesc, setTempFeatureDesc] = useState('');
+  const [tempFeatureImageUrl, setTempFeatureImageUrl] = useState('');
 
-  // Editing existing geometry state
+  // Editing existing geometry/details state
   const [isEditingVertices, setIsEditingVertices] = useState(false);
+  const [isEditingFeatureDetails, setIsEditingFeatureDetails] = useState(false);
+  const [editingName, setEditingName] = useState('');
+  const [editingDesc, setEditingDesc] = useState('');
+  const [editingImageUrl, setEditingImageUrl] = useState('');
   const [editingFeaturePath, setEditingFeaturePath] = useState<{ layerId: string; index: number } | null>(null);
 
   // New layer creation modal / inline state
@@ -167,6 +173,21 @@ export default function LayerMapViewer({ hasWriteAccess, onFeedback, projects = 
       points: drawingPoints
     };
   }, [drawingMode, drawingPoints]);
+
+  // Synchronize selected feature details into editing states
+  useEffect(() => {
+    if (selectedFeature) {
+      const layer = layers.find(l => l.id === selectedFeature.layerId);
+      const feat = layer?.features[selectedFeature.index];
+      if (feat) {
+        setEditingName(feat.name);
+        setEditingDesc(feat.description || '');
+        setEditingImageUrl(feat.imageUrl || '');
+      }
+    } else {
+      setIsEditingFeatureDetails(false);
+    }
+  }, [selectedFeature]);
 
   // Persist layers in local storage
   useEffect(() => {
@@ -295,7 +316,12 @@ export default function LayerMapViewer({ hasWriteAccess, onFeedback, projects = 
                 </span>
               </div>
               <h5 class="font-extrabold text-[#0F172A] text-xs mb-1">${feature.name}</h5>
-              <p class="text-[10px] text-slate-500 leading-relaxed mb-2">${feature.description || 'لا يوجد وصف.'}</p>
+              <p class="text-[10px] text-slate-500 leading-relaxed mb-1">${feature.description || 'لا يوجد وصف.'}</p>
+              ${feature.imageUrl ? `
+                <div class="my-2 overflow-hidden rounded-lg border border-slate-100 max-h-[110px] bg-slate-50 flex items-center justify-center">
+                  <img src="${feature.imageUrl}" class="w-full h-auto max-h-[110px] object-cover" alt="المرفق" />
+                </div>
+              ` : ''}
               <div class="text-[8.5px] text-slate-400 font-mono">
                 الموقع: ${feature.coordinates[0]?.[0]?.toFixed(5)}, ${feature.coordinates[0]?.[1]?.toFixed(5)}
               </div>
@@ -566,7 +592,8 @@ export default function LayerMapViewer({ hasWriteAccess, onFeedback, projects = 
       type: drawingMode as 'polygon' | 'polyline' | 'point',
       name: tempFeatureName.trim() || `معلم جديد ${Date.now().toString().slice(-4)}`,
       description: tempFeatureDesc.trim() || 'تم رسم هذا المعلم مباشرة على خريطة النظام التفاعلية NWC.',
-      coordinates: finalPoints
+      coordinates: finalPoints,
+      imageUrl: tempFeatureImageUrl.trim() || undefined
     };
 
     setLayers(prev => prev.map(l => {
@@ -584,6 +611,7 @@ export default function LayerMapViewer({ hasWriteAccess, onFeedback, projects = 
     setDrawingMode('none');
     setTempFeatureName('');
     setTempFeatureDesc('');
+    setTempFeatureImageUrl('');
   };
 
   // Cancel Drawing
@@ -592,6 +620,7 @@ export default function LayerMapViewer({ hasWriteAccess, onFeedback, projects = 
     setDrawingMode('none');
     setTempFeatureName('');
     setTempFeatureDesc('');
+    setTempFeatureImageUrl('');
     onFeedback('تم إلغاء عملية الرسم الحالية.');
   };
 
@@ -847,6 +876,7 @@ export default function LayerMapViewer({ hasWriteAccess, onFeedback, projects = 
                 onClick={() => {
                   setSelectedFeature(null);
                   setIsEditingVertices(false);
+                  setIsEditingFeatureDetails(false);
                   setEditingFeaturePath(null);
                 }}
                 className="p-1 hover:bg-slate-100 text-slate-400 rounded-lg cursor-pointer"
@@ -855,57 +885,227 @@ export default function LayerMapViewer({ hasWriteAccess, onFeedback, projects = 
               </button>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex justify-between text-[11px] border-b border-dashed border-slate-100 pb-1.5">
-                <span className="text-slate-400">الاسم:</span>
-                <span className="text-slate-800 font-extrabold">{selectedFeatureObj.name}</span>
-              </div>
-              <div className="flex justify-between text-[11px] border-b border-dashed border-slate-100 pb-1.5">
-                <span className="text-slate-400">النوع جغرافي:</span>
-                <span className="text-slate-800 font-bold">
-                  {selectedFeatureObj.type === 'polygon' ? 'مضلع (محيط)' : selectedFeatureObj.type === 'polyline' ? 'مسار (أنبوب)' : 'نقطة (موقع)'}
-                </span>
-              </div>
-              <div className="text-[11px]">
-                <span className="text-slate-400 block mb-1">الوصف:</span>
-                <p className="bg-slate-50 p-2 rounded-xl text-slate-600 leading-relaxed text-[10px] border border-slate-100 max-h-[80px] overflow-y-auto">
-                  {selectedFeatureObj.description || 'لا يوجد وصف.'}
-                </p>
-              </div>
-            </div>
+            {isEditingFeatureDetails ? (
+              <div className="space-y-3 pt-1">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-extrabold text-slate-500">اسم المعلم الجغرافي:</label>
+                  <input
+                    type="text"
+                    value={editingName}
+                    onChange={e => setEditingName(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 font-bold"
+                  />
+                </div>
+                
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-extrabold text-slate-500">الوصف والتفاصيل:</label>
+                  <textarea
+                    value={editingDesc}
+                    onChange={e => setEditingDesc(e.target.value)}
+                    rows={2}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500 resize-none leading-relaxed"
+                  />
+                </div>
 
-            {hasWriteAccess && selectedFeature && (
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={() => {
-                    if (isEditingVertices) {
-                      setIsEditingVertices(false);
-                      setEditingFeaturePath(null);
-                      onFeedback('تم إنهاء وضع تعديل الإحداثيات وحفظ التعديلات.');
-                    } else {
-                      setIsEditingVertices(true);
-                      setEditingFeaturePath(selectedFeature);
-                      onFeedback('🔍 وضع تعديل العُقد نشط: يمكنك الآن سحب النقاط الصفراء على الخريطة لتعديل الشكل الجغرافي مباشرة!');
-                    }
-                  }}
-                  className={`flex-1 py-1.5 px-3 rounded-xl text-[10px] font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    isEditingVertices 
-                      ? 'bg-amber-600 border-amber-500 text-white hover:bg-amber-500' 
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  <Edit className="h-3.5 w-3.5" />
-                  <span>{isEditingVertices ? 'إنهاء التعديل' : 'تعديل الإحداثيات'}</span>
-                </button>
+                <div className="flex flex-col gap-1.5 p-3 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <label className="text-[10px] font-extrabold text-slate-700 flex items-center gap-1.5">
+                    <Image className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+                    إرفاق صور أو مستند رقمي للموقع:
+                  </label>
 
-                <button
-                  onClick={() => handleDeleteFeature(selectedFeature.layerId, selectedFeature.index, selectedFeatureObj.name)}
-                  className="px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl transition-all cursor-pointer flex items-center justify-center"
-                  title="حذف هذا المعلم الجغرافي من الطبقة"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                  {/* Local Uploader */}
+                  <label className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white hover:bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-700 text-[10px] font-bold cursor-pointer transition-colors shadow-3xs text-center">
+                    <UploadCloud className="h-4 w-4 text-indigo-500" />
+                    <span>رفع صورة محلية مباشرة (Base64)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            if (typeof reader.result === 'string') {
+                              setEditingImageUrl(reader.result);
+                              onFeedback('📸 تم رفع الصورة بنجاح وتجهيزها للحفظ.');
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+
+                  {/* Google Drive Guide */}
+                  <div className="bg-indigo-50/50 p-2.5 rounded-xl border border-indigo-100 text-[10px] text-slate-700 leading-normal flex flex-col gap-1">
+                    <span className="font-extrabold text-indigo-950">📁 تخزين الصور سحابياً في قوقل درايف:</span>
+                    <p className="text-[9px] text-slate-500">يمكنك رفع الصور مباشرة إلى مجلد الدرايف المشترك أدناه ثم إرفاق رابطه بالأسفل:</p>
+                    <a 
+                      href="https://drive.google.com/drive/folders/1TKChKu05nDEgvFMwUB6eVzAdyURppEUr?usp=sharing"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[9px] text-indigo-600 hover:text-indigo-800 font-extrabold underline self-start"
+                    >
+                      <Link className="w-2.5 h-2.5" />
+                      مجلد قوقل درايف المشترك لمشروع الرقمنة ↗
+                    </a>
+                  </div>
+
+                  {/* Image URL Input */}
+                  <input
+                    type="url"
+                    placeholder="ضع رابط الصورة أو رابط قوقل درايف هنا"
+                    value={editingImageUrl}
+                    onChange={e => setEditingImageUrl(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-[10px] outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-left"
+                    dir="ltr"
+                  />
+
+                  {editingImageUrl && (
+                    <div className="relative mt-1 rounded-xl overflow-hidden border border-slate-200 max-h-[80px] bg-slate-100 flex items-center justify-center">
+                      <img src={editingImageUrl} className="h-full w-auto max-h-[80px] object-cover" alt="المرفق المعاين" />
+                      <button
+                        type="button"
+                        onClick={() => setEditingImageUrl('')}
+                        className="absolute top-1 right-1 p-0.5 bg-rose-600 text-white rounded-full hover:bg-rose-500"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      setIsEditingFeatureDetails(false);
+                    }}
+                    className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-[10px] font-bold cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLayers(prev => prev.map(l => {
+                        if (l.id !== selectedFeature.layerId) return l;
+                        return {
+                          ...l,
+                          features: l.features.map((f, fIdx) => {
+                            if (fIdx !== selectedFeature.index) return f;
+                            return {
+                              ...f,
+                              name: editingName.trim() || f.name,
+                              description: editingDesc.trim(),
+                              imageUrl: editingImageUrl.trim() || undefined
+                            };
+                          })
+                        };
+                      }));
+                      onFeedback(`✅ تم تعديل تفاصيل المعلم [${editingName}] وحفظ المرفق بنجاح.`);
+                      setIsEditingFeatureDetails(false);
+                    }}
+                    className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-extrabold cursor-pointer text-center"
+                  >
+                    حفظ التغييرات
+                  </button>
+                </div>
               </div>
+            ) : (
+              <>
+                <div className="space-y-2.5">
+                  <div className="flex justify-between text-[11px] border-b border-dashed border-slate-100 pb-1.5">
+                    <span className="text-slate-400 font-bold">الاسم الحالي:</span>
+                    <span className="text-slate-800 font-extrabold">{selectedFeatureObj.name}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px] border-b border-dashed border-slate-100 pb-1.5">
+                    <span className="text-slate-400 font-bold">النوع جغرافي:</span>
+                    <span className="text-slate-800 font-bold">
+                      {selectedFeatureObj.type === 'polygon' ? '🟢 مضلع مغلق' : selectedFeatureObj.type === 'polyline' ? '🔵 مسار / أنبوب' : '🔴 موقع / نقطة'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] border-b border-dashed border-slate-100 pb-2">
+                    <span className="text-slate-400 font-bold block mb-1">الوصف التفصيلي:</span>
+                    <p className="bg-slate-50 p-2 rounded-xl text-slate-600 leading-relaxed text-[10px] border border-slate-100 max-h-[80px] overflow-y-auto font-medium">
+                      {selectedFeatureObj.description || 'لا يوجد وصف مضاف حالياً.'}
+                    </p>
+                  </div>
+
+                  {selectedFeatureObj.imageUrl && (
+                    <div className="text-[11px] space-y-1">
+                      <span className="text-slate-400 font-bold block">المستندات أو الصور المرفقة:</span>
+                      <div className="group relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center max-h-[140px] shadow-3xs">
+                        <img 
+                          src={selectedFeatureObj.imageUrl} 
+                          className="w-full h-auto max-h-[140px] object-cover transition-transform duration-300 group-hover:scale-105" 
+                          alt="مرفق الموقع" 
+                          onError={(e) => {
+                            // display text warning for non-direct links, like raw drive folders or html
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                        <a 
+                          href={selectedFeatureObj.imageUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="absolute bottom-2 left-2 bg-slate-900/80 text-white text-[9px] px-2.5 py-1.5 rounded-lg font-bold hover:bg-slate-900 flex items-center gap-1 transition-colors"
+                        >
+                          <Link className="w-3 h-3" />
+                          عرض المرفق / المجلد ↗
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {hasWriteAccess && selectedFeature && (
+                  <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-100">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setIsEditingFeatureDetails(true);
+                        }}
+                        className="flex-1 py-1.5 px-3 rounded-xl text-[10px] font-bold border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50 text-indigo-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Image className="h-3.5 w-3.5" />
+                        <span>تعديل المرفقات والبيانات</span>
+                      </button>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          if (isEditingVertices) {
+                            setIsEditingVertices(false);
+                            setEditingFeaturePath(null);
+                            onFeedback('تم إنهاء وضع تعديل الإحداثيات وحفظ التعديلات.');
+                          } else {
+                            setIsEditingVertices(true);
+                            setEditingFeaturePath(selectedFeature);
+                            onFeedback('🔍 وضع تعديل العُقد نشط: يمكنك الآن سحب النقاط الصفراء على الخريطة لتعديل الشكل الجغرافي مباشرة!');
+                          }
+                        }}
+                        className={`flex-1 py-1.5 px-3 rounded-xl text-[10px] font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          isEditingVertices 
+                            ? 'bg-amber-600 border-amber-500 text-white hover:bg-amber-500' 
+                            : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                        <span>{isEditingVertices ? 'إنهاء تعديل الإحداثيات' : 'تعديل الإحداثيات على الخريطة'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteFeature(selectedFeature.layerId, selectedFeature.index, selectedFeatureObj.name)}
+                        className="px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                        title="حذف هذا المعلم الجغرافي من الطبقة"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -1034,14 +1234,52 @@ export default function LayerMapViewer({ hasWriteAccess, onFeedback, projects = 
                 placeholder="اسم المعلم الجغرافي"
                 value={tempFeatureName}
                 onChange={e => setTempFeatureName(e.target.value)}
-                className="px-3 py-1.5 bg-white border border-amber-200 rounded-xl text-xs focus:ring-1 focus:ring-amber-500 outline-none w-full md:w-[150px]"
+                className="px-3 py-1.5 bg-white border border-amber-200 rounded-xl text-xs focus:ring-1 focus:ring-amber-500 outline-none w-full md:w-[130px]"
               />
               <input
                 type="text"
                 placeholder="وصف مختصر للمعلم"
                 value={tempFeatureDesc}
                 onChange={e => setTempFeatureDesc(e.target.value)}
-                className="px-3 py-1.5 bg-white border border-amber-200 rounded-xl text-xs focus:ring-1 focus:ring-amber-500 outline-none w-full md:w-[220px]"
+                className="px-3 py-1.5 bg-white border border-amber-200 rounded-xl text-xs focus:ring-1 focus:ring-amber-500 outline-none w-full md:w-[160px]"
+              />
+
+              {/* Image attachment / Google Drive pasting options */}
+              <div className="flex items-center gap-1.5 bg-white border border-amber-200 rounded-xl px-2 py-1.5">
+                <label className="text-amber-800 hover:text-amber-900 cursor-pointer flex items-center gap-1 text-[10px] font-bold">
+                  <UploadCloud className="w-3.5 h-3.5 text-amber-600" />
+                  <span>ارفاق صورة</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          if (typeof reader.result === 'string') {
+                            setTempFeatureImageUrl(reader.result);
+                            onFeedback('📸 تم إرفاق صورة للمعلم الجاري رسمه بنجاح.');
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                </label>
+                {tempFeatureImageUrl && (
+                  <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" title="تم إرفاق صورة"></span>
+                )}
+              </div>
+
+              <input
+                type="text"
+                placeholder="رابط الصورة أو رابط قوقل درايف"
+                value={tempFeatureImageUrl}
+                onChange={e => setTempFeatureImageUrl(e.target.value)}
+                className="px-3 py-1.5 bg-white border border-amber-200 rounded-xl text-[10px] focus:ring-1 focus:ring-amber-500 outline-none w-full md:w-[150px] font-mono text-left"
+                dir="ltr"
               />
               
               <div className="flex gap-1.5 w-full md:w-auto justify-end">

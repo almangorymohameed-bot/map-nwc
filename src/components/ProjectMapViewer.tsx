@@ -668,6 +668,11 @@ export function ProjectMapViewer({
                     </span>
                     <h5 class="font-extrabold text-[#0F172A] text-xs mt-1.5 mb-0.5">${feature.name}</h5>
                     <p class="text-[9.5px] text-slate-500 leading-snug">${feature.description || 'لا يوجد وصف.'}</p>
+                    ${feature.imageUrl ? `
+                      <div class="my-2 overflow-hidden rounded-lg border border-slate-100 max-h-[110px] bg-slate-50 flex items-center justify-center">
+                        <img src="${feature.imageUrl}" class="w-full h-auto max-h-[110px] object-cover" alt="صورة المرفق" />
+                      </div>
+                    ` : ''}
                     ${projectHtml}
                   </div>
                 `;

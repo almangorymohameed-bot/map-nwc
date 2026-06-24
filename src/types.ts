@@ -38,6 +38,7 @@ export interface KMZFeature {
   name: string;
   description: string;
   coordinates: [number, number][]; // Array of [lat, lng]
+  imageUrl?: string; // رابط الصورة المرفقة (سواء محلية أو مرفوعة على جوجل درايف)
 }
 
 export interface KMZLayer {
