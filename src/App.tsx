@@ -18,7 +18,6 @@ import { UserManagement } from './components/UserManagement';
 import { ProjectModal } from './components/ProjectModal';
 import { ProjectList } from './components/ProjectList';
 import { NWCLogo } from './components/NWCLogo';
-import LayerMapViewer from './components/LayerMapViewer';
 
 // Icons
 import { 
@@ -83,7 +82,7 @@ export default function App() {
   });
 
   // 3. UI Control State
-  const [activeTab, setActiveTab] = useState<'maps' | 'layers' | 'stats' | 'users'>('maps');
+  const [activeTab, setActiveTab] = useState<'maps' | 'stats' | 'users'>('maps');
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [mobileViewMode, setMobileViewMode] = useState<'map' | 'list'>('list');
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
@@ -881,7 +880,6 @@ export default function App() {
           <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
             {[
               { id: 'maps', label: 'الخرائط التفاعلية', icon: Map },
-              { id: 'layers', label: 'طبقات الرقمنة (KMZ)', icon: Compass },
               { id: 'stats', label: ' الإحصائيات ', icon: Layers },
               // Admin permission tab only visible to admin
               ...(currentUser.role === 'admin' ? [{ id: 'users', label: 'إدارة وتوزيع صلاحيات الحسابات', icon: Users }] : [])
@@ -1020,17 +1018,6 @@ export default function App() {
                 </div>
 
               </div>
-            </div>
-          )}
-
-          {/* Active Tab: Map Layers with KMZ drawing & management */}
-          {activeTab === 'layers' && (
-            <div className="animate-in fade-in duration-300">
-              <LayerMapViewer 
-                hasWriteAccess={currentUser.role === 'admin' || currentUser.role === 'editor'} 
-                onFeedback={(msg) => showNotification(msg)}
-                projects={projects}
-              />
             </div>
           )}
 

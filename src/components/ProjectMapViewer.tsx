@@ -6,10 +6,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Project, KMZLayer, KMZFeature } from '../types';
+import { Project } from '../types';
 import { getEmbeddableMapUrl } from '../data/initialProjects';
-import JSZip from 'jszip';
-
 
 if (typeof window !== 'undefined') {
   (window as any).L = L;
@@ -228,7 +226,6 @@ export function ProjectMapViewer({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
-  const customLayersGroupRef = useRef<any>(null);
 
   // Live Geographic Inline Editing Mode
   const [isLocationSelectorActive, setIsLocationSelectorActive] = useState(false);
@@ -542,8 +539,6 @@ export function ProjectMapViewer({
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>'
       }).addTo(mapInstanceRef.current);
 
-      customLayersGroupRef.current = L.featureGroup().addTo(mapInstanceRef.current);
-
       // Register map click listener for dynamic localization edit
       mapInstanceRef.current.on('click', (e: any) => {
         if (isLocationSelectorActiveRef.current && activeProjectRef.current && activeProjectRef.current.id !== -1) {
@@ -604,88 +599,6 @@ export function ProjectMapViewer({
     // Clear previous vector project points
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
-
-    // Render custom KMZ/drawn project layers from localStorage
-    if (customLayersGroupRef.current) {
-      customLayersGroupRef.current.clearLayers();
-      const storedLayersStr = localStorage.getItem('nwc_project_layers');
-      if (storedLayersStr) {
-        try {
-          const parsedLayers = JSON.parse(storedLayersStr);
-          parsedLayers.forEach((layer: any) => {
-            if (!layer || !layer.visible || !Array.isArray(layer.features)) return;
-            
-            layer.features.forEach((feature: any) => {
-              if (!feature || !feature.type || !Array.isArray(feature.coordinates)) return;
-              let leafletObj: any = null;
-              
-              // Find linked project details
-              const linkedProj = layer.projectId ? projects.find((p: any) => p.id === layer.projectId) : null;
-              const projectHtml = linkedProj ? `
-                <div class="mt-2 pt-1.5 border-t border-slate-100 text-right">
-                  <span class="text-[9px] text-emerald-600 font-bold block">🔗 مشروع جاري مرتبط:</span>
-                  <div class="bg-emerald-50/50 p-1.5 rounded-lg border border-emerald-100 text-[9px] text-slate-700 mt-1 leading-normal">
-                    <strong>الاسم:</strong> ${linkedProj.name}<br/>
-                    <strong>الرقم التشغيلي:</strong> ${linkedProj.operationalNumber || 'غير متوفر'}<br/>
-                    <strong>المقاول:</strong> ${linkedProj.contractor || 'غير متوفر'}
-                  </div>
-                </div>
-              ` : '';
-              
-              if (feature.type === 'polygon' && feature.coordinates.length > 2) {
-                leafletObj = L.polygon(feature.coordinates, {
-                  color: layer.color,
-                  fillColor: layer.color,
-                  fillOpacity: 0.25,
-                  weight: 2
-                });
-              } else if (feature.type === 'polyline' && feature.coordinates.length > 1) {
-                leafletObj = L.polyline(feature.coordinates, {
-                  color: layer.color,
-                  weight: 3,
-                  opacity: 0.8
-                });
-              } else if (feature.type === 'point' && feature.coordinates.length > 0) {
-                const coord = feature.coordinates[0];
-                const pointIcon = L.divIcon({
-                  html: `
-                    <div class="flex items-center justify-center w-5 h-5 rounded-full border-2 border-white shadow-xs" style="background-color: ${layer.color}">
-                      <div class="w-1.5 h-1.5 rounded-full bg-white"></div>
-                    </div>
-                  `,
-                  className: 'bg-transparent border-0',
-                  iconSize: [20, 20],
-                  iconAnchor: [10, 10]
-                });
-                leafletObj = L.marker(coord, { icon: pointIcon });
-              }
-              
-              if (leafletObj) {
-                const popupContent = `
-                  <div dir="rtl" class="text-right font-sans p-1 min-w-[200px]">
-                    <span class="px-1.5 py-0.5 rounded text-[8px] text-white shadow-3xs font-extrabold" style="background-color: ${layer.color}">
-                      طبقة: ${layer.name}
-                    </span>
-                    <h5 class="font-extrabold text-[#0F172A] text-xs mt-1.5 mb-0.5">${feature.name}</h5>
-                    <p class="text-[9.5px] text-slate-500 leading-snug">${feature.description || 'لا يوجد وصف.'}</p>
-                    ${feature.imageUrl ? `
-                      <div class="my-2 overflow-hidden rounded-lg border border-slate-100 max-h-[110px] bg-slate-50 flex items-center justify-center">
-                        <img src="${feature.imageUrl}" class="w-full h-auto max-h-[110px] object-cover" alt="صورة المرفق" />
-                      </div>
-                    ` : ''}
-                    ${projectHtml}
-                  </div>
-                `;
-                leafletObj.bindPopup(popupContent);
-                leafletObj.addTo(customLayersGroupRef.current);
-              }
-            });
-          });
-        } catch (err) {
-          console.error("Error drawing custom layers on project map", err);
-        }
-      }
-    }
 
     // Filter projects based on user permissions (this array is passed pre-filtered from App.tsx)
     const allowedProjects = projects || [];
