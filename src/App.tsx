@@ -91,6 +91,7 @@ export default function App() {
   const [showRoleSwitcherDropdown, setShowRoleSwitcherDropdown] = useState(false);
   const [successNotification, setSuccessNotification] = useState('');
   const [showExitModal, setShowExitModal] = useState(false);
+  const [supabaseError, setSupabaseError] = useState<string | null>(null);
 
   // 3.0. Offline/Online Status Monitor
   const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -141,6 +142,17 @@ export default function App() {
       const { data: dbUsers, error: userError } = await supabase
         .from('users')
         .select('*');
+
+      if (userError || projError) {
+        const errorDetails = [
+          userError ? `جدول المستخدمين: ${userError.message} (${userError.details || 'لا توجد تفاصيل إضافية'})` : null,
+          projError ? `جدول المشاريع: ${projError.message} (${projError.details || 'لا توجد تفاصيل إضافية'})` : null
+        ].filter(Boolean).join(" | ");
+        console.warn("فشل الاتصال بـ Supabase:", errorDetails);
+        setSupabaseError(errorDetails);
+      } else {
+        setSupabaseError(null);
+      }
 
       if (!projError && dbProjects) {
         // مطابقة وتغيير مسميات الحقول لتتوافق مع الـ Frontend إن وجدت
@@ -596,23 +608,47 @@ export default function App() {
       y: savedProj.y !== undefined && savedProj.y !== null ? Number(savedProj.y) : null
     };
 
+    // تحديث الحالة المحلية فوراً لضمان سرعة الاستجابة وانعكاس البيانات مباشرة
+    setProjects(prev => {
+      const exists = prev.some(p => p.id === savedProj.id);
+      if (exists) {
+        return prev.map(p => p.id === savedProj.id ? savedProj : p);
+      } else {
+        return [savedProj, ...prev];
+      }
+    });
+
     const exists = projects.some(p => p.id === savedProj.id);
-    
-    if (exists) {
-      // تحديث مشروع قائم بالسيرفر
-      const { error } = await supabase
-        .from('projects')
-        .update(payload)
-        .eq('id', savedProj.id);
-      
-      if (!error) showNotification(`تم تحديث بيانات مشروع بالسيرفر: ${savedProj.name}`);
-    } else {
-      // إدراج مشروع جديد كلياً
-      const { error } = await supabase
-        .from('projects')
-        .insert([payload]);
-      
-      if (!error) showNotification(`تم إضافة مشروع شبكة جديد بنجاح للسيرفر: ${savedProj.name}`);
+    try {
+      if (exists) {
+        // تحديث مشروع قائم بالسيرفر
+        const { error } = await supabase
+          .from('projects')
+          .update(payload)
+          .eq('id', savedProj.id);
+        
+        if (!error) {
+          showNotification(`تم تحديث بيانات مشروع بالسيرفر: ${savedProj.name}`);
+        } else {
+          console.error("error updating project", error);
+          alert(`خطأ في تحديث المشروع على سوبابيس:\n${error.message}\n\nتأكد من مطابقة أعمدة جدول projects في سوبابيس.`);
+        }
+      } else {
+        // إدراج مشروع جديد كلياً
+        const { error } = await supabase
+          .from('projects')
+          .insert([payload]);
+        
+        if (!error) {
+          showNotification(`تم إضافة مشروع شبكة جديد بنجاح للسيرفر: ${savedProj.name}`);
+        } else {
+          console.error("error inserting project", error);
+          alert(`خطأ في إضافة مشروع جديد على سوبابيس:\n${error.message}\n\nتأكد من مطابقة أعمدة جدول projects في سوبابيس.`);
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert(`خطأ بالاتصال مع سوبابيس: ${err.message || err}`);
     }
     // إعادة إنعاش البيانات لمطابقتها فوراً
     fetchDataFromSupabase();
@@ -631,7 +667,7 @@ export default function App() {
   };
 
   // ==========================================
-  // مزامنة صلاحيات ومستخدمي النظام مع سوبابيس
+  // مزامنة صلاحيات ومخدمي النظام مع سوبابيس
   // ==========================================
   const handleSaveUserPermissions = async (updatedUser: User) => {
     const payload = {
@@ -650,6 +686,20 @@ export default function App() {
       allowed_project_ids: updatedUser.allowedProjectIds || []
     };
 
+    // تحديث الحالة المحلية فوراً لضمان الاستجابة السريعة وانعكاس الصلاحيات مباشرة
+    setUsers(prev => {
+      const exists = prev.some(u => u.id === updatedUser.id);
+      if (exists) {
+        return prev.map(u => u.id === updatedUser.id ? updatedUser : u);
+      } else {
+        return [...prev, updatedUser];
+      }
+    });
+
+    if (updatedUser.id === currentUser.id) {
+      setCurrentUser(updatedUser);
+    }
+
     const exists = users.some(u => u.id === updatedUser.id);
     try {
       if (exists) {
@@ -663,6 +713,7 @@ export default function App() {
           showNotification(`تم حفظ إعداد الصلاحيات للمستخدم: ${updatedUser.name}`);
         } else {
           console.error("error updating user", error);
+          alert(`خطأ في تحديث الصلاحيات على سوبابيس:\n${error.message}\n\nتأكد من إنشاء جدول 'users' بالأعمدة المطلوبة وتفعيل صلاحيات RLS.`);
         }
       } else {
         // إدراج مستخدم جديد
@@ -677,16 +728,21 @@ export default function App() {
           showNotification(`تم إنشاء مستخدم وصلاحيات جديدة بنجاح: ${updatedUser.name}`);
         } else {
           console.error("error inserting user", error);
+          alert(`خطأ في إضافة مستخدم جديد إلى سوبابيس:\n${error.message}\n\nتأكد من إنشاء جدول 'users' بالأعمدة المطلوبة وتفعيل صلاحيات RLS.`);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(`خطأ بالاتصال مع سوبابيس: ${err.message || err}`);
     }
     // تحديث البيانات لايف
     fetchDataFromSupabase();
   };
 
   const handleDeleteUser = async (userId: string) => {
+    // تحديث فوري للحالة المحلية
+    setUsers(prev => prev.filter(u => u.id !== userId));
+    
     try {
       const { error } = await supabase
         .from('users')
@@ -697,9 +753,11 @@ export default function App() {
         showNotification('تم إلغاء حساب المستخدم وسحب شهادات الاعتماد.');
       } else {
         console.error("error deleting user", error);
+        alert(`خطأ في حذف المستخدم من سوبابيس:\n${error.message}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(`خطأ بالاتصال مع سوبابيس: ${err.message || err}`);
     }
     fetchDataFromSupabase();
   };
@@ -893,6 +951,80 @@ export default function App() {
         <div className="bg-emerald-600 text-white text-xs px-6 py-3 font-semibold shadow-inner text-center animate-pulse flex items-center justify-center gap-2">
           <ShieldCheck className="h-4 w-4" />
           <span>{successNotification}</span>
+        </div>
+      )}
+
+      {/* Supabase Error & SQL Creator Warning Banner */}
+      {supabaseError && currentUser && currentUser.role === 'admin' && (
+        <div className="bg-gradient-to-r from-red-600 to-amber-600 text-white text-xs px-6 py-4 font-medium shadow-md text-right flex flex-col md:flex-row items-center justify-between gap-4 border-b border-red-700/50">
+          <div className="flex items-start gap-2.5">
+            <span className="p-1.5 bg-white/10 rounded-lg shrink-0 mt-0.5 text-base">⚠️</span>
+            <div>
+              <span className="font-extrabold text-sm block mb-1">تنبيه لمدير النظام: لم يتم تفعيل أو مطابقة جداول قاعدة بيانات Supabase بشكل كامل!</span>
+              <p className="opacity-95 text-[11px] leading-relaxed">
+                البوابة تعمل حالياً بوضع المحاكاة الآمن (Local Fallback Cache). لتفعيل حفظ وتعديل الصلاحيات والمشاريع لجميع المستخدمين، يرجى تشغيل كود الـ SQL المخصص في قسم <code className="bg-black/25 px-1 py-0.5 rounded font-mono text-[10px]">SQL Editor</code> داخل حسابك في Supabase.
+              </p>
+              <div className="mt-2 text-[10px] bg-black/20 p-2 rounded font-mono overflow-x-auto text-left" dir="ltr">
+                {supabaseError}
+              </div>
+            </div>
+          </div>
+          <button 
+            onClick={() => {
+              const sql = `-- كود إنشاء جداول الصلاحيات لشركة المياه الوطنية بالقطاع الأوسط NWC\n\n` +
+                `CREATE TABLE IF NOT EXISTS users (\n` +
+                `  id TEXT PRIMARY KEY,\n` +
+                `  username TEXT UNIQUE NOT NULL,\n` +
+                `  name TEXT NOT NULL,\n` +
+                `  role TEXT NOT NULL CHECK (role IN ('admin', 'editor', 'viewer')),\n` +
+                `  allowed_regions JSONB DEFAULT '["الكل"]'::jsonb,\n` +
+                `  allowed_scopes JSONB DEFAULT '["الكل"]'::jsonb,\n` +
+                `  allowed_tabs JSONB DEFAULT '["maps", "stats", "layers"]'::jsonb,\n` +
+                `  password TEXT NOT NULL DEFAULT 'nwc1234',\n` +
+                `  can_open_external_links BOOLEAN DEFAULT true,\n` +
+                `  can_filter BOOLEAN DEFAULT true,\n` +
+                `  can_insert BOOLEAN DEFAULT true,\n` +
+                `  department TEXT DEFAULT '',\n` +
+                `  job_title TEXT DEFAULT '',\n` +
+                `  allowed_project_ids JSONB DEFAULT '[]'::jsonb,\n` +
+                `  created_at TIMESTAMPTZ DEFAULT NOW()\n` +
+                `);\n\n` +
+                `CREATE TABLE IF NOT EXISTS projects (\n` +
+                `  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,\n` +
+                `  operational_number TEXT UNIQUE NOT NULL,\n` +
+                `  name TEXT NOT NULL,\n` +
+                `  po TEXT DEFAULT '',\n` +
+                `  unifier_no TEXT DEFAULT '',\n` +
+                `  contractor TEXT,\n` +
+                `  consultant TEXT,\n` +
+                `  status TEXT,\n` +
+                `  scope TEXT,\n` +
+                `  classification TEXT,\n` +
+                `  business_unit TEXT,\n` +
+                `  region TEXT,\n` +
+                `  sub_program TEXT,\n` +
+                `  map_url TEXT,\n` +
+                `  x NUMERIC,\n` +
+                `  y NUMERIC,\n` +
+                `  created_at TIMESTAMPTZ DEFAULT NOW()\n` +
+                `);\n\n` +
+                `-- إدراج المستخدمين الافتراضيين لشركة المياه الوطنية\n` +
+                `INSERT INTO users (id, username, name, role, allowed_regions, allowed_scopes, password, allowed_tabs, can_open_external_links, can_filter, can_insert, department, job_title, allowed_project_ids)\n` +
+                `VALUES \n` +
+                `('admin', 'admin', 'المهندس مدير النظام (الكل)', 'admin', '["الكل"]'::jsonb, '["الكل"]'::jsonb, '20302060', '["maps", "stats", "layers"]'::jsonb, true, true, true, 'إدارة النظم', 'مدير النظام', '[]'::jsonb),\n` +
+                `('riyadh_eng', 'riyadh.engineer', 'مهندس مشاريع وحدة الرياض', 'editor', '["شمال الرياض", "جنوب الرياض", "غرب الرياض", "المتفرقات"]'::jsonb, '["الكل"]'::jsonb, 'nwc1234', '["maps", "stats", "layers"]'::jsonb, true, true, true, 'وحدة أعمال الرياض', 'مهندس مشاريع', '[]'::jsonb),\n` +
+                `('govs_eng', 'gov.engineer', 'مهندس مشاريع المحافظات', 'editor', '["المحافظات الشمالية", "المحافظات الجنوبية", "المحافظات الغربية"]'::jsonb, '["الكل"]'::jsonb, 'nwc1234', '["maps", "stats", "layers"]'::jsonb, true, true, true, 'إدارة المحافظات', 'مهندس مشاريع', '[]'::jsonb),\n` +
+                `('water_monitor', 'water.monitor', 'مراقب عام قطاع المياه', 'viewer', '["الكل"]'::jsonb, '["مياه"]'::jsonb, 'nwc1234', '["maps", "stats", "layers"]'::jsonb, true, true, true, 'إدارة التشغيل والصيانة', 'مراقب عام قطاع المياه', '[]'::jsonb),\n` +
+                `('sewage_monitor', 'sewage.monitor', 'مراقب عام قطاع الصرف الصحي', 'viewer', '["الكل"]'::jsonb, '["صرف صحي"]'::jsonb, 'nwc1234', '["maps", "stats", "layers"]'::jsonb, true, true, true, 'إدارة التشغيل والصيانة', 'مراقب عام قطاع الصرف الصحي', '[]'::jsonb),\n` +
+                `('guest_riyadh', 'guest.riyadh', 'زائر بلدية الرياض الفرعية', 'viewer', '["شمال الرياض", "جنوب الرياض"]'::jsonb, '["الكل"]'::jsonb, 'nwc1234', '["maps", "stats", "layers"]'::jsonb, true, true, true, 'بلدية الرياض', 'زائر معتمد', '[]'::jsonb)\n` +
+                `ON CONFLICT (username) DO NOTHING;`;
+              navigator.clipboard.writeText(sql);
+              alert("تم نسخ كود SQL لإنشاء وتجهيز الجداول بنجاح! الصقه في الـ SQL Editor في Supabase واضغط Run لتهيئة قاعدة البيانات وعكس الصلاحيات مباشرة.");
+            }}
+            className="bg-white hover:bg-slate-50 text-amber-700 font-extrabold text-xs py-2.5 px-4 rounded-xl transition-all cursor-pointer shrink-0 shadow-sm border border-white/20"
+          >
+            نسخ كود SQL للتهيئة 📋
+          </button>
         </div>
       )}
 
