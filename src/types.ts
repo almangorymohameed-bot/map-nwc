@@ -32,3 +32,21 @@ export interface User {
   allowedScopes: string[];  // e.g. ["مياه", "صرف صحي"] - empty or ["الكل"] means all scopes
   password?: string; // كلمة المرور الخاصة بالمستخدم
 }
+
+export interface KMZFeature {
+  type: 'polygon' | 'polyline' | 'point';
+  name: string;
+  description: string;
+  coordinates: [number, number][]; // Array of [lat, lng]
+}
+
+export interface KMZLayer {
+  id: string;
+  name: string;
+  fileName: string;
+  visible: boolean;
+  color: string;
+  features: KMZFeature[];
+  projectId?: number; // الرقم الفريد للمشروع المرتبط
+}
+
