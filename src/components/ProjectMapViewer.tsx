@@ -296,21 +296,10 @@ export function ProjectMapViewer({
 
     map.setView([lat, lng], 14, { animate: true, duration: 1.0 });
 
-    const searchIcon = L.divIcon({
-      html: `
-        <div class="flex items-center justify-center w-8 h-8 rounded-full bg-red-600 text-white shadow-lg animate-bounce border-2 border-white relative z-50">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
-        </div>
-      `,
-      className: 'bg-transparent border-0',
-      iconSize: [32, 32],
-      iconAnchor: [16, 32]
-    });
-
     const popupHtml = `
       <div dir="rtl" class="text-right p-1.5 font-sans min-w-[200px]">
         <div class="flex items-center gap-1.5 mb-1.5 align-right">
-          <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-100">الموقع المحدد للبحث</span>
+          <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-100">الموقع المحدد للبحث 📍</span>
           <span class="px-1.5 py-0.5 rounded text-[8.5px] bg-slate-100 text-slate-600 font-mono">GPS_MATCH</span>
         </div>
         <div class="font-extrabold text-slate-900 text-xs mb-1">${popupLabel}</div>
@@ -322,7 +311,18 @@ export function ProjectMapViewer({
       </div>
     `;
 
-    searchMarkerRef.current = L.marker([lat, lng], { icon: searchIcon })
+    // Draw a prominent, beautiful red pulsing circle marker representing the exact geocoded match
+    const searchMarkerOptions = {
+      radius: 12,
+      color: '#DC2626', // Red-600
+      fillColor: '#FEE2E2', // Red-100
+      weight: 3.5,
+      opacity: 1,
+      fillOpacity: 0.85,
+      className: 'leaflet-active-pulse-glow'
+    };
+
+    searchMarkerRef.current = L.circleMarker([lat, lng], searchMarkerOptions)
       .bindPopup(popupHtml, { maxWidth: 260, closeButton: true })
       .addTo(map);
 
@@ -349,23 +349,33 @@ export function ProjectMapViewer({
     const cleanQuery = searchQuery.trim();
     if (!cleanQuery) return;
 
-    // 1. Check if the input is direct coordinates: e.g. "24.7136, 46.6753"
-    const coordRegEx = /^\s*([+-]?\d+(?:\.\d+)?)\s*[\s,;:\/]\s*([+-]?\d+(?:\.\d+)?)\s*$/;
-    const coordMatch = cleanQuery.match(coordRegEx);
-
-    if (coordMatch) {
-      const lat = parseFloat(coordMatch[1]);
-      const lng = parseFloat(coordMatch[2]);
-      
-      // Confirm standard geographic limits for Saudi Arabia
-      if (lat >= 15 && lat <= 35 && lng >= 30 && lng <= 60) {
-        focusOnCoordinates(lat, lng, `الإحداثيات المدخلة: ${lat.toFixed(5)}، ${lng.toFixed(5)}`);
-        triggerFeedback('📍 تم الانتقال للإحداثيات المعطاة على الخريطة مباشرة!');
-        return;
-      } else {
-        setSearchError('الرجاء التأكد من نطاق الإحداثيات الجغرافية الصحيحة للرياض والمملكة العربية السعودية (lat: 15~35, lng: 30~60).');
-        return;
+    // 1. Check if the input contains coordinates (lat, lng) in various formats
+    const tryExtractCoords = (text: string) => {
+      // Normalise characters: remove degree/minutes symbols, N, E, Lat, Lng, and Arabic direction symbols
+      const cleaned = text.replace(/[°'"’“”NnEeSsWw\u0634\u0631\u0642\u0645\u0644\u064a\u062c,;:\/]/g, ' ').trim();
+      const numberPattern = /[+-]?\d+(?:\.\d+)?/g;
+      const matches = cleaned.match(numberPattern);
+      if (matches && matches.length >= 2) {
+        const num1 = parseFloat(matches[0]);
+        const num2 = parseFloat(matches[1]);
+        
+        // Saudi Arabia lat/lng bounds (approx 15 to 35 Lat, 30 to 60 Lng)
+        if (num1 >= 15 && num1 <= 35 && num2 >= 30 && num2 <= 60) {
+          return { lat: num1, lng: num2 };
+        }
+        if (num2 >= 15 && num2 <= 35 && num1 >= 30 && num1 <= 60) {
+          return { lat: num2, lng: num1 };
+        }
       }
+      return null;
+    };
+
+    const parsedCoords = tryExtractCoords(cleanQuery);
+
+    if (parsedCoords) {
+      focusOnCoordinates(parsedCoords.lat, parsedCoords.lng, `الإحداثيات المدخلة: ${parsedCoords.lat.toFixed(5)}، ${parsedCoords.lng.toFixed(5)}`);
+      triggerFeedback('📍 تم الانتقال للإحداثيات المعطاة على الخريطة مباشرة!');
+      return;
     }
 
     // 2. Local Projects Match
@@ -430,15 +440,6 @@ export function ProjectMapViewer({
     setIsIframeLoading(true);
     // Keep mapMode on 'osm' first so they see the interactive Leaflet popup card on the map!
     setMapMode('osm');
-
-    // Clean up temporary search when standard selection shifts
-    if (searchMarkerRef.current) {
-      searchMarkerRef.current.remove();
-      searchMarkerRef.current = null;
-    }
-    setActiveSearchMarkerCoords(null);
-    setSearchResults([]);
-    setMatchingProjects([]);
   }, [project]);
 
   // Clean search marker on unmount
@@ -652,19 +653,19 @@ export function ProjectMapViewer({
         className: isSelected ? 'leaflet-active-pulse-glow' : ''
       };
 
-      // Clean RTL styling inside Leaflet popups
+      // Clean RTL styling inside Leaflet popups - made very compact for small mobile screens
       const popupHtml = `
-        <div dir="rtl" class="text-right font-sans p-0.5 min-w-[250px] max-w-[310px] flex flex-col gap-2">
-          <div class="flex flex-wrap items-center gap-1.5 mb-1.5 justify-start">
-            <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold shadow-3xs ${
+        <div dir="rtl" class="text-right font-sans p-0 flex flex-col gap-1.5 w-[210px] sm:w-[255px] select-none">
+          <div class="flex flex-wrap items-center gap-1 mb-0.5 justify-start">
+            <span class="px-1.5 py-0.5 rounded text-[8.5px] font-black shadow-3xs ${
               isWater ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
             }">
               ${p.scope}
             </span>
-            <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200 shadow-3xs">
+            <span class="px-1.5 py-0.5 rounded text-[8.5px] font-black bg-slate-100 text-slate-700 border border-slate-200 shadow-3xs">
               ${p.classification}
             </span>
-            <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold shadow-3xs ${
+            <span class="px-1.5 py-0.5 rounded text-[8.5px] font-black shadow-3xs ${
               (p.status || '').includes('جاري') 
                 ? 'bg-amber-50 text-amber-700 border border-amber-200' 
                 : (p.status || '').includes('مسحوب')
@@ -674,33 +675,33 @@ export function ProjectMapViewer({
               ${p.status || ''}
             </span>
           </div>
-          <h5 class="font-extrabold text-[#0F172A] text-sm leading-snug tracking-tight mb-2 text-right">${p.name}</h5>
+          <h5 class="font-black text-[#0F172A] text-[11.5px] sm:text-[12.5px] leading-tight tracking-tight mb-1 text-right break-words">${p.name}</h5>
           
-          <div class="text-[10.5px] text-slate-500 space-y-1.5 mt-1 border-t border-slate-100 pt-2.5 leading-relaxed">
-            <div class="flex justify-between items-start gap-2 pb-1 border-b border-dashed border-slate-100"><strong class="text-slate-500 shrink-0 font-bold">الرقم التشغيلي:</strong> <span class="font-mono text-slate-800 font-extrabold text-left break-all select-all">${p.operationalNumber}</span></div>
-            <div class="flex justify-between items-start gap-2 pb-1 border-b border-dashed border-slate-100"><strong class="text-slate-500 shrink-0 font-bold">المقاول:</strong> <span class="text-slate-800 font-extrabold text-left leading-normal">${p.contractor}</span></div>
-            <div class="flex justify-between items-start gap-2 pb-1 border-b border-dashed border-slate-100"><strong class="text-slate-500 shrink-0 font-bold">الاستشاري:</strong> <span class="text-slate-800 font-extrabold text-left leading-normal">${p.consultant}</span></div>
-            <div class="flex justify-between items-start gap-2"><strong class="text-slate-500 shrink-0 font-bold">النطاق:</strong> <span class="text-slate-800 font-extrabold text-left">${p.region}</span></div>
+          <div class="text-[9.5px] text-slate-500 space-y-1 mt-0.5 border-t border-slate-100 pt-1.5 leading-normal">
+            <div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">الرقم التشغيلي:</strong> <span class="font-mono text-slate-800 font-extrabold text-left break-all select-all">${p.operationalNumber}</span></div>
+            <div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">المقاول:</strong> <span class="text-slate-800 font-extrabold text-left leading-tight">${p.contractor}</span></div>
+            <div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">الاستشاري:</strong> <span class="text-slate-800 font-extrabold text-left leading-tight">${p.consultant}</span></div>
+            <div class="flex justify-between items-start gap-1.5"><strong class="text-slate-400 shrink-0 font-bold">النطاق:</strong> <span class="text-slate-800 font-extrabold text-left">${p.region}</span></div>
           </div>
           
-          <div class="mt-3 pt-2 border-t border-slate-100 space-y-2">
+          <div class="mt-2 pt-1.5 border-t border-slate-100 flex flex-col gap-1">
             <button 
               type="button"
               data-project-id="${p.id}"
-              class="switch-to-iframe-btn flex items-center justify-center gap-1.5 w-full bg-blue-600 hover:bg-blue-500 text-white text-[11px] py-2 px-3 rounded-xl shadow-xs transition-all text-center cursor-pointer font-bold border-0"
+              class="switch-to-iframe-btn flex items-center justify-center gap-1 w-full bg-blue-600 hover:bg-blue-500 text-white text-[9.5px] py-1.5 px-2 rounded-lg shadow-xs transition-all text-center cursor-pointer font-black border-0"
               style="text-decoration: none; color: white !important;"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:4px;"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:2px;"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
               المعاينة والتفاصيل 🔍
             </button>
             ${hasWriteAccess ? `
             <button 
               type="button"
               data-map-url="${p.mapUrl || `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`}"
-              class="open-maps-btn flex items-center justify-center gap-1.5 w-full bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] py-1.5 px-3 rounded-xl border border-slate-200 transition-all text-center cursor-pointer font-bold shadow-2xs"
+              class="open-maps-btn flex items-center justify-center gap-1 w-full bg-slate-100 hover:bg-slate-200 text-slate-850 text-[9.5px] py-1 px-2 rounded-lg border border-slate-200 transition-all text-center cursor-pointer font-extrabold shadow-3xs"
               style="text-decoration: none;"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:4px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:2px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
               فتح في قوقل ماب 🌐
             </button>
             ` : ''}
@@ -710,11 +711,11 @@ export function ProjectMapViewer({
 
       const marker = L.circleMarker([lat, lng], markerOptions)
         .bindPopup(popupHtml, { 
-          maxWidth: 320, 
-          minWidth: 260, 
+          maxWidth: 260, 
+          minWidth: 210, 
           closeButton: false,
           autoPan: true,
-          autoPanPadding: [24, 110]
+          autoPanPadding: [12, 110]
         })
         .addTo(map);
 
@@ -1090,6 +1091,12 @@ export function ProjectMapViewer({
                   )}
                 </button>
               </form>
+
+              {/* Quick interactive search guide tip */}
+              <div className="px-3 py-1.5 bg-blue-500/5 text-[9.5px] text-slate-500 font-bold border-b border-slate-100/80 flex items-center justify-between select-none">
+                <span className="text-blue-700">🔎 تلميح البحث السريع:</span>
+                <span className="text-slate-600"> "" "24.71, 46.67"</span>
+              </div>
 
               {/* Error indicator */}
               {searchError && (

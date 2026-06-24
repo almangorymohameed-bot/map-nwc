@@ -229,6 +229,15 @@ export function UserManagement({
     setFormData({ ...formData, allowedProjectIds: filtered });
   };
 
+  const handleSelectAllProjectsAcrossAllPrograms = () => {
+    const allProjIds = projects.filter(p => p.id !== -1).map(p => p.id);
+    setFormData({ ...formData, allowedProjectIds: allProjIds });
+  };
+
+  const handleDeselectAllProjectsAcrossAllPrograms = () => {
+    setFormData({ ...formData, allowedProjectIds: [] });
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin) return;
@@ -704,6 +713,30 @@ export function UserManagement({
                     إجمالي المشاريع المحددة المسموحة: {formData.allowedProjectIds.length}
                   </span>
                 )}
+              </div>
+
+              {/* Global control for all projects across all programs */}
+              <div className="bg-amber-500/5 border border-amber-200/40 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3" id="global-projects-bulk-actions">
+                <div className="space-y-0.5 text-right">
+                  <span className="text-xs font-bold text-amber-900 block">التحكم الشامل بكافة المشاريع:</span>
+                  <p className="text-[10px] text-slate-500 leading-normal">تحديد أو إلغاء تحديد كافة المشاريع بجميع البرامج الفرعية المتاحة بضغطة واحدة.</p>
+                </div>
+                <div className="flex flex-wrap gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleSelectAllProjectsAcrossAllPrograms}
+                    className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white text-[10px] font-black rounded-lg transition-colors border-0 cursor-pointer shadow-3xs"
+                  >
+                    تحديد جميع المشاريع بكافة البرامج 🌐
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeselectAllProjectsAcrossAllPrograms}
+                    className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-600 text-[10px] font-bold rounded-lg transition-colors border border-slate-200 cursor-pointer shadow-3xs"
+                  >
+                    إلغاء تحديد كافة المشاريع 🧹
+                  </button>
+                </div>
               </div>
 
               {/* Sub-Program dropdown selection */}
