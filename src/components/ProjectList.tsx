@@ -114,142 +114,148 @@ export function ProjectList({
   return (
     <div className="space-y-4">
       {/* Search and Filters Toggle Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-3">
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="البحث بالاسم، الرقم التشغيلي، المقاول، الاستشاري أو رقم PO..."
-              className="w-full text-xs pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
-            className={`flex items-center gap-1.5 px-3.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
-              showOnlyFavorites
-                ? 'bg-amber-50 border-amber-300 text-amber-700 shadow-3xs'
-                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-            }`}
-            title="عرض المشاريع المفضلة فقط"
-          >
-            <Star className={`h-4 w-4 ${showOnlyFavorites ? 'fill-amber-500 text-amber-500' : 'text-slate-400'}`} />
-            <span className="hidden sm:inline">المفضلة فقط</span>
-          </button>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-1.5 px-3.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
-              showFilters || selectedSubProgram !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || showOnlyFavorites
-                ? 'bg-blue-50 border-blue-200 text-blue-700'
-                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-            <span className="hidden sm:inline">أدوات تصفية</span>
-          </button>
-        </div>
-
-        {/* Expandable Advanced Filters */}
-        {(showFilters || selectedSubProgram !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل') && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
-            {/* SubProgram select */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 block">البرنامج الفرعي</label>
-              <select
-                className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                value={selectedSubProgram}
-                onChange={e => setSelectedSubProgram(e.target.value)}
-              >
-                {uniqueSubPrograms.map(sp => (
-                  <option key={sp} value={sp}>{sp}</option>
-                ))}
-              </select>
+      {currentUser.canFilter !== false ? (
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-3">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="البحث بالاسم، الرقم التشغيلي، المقاول، الاستشاري أو رقم PO..."
+                className="w-full text-xs pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-right"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+              />
             </div>
-
-            {/* Classification select */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 block">تصنيف المشروع</label>
-              <select
-                className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                value={selectedClassification}
-                onChange={e => setSelectedClassification(e.target.value)}
-              >
-                {uniqueClassifications.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Status select */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-500 block">المشروع مرحلة </label>
-              <select
-                className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                value={selectedStatus}
-                onChange={e => setSelectedStatus(e.target.value)}
-              >
-                {uniqueStatuses.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-
-        {/* Filtering status indicator */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 pt-1">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span>تم العثور على <span className="font-bold text-blue-600">{filteredProjects.length}</span> من أصل <span className="font-semibold text-slate-800">{projects.length}</span></span>
-            
-            {/* High fidelity mode toggle */}
-            <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 select-none shrink-0">
-              <button
-                type="button"
-                onClick={() => setViewMode('compact')}
-                className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
-                  viewMode === 'compact'
-                    ? 'bg-white text-blue-700 shadow-3xs border border-slate-200/40'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="عرض قائمة مبسطة ذكية للجوال"
-              >
-                <List className="h-3 w-3" />
-                <span>مبسط</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('cards')}
-                className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
-                  viewMode === 'cards'
-                    ? 'bg-white text-blue-700 shadow-3xs border border-slate-200/40'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="عرض بطاقات تفصيلية"
-              >
-                <LayoutGrid className="h-3 w-3" />
-                <span>بطاقات</span>
-              </button>
-            </div>
-          </div>
-          {(selectedSubProgram !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || searchTerm || showOnlyFavorites) && (
             <button
-              onClick={() => {
-                setSearchTerm('');
-                setSelectedSubProgram('الكل');
-                setSelectedClassification('الكل');
-                setSelectedStatus('الكل');
-                setShowOnlyFavorites(false);
-              }}
-              className="text-xs text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer"
+              type="button"
+              onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
+              className={`flex items-center gap-1.5 px-3.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
+                showOnlyFavorites
+                  ? 'bg-amber-50 border-amber-300 text-amber-700 shadow-3xs'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+              title="عرض المشاريع المفضلة فقط"
             >
-              مسح جميع فلاتر التصفية
+              <Star className={`h-4 w-4 ${showOnlyFavorites ? 'fill-amber-500 text-amber-500' : 'text-slate-400'}`} />
+              <span className="hidden sm:inline">المفضلة فقط</span>
             </button>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-1.5 px-3.5 rounded-xl border text-xs font-semibold cursor-pointer transition-colors ${
+                showFilters || selectedSubProgram !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || showOnlyFavorites
+                  ? 'bg-blue-50 border-blue-200 text-blue-700'
+                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              <span className="hidden sm:inline">أدوات تصفية</span>
+            </button>
+          </div>
+
+          {/* Expandable Advanced Filters */}
+          {(showFilters || selectedSubProgram !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل') && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
+              {/* SubProgram select */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 block">البرنامج الفرعي</label>
+                <select
+                  className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  value={selectedSubProgram}
+                  onChange={e => setSelectedSubProgram(e.target.value)}
+                >
+                  {uniqueSubPrograms.map(sp => (
+                    <option key={sp} value={sp}>{sp}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Classification select */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 block">تصنيف المشروع</label>
+                <select
+                  className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  value={selectedClassification}
+                  onChange={e => setSelectedClassification(e.target.value)}
+                >
+                  {uniqueClassifications.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status select */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 block">المشروع مرحلة </label>
+                <select
+                  className="w-full text-xs p-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  value={selectedStatus}
+                  onChange={e => setSelectedStatus(e.target.value)}
+                >
+                  {uniqueStatuses.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
           )}
+
+          {/* Filtering status indicator */}
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500 pt-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span>تم العثور على <span className="font-bold text-blue-600">{filteredProjects.length}</span> من أصل <span className="font-semibold text-slate-800">{projects.length}</span></span>
+              
+              {/* High fidelity mode toggle */}
+              <div className="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-lg border border-slate-200 select-none shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('compact')}
+                  className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                    viewMode === 'compact'
+                      ? 'bg-white text-blue-700 shadow-3xs border border-slate-200/40'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                  title="عرض قائمة مبسطة ذكية للجوال"
+                >
+                  <List className="h-3 w-3" />
+                  <span>مبسط</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('cards')}
+                  className={`px-2 py-1 text-[10px] font-bold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                    viewMode === 'cards'
+                      ? 'bg-white text-blue-700 shadow-3xs border border-slate-200/40'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                  title="عرض بطاقات تفصيلية"
+                >
+                  <LayoutGrid className="h-3 w-3" />
+                  <span>بطاقات</span>
+                </button>
+              </div>
+            </div>
+            {(selectedSubProgram !== 'الكل' || selectedClassification !== 'الكل' || selectedStatus !== 'الكل' || searchTerm || showOnlyFavorites) && (
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedSubProgram('الكل');
+                  setSelectedClassification('الكل');
+                  setSelectedStatus('الكل');
+                  setShowOnlyFavorites(false);
+                }}
+                className="text-xs text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer"
+              >
+                مسح جميع فلاتر التصفية
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-[#FFFBEB] border border-[#FDE68A] p-4 rounded-2xl text-[#92400E] text-xs font-extrabold text-center shadow-xs flex items-center justify-center gap-1.5" id="filters-locked-alert">
+          <span>🔒 لقد قام مدير البوابة بتقييد تصفية وبحث المشاريع لحسابك لضمان الأمن العام للمنظومة الجغرافية.</span>
+        </div>
+      )}
 
       {/* Projects Grid List */}
       <div className={viewMode === 'compact' ? 'flex flex-col gap-2' : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4'}>

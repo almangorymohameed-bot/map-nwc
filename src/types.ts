@@ -31,4 +31,17 @@ export interface User {
   allowedRegions: string[]; // e.g. ["شمال الرياض"] - empty or ["الكل"] means all regions
   allowedScopes: string[];  // e.g. ["مياه", "صرف صحي"] - empty or ["الكل"] means all scopes
   password?: string; // كلمة المرور الخاصة بالمستخدم
+  
+  // خصائص الصلاحيات الجديدة للموقع
+  allowedTabs?: string[]; // التبويبات المسموحة: ["maps", "stats", "layers", "users"]
+  canOpenExternalLinks?: boolean; // فتح روابط خارجية
+  canFilter?: boolean; // التصفية والبحث
+  canInsert?: boolean; // إدراج مشاريع جديدة
+  
+  // بيانات الملف الشخصي للمستخدم الجديد
+  department?: string; // القسم
+  jobTitle?: string; // الوظيفة
+  
+  // صلاحية اختيار مشاريع محددة
+  allowedProjectIds?: number[]; // معرفات المشاريع المحددة المسموحة
 }

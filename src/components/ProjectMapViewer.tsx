@@ -47,6 +47,7 @@ interface ProjectMapViewerProps {
   canEdit: boolean;
   onUpdateProjectCoordinates?: (projectId: number, lat: number, lng: number) => void;
   isAdmin?: boolean;
+  canOpenExternalLinks?: boolean;
 }
 
 // Robust fallback coordinate resolver to map projects of Riyadh & provinces beautifully
@@ -202,7 +203,8 @@ export function ProjectMapViewer({
   onEditClick, 
   canEdit,
   onUpdateProjectCoordinates,
-  isAdmin = false
+  isAdmin = false,
+  canOpenExternalLinks = true
 }: ProjectMapViewerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLeafletReady, setIsLeafletReady] = useState(true);
@@ -911,7 +913,7 @@ export function ProjectMapViewer({
             </div>
           )}
 
-          {hasWriteAccess && !isMasterMap && project && project.mapUrl && (
+          {hasWriteAccess && !isMasterMap && project && project.mapUrl && canOpenExternalLinks !== false && (
             <a
               href={project.mapUrl}
               target="_blank"
@@ -936,7 +938,7 @@ export function ProjectMapViewer({
           )}
 
           {/* Admin & Editor features: External map opening (تبويب خارجي) and share link (مشاركة) */}
-          {hasWriteAccess && (
+          {hasWriteAccess && canOpenExternalLinks !== false && (
             <>
               {/* Share map link */}
               <button
@@ -1022,7 +1024,7 @@ export function ProjectMapViewer({
             </span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0 self-auto block">
-            {isAdmin && (
+            {isAdmin && canOpenExternalLinks !== false && (
               <a
                 href={project.mapUrl}
                 target="_blank"

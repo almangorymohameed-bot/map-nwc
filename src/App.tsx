@@ -18,6 +18,7 @@ import { UserManagement } from './components/UserManagement';
 import { ProjectModal } from './components/ProjectModal';
 import { ProjectList } from './components/ProjectList';
 import { NWCLogo } from './components/NWCLogo';
+import { ProjectLayersViewer } from './components/ProjectLayersViewer';
 
 // Icons
 import { 
@@ -82,7 +83,7 @@ export default function App() {
   });
 
   // 3. UI Control State
-  const [activeTab, setActiveTab] = useState<'maps' | 'stats' | 'users'>('maps');
+  const [activeTab, setActiveTab] = useState<'maps' | 'stats' | 'layers' | 'users'>('maps');
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [mobileViewMode, setMobileViewMode] = useState<'map' | 'list'>('list');
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
@@ -211,6 +212,32 @@ export default function App() {
             }
           }
 
+          let allowedTabs = ['maps', 'stats', 'layers'];
+          if (u.allowed_tabs) {
+            if (Array.isArray(u.allowed_tabs)) {
+              allowedTabs = u.allowed_tabs;
+            } else if (typeof u.allowed_tabs === 'string') {
+              try {
+                allowedTabs = JSON.parse(u.allowed_tabs);
+              } catch (e) {
+                allowedTabs = u.allowed_tabs.split(',').map((x: string) => x.trim()).filter(Boolean);
+              }
+            }
+          }
+
+          let allowedProjectIds: number[] = [];
+          if (u.allowed_project_ids) {
+            if (Array.isArray(u.allowed_project_ids)) {
+              allowedProjectIds = u.allowed_project_ids.map(Number);
+            } else if (typeof u.allowed_project_ids === 'string') {
+              try {
+                allowedProjectIds = JSON.parse(u.allowed_project_ids).map(Number);
+              } catch (e) {
+                allowedProjectIds = u.allowed_project_ids.split(',').map(Number).filter((x: any) => !isNaN(x));
+              }
+            }
+          }
+
           return {
             id: u.id,
             username: u.username,
@@ -218,7 +245,14 @@ export default function App() {
             role: u.role,
             allowedRegions: allowedRegions.length > 0 ? allowedRegions : ['الكل'],
             allowedScopes: allowedScopes.length > 0 ? allowedScopes : ['الكل'],
-            password: u.password
+            password: u.password,
+            allowedTabs: allowedTabs,
+            canOpenExternalLinks: u.can_open_external_links !== false,
+            canFilter: u.can_filter !== false,
+            canInsert: u.can_insert !== false,
+            department: u.department || '',
+            jobTitle: u.job_title || '',
+            allowedProjectIds: allowedProjectIds
           };
         });
         setUsers(mappedUsers);
@@ -267,8 +301,15 @@ export default function App() {
   // حفظ تعديل المفضلة محلياً
   useEffect(() => {
     localStorage.setItem('water_maps_active_user_id', currentUser.id);
-    if (currentUser.role !== 'admin' && activeTab === 'users') {
-      setActiveTab('maps');
+    if (currentUser.role !== 'admin') {
+      if (activeTab === 'users') {
+        setActiveTab('maps');
+      } else {
+        const allowed = currentUser.allowedTabs || ['maps', 'stats', 'layers'];
+        if (!allowed.includes(activeTab)) {
+          setActiveTab((allowed[0] as any) || 'maps');
+        }
+      }
     }
   }, [currentUser, activeTab]);
 
@@ -382,6 +423,12 @@ export default function App() {
 
     return projects.filter(p => {
       if (currentUser.role === 'admin') return true;
+      
+      // إذا حدد مسؤول النظام مشاريع معينة للمستخدم، فإن حقه بالوصول يقتصر عليها حصراً لتعزيز الحماية والسرية
+      if (currentUser.allowedProjectIds && currentUser.allowedProjectIds.length > 0) {
+        return currentUser.allowedProjectIds.includes(p.id);
+      }
+
       const uRegions = (currentUser.allowedRegions || []).map(r => r.trim());
       const isAllRegions = uRegions.includes('الكل');
       
@@ -467,7 +514,7 @@ export default function App() {
     return found || null;
   }, [visibleProjects, selectedProjectId]);
 
-  const canEditProjects = currentUser.role === 'admin' || currentUser.role === 'editor';
+  const canEditProjects = currentUser.role === 'admin' || (currentUser.role === 'editor' && currentUser.canInsert !== false) || currentUser.canInsert === true;
 
   const showNotification = (msg: string) => {
     setSuccessNotification(msg);
@@ -593,7 +640,14 @@ export default function App() {
       role: updatedUser.role,
       allowed_regions: updatedUser.allowedRegions,
       allowed_scopes: updatedUser.allowedScopes,
-      password: updatedUser.password || 'nwc1234'
+      password: updatedUser.password || 'nwc1234',
+      allowed_tabs: updatedUser.allowedTabs || ['maps', 'stats', 'layers'],
+      can_open_external_links: updatedUser.canOpenExternalLinks !== false,
+      can_filter: updatedUser.canFilter !== false,
+      can_insert: updatedUser.canInsert !== false,
+      department: updatedUser.department || '',
+      job_title: updatedUser.jobTitle || '',
+      allowed_project_ids: updatedUser.allowedProjectIds || []
     };
 
     const exists = users.some(u => u.id === updatedUser.id);
@@ -879,8 +933,9 @@ export default function App() {
         <div className="border-b border-slate-200 flex justify-between items-center bg-white p-2.5 rounded-2xl border border-slate-100 shadow-2xs">
           <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
             {[
-              { id: 'maps', label: 'الخرائط التفاعلية', icon: Map },
-              { id: 'stats', label: ' الإحصائيات ', icon: Layers },
+              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('maps')) ? [{ id: 'maps', label: 'الخرائط التفاعلية', icon: Map }] : []),
+              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('stats')) ? [{ id: 'stats', label: ' الإحصائيات ', icon: Layers }] : []),
+              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('layers')) ? [{ id: 'layers', label: 'طبقات المشاريع', icon: Compass }] : []),
               // Admin permission tab only visible to admin
               ...(currentUser.role === 'admin' ? [{ id: 'users', label: 'إدارة وتوزيع صلاحيات الحسابات', icon: Users }] : [])
             ].map(tab => {
@@ -960,6 +1015,7 @@ export default function App() {
                     onEditClick={handleStartEditProject}
                     canEdit={canEditProjects}
                     isAdmin={currentUser.role === 'admin'}
+                    canOpenExternalLinks={currentUser.canOpenExternalLinks !== false}
                     onUpdateProjectCoordinates={(id, lat, lng) => {
                       const updated = projects.map(p => {
                         if (p.id === id) {
@@ -1022,9 +1078,16 @@ export default function App() {
           )}
 
           {/* Active Tab: Analytics Dashboard Stats */}
-          {activeTab === 'stats' && (
+          {activeTab === 'stats' && (currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('stats')) && (
             <div className="animate-in fade-in duration-300">
               <DashboardStats projects={filteredProjects} />
+            </div>
+          )}
+
+          {/* Active Tab: Project Layers Viewer */}
+          {activeTab === 'layers' && (currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('layers')) && (
+            <div className="animate-in fade-in duration-300">
+              <ProjectLayersViewer currentUser={currentUser} />
             </div>
           )}
 
@@ -1036,6 +1099,7 @@ export default function App() {
                 currentUser={currentUser} 
                 onSaveUser={handleSaveUserPermissions}
                 onDeleteUser={handleDeleteUser}
+                projects={projects}
               />
             </div>
           )}
