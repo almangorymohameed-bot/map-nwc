@@ -867,23 +867,7 @@ export function ProjectMapViewer({
               <h4 className="text-sm font-bold truncate max-w-[210px] sm:max-w-xs md:max-w-md text-right" title={project?.name || "الخريطة العامة والمجمل المالي والربط"}>
                 {project?.name || "الخريطة التفاعلية للمشروعات الجغرافية"}
               </h4>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold whitespace-nowrap ${
-                isMasterMap
-                  ? 'bg-indigo-950/70 text-indigo-200 border border-indigo-700'
-                  : (project?.scope || '').includes('مياه') 
-                    ? 'bg-cyan-950/60 text-cyan-200 border border-cyan-800' 
-                    : 'bg-emerald-950/60 text-emerald-200 border border-emerald-800'
-              }`}>
-                {isMasterMap ? 'منظور مجمع' : project?.scope}
-              </span>
             </div>
-            <p className="text-[11px] text-slate-400 text-right truncate">
-              {isMasterMap ? (
-                <>البوابة الجغرافية الموحدة لمدينة الرياض | التحديث: تلقائي لحظي</>
-              ) : (
-                <>الرقم التشغيلي: <span className="font-mono text-slate-300">{project?.operationalNumber}</span> | المقاول: {project?.contractor}</>
-              )}
-            </p>
           </div>
         </div>
 
@@ -918,19 +902,6 @@ export function ProjectMapViewer({
             </div>
           )}
 
-          {!isMasterMap && project && project.mapUrl && canOpenExternalLinks !== false && (
-            <a
-              href={project.mapUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-2 py-1 sm:py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] sm:text-[11px] font-bold rounded-lg shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
-              title="الذهاب لخريطة المشروع الرسمية على موقع قوقل ماب الخارجي"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-              <span>فتح تطبيق Google Maps ↗️</span>
-            </a>
-          )}
-
           {hasWriteAccess && onEditClick && !isMasterMap && project && (
             <button
               onClick={() => onEditClick(project)}
@@ -940,30 +911,6 @@ export function ProjectMapViewer({
               <Edit className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 text-blue-200" />
               <span>تعديل</span>
             </button>
-          )}
-
-          {/* External map opening (تبويب خارجي) available based on permission */}
-          {canOpenExternalLinks !== false && (
-            <>
-
-
-
-              {/* External Map opening button */}
-              <a
-                href={isMasterMap ? 'https://www.openstreetmap.org/#map=10/24.7136/46.6753' : (
-                  mapMode === 'osm' 
-                    ? `https://www.openstreetmap.org/?mlat=${getProjectCoordinates(project).lat}&mlon=${getProjectCoordinates(project).lng}#map=15/${getProjectCoordinates(project).lat}/${getProjectCoordinates(project).lng}`
-                    : (project?.mapUrl || `https://www.google.com/maps/search/?api=1&query=${getProjectCoordinates(project).lat},${getProjectCoordinates(project).lng}`)
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="فتح الخريطة والإحداثيات في نافذة مستقلة"
-                className="flex items-center gap-1 p-1 px-1.5 sm:px-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-[9px] sm:text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs"
-              >
-                <ExternalLink className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 text-indigo-200" />
-                <span>تبويب خارجي</span>
-              </a>
-            </>
           )}
 
           <button
@@ -1270,7 +1217,7 @@ export function ProjectMapViewer({
                   </p>
                 </div>
               )}
-              {/* Visual Crop overlay covering the top: The top header is pushed up by -56px and hidden by overflow-hidden */}
+              {/* Visual Crop overlay covering the top and bottom: The top header is pushed up by -56px, and the bottom footer is pushed down by 40px and hidden by overflow-hidden */}
               <iframe
                 key={project.id}
                 src={embedUrl}
@@ -1278,7 +1225,7 @@ export function ProjectMapViewer({
                 className="absolute left-0 w-full border-0 z-0"
                 style={{
                   top: '-56px',
-                  height: 'calc(100% + 56px)'
+                  height: 'calc(100% + 56px + 40px)'
                 }}
                 allowFullScreen
                 loading="lazy"

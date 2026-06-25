@@ -465,7 +465,7 @@ export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
           </div>
         )}
 
-        {/* Visual Crop overlay covering the top: The top header of My Maps is pushed up by -56px and hidden by overflow-hidden */}
+        {/* Visual Crop overlay covering the top and bottom: The top header of My Maps is pushed up by -56px, and the bottom footer is pushed down by 40px and hidden by overflow-hidden */}
         <iframe
           key={activeLayer}
           src={embedUrl}
@@ -473,7 +473,7 @@ export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
           className="absolute left-0 w-full border-0 z-0"
           style={{
             top: '-56px',
-            height: 'calc(100% + 56px)'
+            height: 'calc(100% + 56px + 40px)'
           }}
           allowFullScreen
           loading="lazy"

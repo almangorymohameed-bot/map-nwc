@@ -384,7 +384,7 @@ export function ProjectList({
                               className="absolute left-0 w-full border-0 z-0"
                               style={{
                                 top: '-56px',
-                                height: 'calc(100% + 56px)'
+                                height: 'calc(100% + 56px + 40px)'
                               }}
                               title={`Google My Maps list preview ${p.name}`}
                               allowFullScreen
@@ -549,7 +549,7 @@ export function ProjectList({
                             className="absolute left-0 w-full border-0 z-0"
                             style={{
                               top: '-56px',
-                              height: 'calc(100% + 56px)'
+                              height: 'calc(100% + 56px + 40px)'
                             }}
                             title={`Google My Maps card preview ${p.name}`}
                             allowFullScreen
