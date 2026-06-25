@@ -37,7 +37,8 @@ import {
   Unlock,
   Share2,
   Globe,
-  Search
+  Search,
+  Key
 } from 'lucide-react';
 
 interface ProjectMapViewerProps {
@@ -264,6 +265,7 @@ export function ProjectMapViewer({
   // Local/Geographic search states
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [isLegendExpanded, setIsLegendExpanded] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [matchingProjects, setMatchingProjects] = useState<Project[]>([]);
@@ -940,28 +942,9 @@ export function ProjectMapViewer({
             </button>
           )}
 
-          {/* External map opening (تبويب خارجي) and share link (مشاركة) available based on permission */}
+          {/* External map opening (تبويب خارجي) available based on permission */}
           {canOpenExternalLinks !== false && (
             <>
-              {/* Share map link */}
-              <button
-                type="button"
-                onClick={() => {
-                  const url = isMasterMap 
-                    ? window.location.href 
-                    : (project?.mapUrl || window.location.href);
-                  navigator.clipboard.writeText(url).then(() => {
-                    triggerFeedback('📋 تم نسخ رابط الخريطة والمشاركة إلى الحافظة بنجاح!');
-                  }).catch(() => {
-                    triggerFeedback('فشل نسخ رابط المشاركة.');
-                  });
-                }}
-                title="نسخ رابط المشاركة"
-                className="flex items-center gap-1 p-1 px-1.5 sm:px-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-[9px] sm:text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs"
-              >
-                <Share2 className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 text-emerald-200" />
-                <span>مشاركة</span>
-              </button>
 
 
 
@@ -1233,16 +1216,41 @@ export function ProjectMapViewer({
 
         {/* Floating map classification legend block */}
         {isLeafletReady && mapMode === 'osm' && (
-          <div className="absolute bottom-4 left-4 z-[999] bg-white/95 backdrop-blur-xs p-2.5 px-3 rounded-xl shadow-lg border border-slate-200/80 text-xs font-bold text-slate-700 flex flex-col gap-1.5 pointer-events-auto text-right" dir="rtl">
-            <div className="text-[10px] text-slate-400 font-extrabold pb-1 border-b border-slate-100 mb-0.5"></div>
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#3b82f6] border border-blue-700 flex-shrink-0"></span>
-              <span className="text-[11px] text-slate-800">مياه 💧</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] border border-green-700 flex-shrink-0"></span>
-              <span className="text-[11px] text-slate-800"> صرف 🌿</span>
-            </div>
+          <div className="absolute bottom-4 left-4 z-[999] flex flex-col items-end gap-2" dir="rtl">
+            {!isLegendExpanded ? (
+              <button
+                type="button"
+                onClick={() => setIsLegendExpanded(true)}
+                title="مفاتيح الخريطة"
+                className="w-10 h-10 rounded-xl bg-white hover:bg-slate-50 border border-slate-200/85 shadow-lg flex items-center justify-center text-blue-600 transition-all active:scale-95 hover:scale-105 cursor-pointer"
+              >
+                <Key className="h-5 w-5 text-blue-500 animate-pulse" />
+              </button>
+            ) : (
+              <div className="bg-white/95 backdrop-blur-xs p-3 rounded-xl shadow-xl border border-slate-200/80 text-xs font-bold text-slate-700 flex flex-col gap-2 min-w-[120px] text-right animate-in fade-in zoom-in duration-150">
+                <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 mb-0.5 gap-4">
+                  <span className="text-[11px] font-black text-slate-700 flex items-center gap-1">
+                    <Key className="h-3 w-3 text-blue-500" />
+                    مفاتيح الخريطة
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsLegendExpanded(false)}
+                    className="p-0.5 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition-colors cursor-pointer border-0"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#3b82f6] border border-blue-700 flex-shrink-0"></span>
+                  <span className="text-[11px] text-slate-800">مياه 💧</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] border border-green-700 flex-shrink-0"></span>
+                  <span className="text-[11px] text-slate-800">صرف 🌿</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
