@@ -103,7 +103,7 @@ export const isProjectAllowedForUser = (p: Project, currentUser: User): boolean 
       if (uRegions.includes('المحافظات الجنوبية') && (southGovs.includes(pr) || pr.includes('السليل') || pr.includes('الدواسر') || pr.includes('الأفلاج') || pr.includes('تميم') || pr.includes('الخرج') || pr.includes('الحريق') || pr.includes('السيح'))) {
         isRegionAllowed = true;
       }
-      if (uRegions.includes('المحافظات الغربية') && (westGovs.includes(pr) || pr.includes('عفيف') || pr.includes('الدوادمي') || pr.includes('المزاحمية') || pr.includes('شقراء') || pr.includes('القويعية') || pr.includes('البجادية') || pr.includes('البجاديه') || pr.includes('ضرما') || pr.includes('ضرماء'))) {
+      if (uRegions.includes('المحافظات الغربية') && (westGovs.includes(pr) || pr.includes('عفيف') || pr.includes('الدوادمي') || pr.includes('المزاحمية') || pr.includes('شقراء', 'مرات') || pr.includes('القويعية') || pr.includes('البجادية') || pr.includes('البجاديه') || pr.includes('ضرما') || pr.includes('ضرماء'))) {
         isRegionAllowed = true;
       }
     }
@@ -244,25 +244,24 @@ export default function App() {
     return [];
   });
 
-  // 📢 دالة ذكية لإرسال التنبيهات طوالي لستارة النظام الخارجية بالجوال والكمبيوتر
+  // 📢 دالة دمج ميزة إرسال التنبيهات إلى ستارة النظام الخارجية بالجوال والكمبيوتر
   const sendNativeNotification = (title: string, body: string) => {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(title, {
         body: body,
-        icon: '/vite.svg', // حيشيل أيقونة التطبيق حقتك
+        icon: '/vite.svg',
         dir: 'rtl'
       });
     }
   };
 
-  // 🔓 دالة تطلب الإذن من المستخدم أول ما يسجل دخول بنجاح
+  // 🔓 دالة تطلب إذن التنبيهات من المستخدم وتطلق ترحيباً منزلقاً فوراً
   const requestNotificationPermission = async (userName: string) => {
     if ('Notification' in window) {
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
-        // تنبيه منزلق فوراً يؤكد نجاح الربط ويرحب به
         new Notification('شركة المياه الوطنية • NWC', {
-          body: `مرحباً بك المهندس ${userName}، تم ربط بوابة الخرائط التفاعلية بنظام الإشعارات بنجاح.`,
+          body: `مرحباً بك المهندس ${userName}، تم تفعيل ميزة إشعارات ستارة الجوال الخارجية بنجاح.`,
           icon: '/vite.svg',
           dir: 'rtl'
         });
@@ -379,12 +378,7 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    setActiveTab('maps');
-    fetchDataFromSupabase();
-  }, []);
-
-  // 🔄 الـ Effect المطور لـجلب الإشعارات حياً وإرسالها متزامنة لستارة النظام الخارجية (Native)
+  // 🔄 المزامنة الحية لِـسحب الإشعارات من سوبابيس وتمرير الأحداث الدقيقة لِـستارة الجوال
   useEffect(() => {
     const fetchUserNotifications = async () => {
       if (!currentUser || !currentUser.id || !isLogged) return;
@@ -409,11 +403,11 @@ export default function App() {
             scope: n.scope || ''
           }));
 
-          // لو لقى إشعار جديد تماماً ما كان مسجل في الـ State المحلية، يطيره طوالي لستارة الجوال
+          // عند لقط إشعار جديد غير مقروء قادم من السيرفر، يتم دفعه لِـستارة الجوال فوراً
           if (notifications.length > 0 && mappedNotifs.length > notifications.length) {
             const latestNotif = mappedNotifs[0];
             if (!latestNotif.read) {
-              sendNativeNotification('تنبيه مشروع جديد • NWC', latestNotif.message);
+              sendNativeNotification('تنبيه مشاريع NWC 🔔', latestNotif.message);
             }
           }
 
@@ -504,12 +498,14 @@ export default function App() {
     setFavoriteIds(prev => {
       const isFav = prev.includes(projectId);
       const updated = isFav ? prev.filter(id => id !== projectId) : [...prev, projectId];
-      const currentProjName = projects.find(p => p.id === projectId)?.name || '';
+      const targetProj = projects.find(p => p.id === projectId);
+      const projName = targetProj ? targetProj.name : '';
       
-      showNotification(isFav ? 'تمت الإزالة من المشاريع المفضلة ⭐️' : 'تمت الإضافة إلى المشاريع المفضلة ⭐');
+      const alertMsg = isFav ? `تمت الإزالة من المفضلة ⭐️` : `تمت الإضافة للمفضلة ⭐`;
+      showNotification(alertMsg);
       
-      // إرسال لستارة النظام عند تفعيل أو إلغاء المفضلة
-      sendNativeNotification('المشاريع المفضلة ⭐', isFav ? `تمت إزالة: ${currentProjName}` : `تمت إضافة: ${currentProjName}`);
+      // مزامنة التفضيل مع ستارة الجوال الخارجية
+      sendNativeNotification('المشاريع المفضلة ⭐', `${alertMsg}: ${projName}`);
       
       return updated;
     });
@@ -668,7 +664,7 @@ export default function App() {
       localStorage.setItem('water_maps_active_user_id', found.id);
       showNotification(`مرحباً بك مجدداً المهندس: ${found.name}`);
       
-      // طلب الإذن لِـ ستارة الجوال الخارجية فور تسجيل الدخول بنجاح
+      // طلب الإذن لِـستارة الجوال فور الدخول الناجح
       requestNotificationPermission(found.name);
     } else {
       setLoginError('عذراً، هذا البريد غير معتمد ومسجل مسبقاً في النظام.');
@@ -700,6 +696,9 @@ export default function App() {
     showNotification('تم تسجيل الخروج بنجاح.');
   };
 
+  // ==========================================
+  // دالة الحفظ المعدلة بالكامل لصياغة الفروقات والأحداث التفصيلية
+  // ==========================================
   const handleSaveProject = async (savedProj: Project) => {
     const payload = {
       operational_number: savedProj.operationalNumber,
@@ -720,6 +719,18 @@ export default function App() {
     };
 
     const exists = projects.some(p => p.id === savedProj.id);
+    
+    // صياغة نص التغيير والحدث التفصيلي الحقيقي (زي تغيير الحالة)
+    let dynamicDiffMsg = '';
+    if (exists) {
+      const oldProj = projects.find(p => p.id === savedProj.id);
+      dynamicDiffMsg = oldProj ? getProjectDifferencesMessage(oldProj, savedProj) : '';
+      if (!dynamicDiffMsg) {
+        dynamicDiffMsg = `تم تحديث بيانات مشروع: ${savedProj.name}`;
+      }
+    } else {
+      dynamicDiffMsg = `قام المهندس ${currentUser.name} بإضافة مشروع جديد: ${savedProj.name}`;
+    }
 
     try {
       if (exists) {
@@ -727,15 +738,16 @@ export default function App() {
         if (!error) {
           showNotification(`تم تحديث بيانات مشروع بالسيرفر: ${savedProj.name}`);
           
-          // طيران إشعار فوري لستارة القائم بالعمل
-          sendNativeNotification('تحديث بيانات 💾', `لقد قمت بتعديل بيانات المشروع: ${savedProj.name}`);
+          // إرسال التنبيه المنزلق الفوري لستارة صاحب الحركة الحالية لِتأكيد الإجراء
+          sendNativeNotification('تحديث بيانات المشروع 💾', dynamicDiffMsg);
 
+          // صب التنبيه المفصل في السيرفر ليتوزع آلياً للباقين
           await supabase.from('notifications').insert([{
             user_id: currentUser.id,
             project_id: savedProj.id,
             project_name: savedProj.name,
             type: 'edit',
-            message: `قام المهندس ${currentUser.name} بتعديل بيانات المشروع: ${savedProj.name}`,
+            message: dynamicDiffMsg, 
             region: savedProj.region,
             scope: payload.scope
           }]);
@@ -745,14 +757,14 @@ export default function App() {
         if (!error && insertedData && insertedData[0]) {
           showNotification(`تم إضافة مشروع شبكة جديد بنجاح للسيرفر: ${savedProj.name}`);
           
-          sendNativeNotification('إضافة مشروع جديد 🚀', `لقد قمت بإضافة المشروع بنجاح: ${savedProj.name}`);
+          sendNativeNotification('إضافة مشروع جديد 🚀', `تم إدراج خارطة مشروع جديد بنجاح: ${savedProj.name}`);
 
           await supabase.from('notifications').insert([{
             user_id: currentUser.id,
             project_id: insertedData[0].id,
             project_name: savedProj.name,
             type: 'add',
-            message: `قام المهندس ${currentUser.name} بإضافة مشروع جديد: ${savedProj.name}`,
+            message: dynamicDiffMsg,
             region: savedProj.region,
             scope: payload.scope
           }]);
@@ -911,7 +923,7 @@ export default function App() {
                             <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${notif.type === 'add' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>{notif.type === 'add' ? <Plus className="h-3.5 w-3.5" /> : <Layers className="h-3.5 w-3.5" />}</div>
                             <div className="flex-1 min-w-0 space-y-1">
                               <p className="text-xs text-slate-700 leading-relaxed font-semibold">{notif.message}</p>
-                              <div className="flex items-center justify-between text-[10px] text-slate-400"><span>{notif.timestamp}</span><span className="bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-medium text-[9px]">{notif.region || notif.scope}</span></div>
+                              <div className="flex items-center justify-between text-[10px] text-slate-400"><span>{notif.timestamp}</span><span className="bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-medium text-[9px]"> {notif.region || notif.scope}</span></div>
                             </div>
                             {!notif.read && (<span className="w-2 h-2 rounded-full bg-blue-600 shrink-0 mt-2"></span>)}
                           </div>
