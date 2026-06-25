@@ -1326,7 +1326,7 @@ export default function App() {
                 >
                   <Bell className="h-4 w-4" />
                   {unreadNotificationsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-extrabold h-4 w-4 rounded-full flex items-center justify-center animate-bounce">
+                    <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-black h-5 w-5 rounded-full flex items-center justify-center border border-white shadow-sm animate-pulse z-10">
                       {unreadNotificationsCount}
                     </span>
                   )}
