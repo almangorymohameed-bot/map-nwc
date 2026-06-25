@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Project, User } from './types';
+import { Project, User, AppNotification } from './types';
 import { getParsedProjects } from './data/initialProjects';
 import { INITIAL_USERS } from './data/initialUsers';
 
@@ -39,8 +39,91 @@ import {
   Key,
   LogOut,
   Smartphone,
-  CheckCircle2
+  CheckCircle2,
+  Bell
 } from 'lucide-react';
+
+// Helper to determine the actual effective scope of a project (resolving any data classification discrepancies)
+export const getActualProjectScope = (proj: Project): string => {
+  const name = (proj.name || '').trim();
+  const scope = (proj.scope || '').trim();
+  const classification = (proj.classification || '').trim();
+  const subProgram = (proj.subProgram || '').trim();
+  
+  // If the project mentions "صرف صحي" or "الصرف الصحي" or sewage treatment/environmental elements in its name, classification, or subprogram,
+  // it MUST be classified as sewage/wastewater (صرف صحي) to protect users from permission data-entry errors.
+  if (
+    name.includes('صرف') || 
+    name.includes('الصرف') || 
+    classification.includes('صرف') || 
+    classification.includes('معالجة') || 
+    classification.includes('بيئية') || 
+    subProgram.includes('صرف')
+  ) {
+    return 'صرف صحي';
+  }
+  
+  if (scope.includes('صرف')) {
+    return 'صرف صحي';
+  }
+  
+  if (scope.includes('مياه')) {
+    return 'مياه';
+  }
+  
+  return scope || 'مياه';
+};
+
+export const isProjectAllowedForUser = (p: Project, currentUser: User): boolean => {
+  if (currentUser.role === 'admin') return true;
+  
+  // إذا حدد مسؤول النظام مشاريع معينة للمستخدم، فإن حقه بالوصول يقتصر عليها حصراً لتعزيز الحماية والسرية
+  if (currentUser.allowedProjectIds && currentUser.allowedProjectIds.length > 0) {
+    return currentUser.allowedProjectIds.includes(p.id);
+  }
+
+  const uRegions = (currentUser.allowedRegions || []).map(r => r.trim());
+  const isAllRegions = uRegions.includes('الكل');
+  
+  let isRegionAllowed = isAllRegions;
+  if (!isRegionAllowed) {
+    const pr = (p.region || '').trim();
+    const pb = (p.businessUnit || '').trim();
+    const ps = (p.subProgram || '').trim();
+    
+    // 1. Direct match on region or business unit
+    if (uRegions.includes(pr) || uRegions.includes(pb) || uRegions.includes(ps)) {
+      isRegionAllowed = true;
+    }
+    
+    // 2. Map-based fallbacks for Governorate classifications to be absolutely perfect
+    if (!isRegionAllowed) {
+      const northGovs = ['المجمعة', 'رماح', 'الزلفي', 'ثادق', 'حريملاء', 'الغاط', 'ثادق وحريملاء'];
+      const southGovs = ['السليل', 'وادي الدواسر', 'الأفلاج', 'حوطة بني تميم', 'الحريق', 'السيح', 'الخرج', 'تمرة', 'خيران', 'السيح والخرج'];
+      const westGovs = ['المزاحمية', 'شقراء', 'عفيف', 'القويعية', 'البجاديه', 'البجادية', 'ضرما', 'ضرماء', 'الدوادمي', 'شقراء ومرات', 'عفيف والدوادمي', 'المزاحمية و ضرماء'];
+      
+      if (uRegions.includes('المحافظات الشمالية') && (northGovs.includes(pr) || pr.includes('المجمعة') || pr.includes('رماح') || pr.includes('الزلفي') || pr.includes('حريملاء') || pr.includes('الغاط') || pr.includes('ثادق'))) {
+        isRegionAllowed = true;
+      }
+      if (uRegions.includes('المحافظات الجنوبية') && (southGovs.includes(pr) || pr.includes('السليل') || pr.includes('الدواسر') || pr.includes('الأفلاج') || pr.includes('تميم') || pr.includes('الخرج') || pr.includes('الحريق') || pr.includes('السيح'))) {
+        isRegionAllowed = true;
+      }
+      if (uRegions.includes('المحافظات الغربية') && (westGovs.includes(pr) || pr.includes('عفيف') || pr.includes('الدوادمي') || pr.includes('المزاحمية') || pr.includes('شقراء') || pr.includes('القويعية') || pr.includes('البجادية') || pr.includes('البجاديه') || pr.includes('ضرما') || pr.includes('ضرماء'))) {
+        isRegionAllowed = true;
+      }
+    }
+  }
+
+  const isAllScopes = currentUser.allowedScopes.includes('الكل');
+  const actualScope = getActualProjectScope(p);
+  const isScopeAllowed = isAllScopes || currentUser.allowedScopes.some(scopeType => {
+    const uScope = scopeType.trim();
+    if (!uScope) return false;
+    return actualScope === uScope;
+  });
+
+  return isRegionAllowed && isScopeAllowed;
+};
 
 export default function App() {
   // 1. Authentication State
@@ -76,16 +159,33 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const savedAndActive = localStorage.getItem('water_maps_active_user_id');
     if (savedAndActive) {
-      // سيتم مطابقتها بعد جلب المستخدمين من السيرفر، مرحلياً نضع قيمة افتراضية
+      const matchedLocal = INITIAL_USERS.find(u => u.id === savedAndActive);
+      if (matchedLocal) return matchedLocal;
       return { id: savedAndActive, username: 'admin', name: 'جاري التحميل...', role: 'admin', allowedRegions: ['الكل'], allowedScopes: ['الكل'], password: '' };
     }
     return INITIAL_USERS[0]; // Admin by default
   });
 
+  // 3.0.1 Notifications & Alerts State
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    try {
+      const savedActive = localStorage.getItem('water_maps_active_user_id');
+      const userId = savedActive || 'admin';
+      const saved = localStorage.getItem(`water_maps_notifications_${userId}`);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error("error loading notifications", e);
+    }
+    return [];
+  });
+  const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
+
   // 3. UI Control State
   const [activeTab, setActiveTab] = useState<'maps' | 'stats' | 'layers' | 'users'>('maps');
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-  const [mobileViewMode, setMobileViewMode] = useState<'map' | 'list'>('list');
+  const [mobileViewMode, setMobileViewMode] = useState<'map' | 'list'>('map');
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [showRoleSwitcherDropdown, setShowRoleSwitcherDropdown] = useState(false);
@@ -174,7 +274,71 @@ export default function App() {
           x: p.x !== undefined && p.x !== null ? Number(p.x) : null,
           y: p.y !== undefined && p.y !== null ? Number(p.y) : null
         }));
-        setProjects(mappedProjects);
+        // مقارنة البيانات الواردة مع البيانات المحلية الحالية لتوليد إشعارات بالتحديثات والإضافات الجديدة المسموحة للمستخدم
+        setProjects(prevProjects => {
+          // إذا كانت القائمة فارغة أو تملك فقط القيمة الافتراضية الأولية، فلا نقوم بإغراق المستخدم بالإشعارات
+          if (prevProjects && prevProjects.length > 0 && prevProjects.length !== 121) {
+            const newNotifications: AppNotification[] = [];
+            let addedCount = 0;
+            
+            mappedProjects.forEach(newP => {
+              const oldP = prevProjects.find(op => op.id === newP.id);
+              if (!oldP) {
+                // مشروع جديد تمت إضافته
+                if (isProjectAllowedForUser(newP, currentUser) && addedCount < 10) {
+                  const uniqueId = `add_${newP.id}_${newP.name}`;
+                  // تجنب التكرار
+                  if (!notifications.some(n => n.id === uniqueId) && !newNotifications.some(n => n.id === uniqueId)) {
+                    newNotifications.push({
+                      id: uniqueId,
+                      projectId: newP.id,
+                      projectName: newP.name,
+                      type: 'add',
+                      message: `تمت إضافة مشروع جديد في النظام: ${newP.name}`,
+                      timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString('ar-SA'),
+                      read: false,
+                      region: newP.region || '',
+                      scope: newP.scope || ''
+                    });
+                    addedCount++;
+                  }
+                }
+              } else {
+                // مشروع قائم، فحص التعديلات الهامة
+                const hasChanged = 
+                  newP.name !== oldP.name || 
+                  newP.status !== oldP.status || 
+                  newP.region !== oldP.region || 
+                  newP.scope !== oldP.scope ||
+                  newP.contractor !== oldP.contractor ||
+                  newP.consultant !== oldP.consultant;
+                
+                if (hasChanged && isProjectAllowedForUser(newP, currentUser) && addedCount < 10) {
+                  const uniqueId = `edit_${newP.id}_${newP.name}_${newP.status}`;
+                  if (!notifications.some(n => n.id === uniqueId) && !newNotifications.some(n => n.id === uniqueId)) {
+                    newNotifications.push({
+                      id: uniqueId,
+                      projectId: newP.id,
+                      projectName: newP.name,
+                      type: 'edit',
+                      message: `تم تعديل بيانات المشروع: ${newP.name} (الحالة الحالية: ${newP.status})`,
+                      timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString('ar-SA'),
+                      read: false,
+                      region: newP.region || '',
+                      scope: newP.scope || ''
+                    });
+                    addedCount++;
+                  }
+                }
+              }
+            });
+
+            if (newNotifications.length > 0) {
+              setNotifications(prev => [...newNotifications, ...prev]);
+            }
+          }
+          return mappedProjects;
+        });
         try {
           localStorage.setItem('water_maps_cached_projects', JSON.stringify(mappedProjects));
         } catch (cacheErr) {
@@ -307,6 +471,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    setActiveTab('maps');
     fetchDataFromSupabase();
   }, []);
 
@@ -337,6 +502,27 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(`water_maps_favorites_${currentUser.id}`, JSON.stringify(favoriteIds));
   }, [favoriteIds, currentUser.id]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`water_maps_notifications_${currentUser.id}`);
+      if (saved) {
+        setNotifications(JSON.parse(saved));
+      } else {
+        setNotifications([]);
+      }
+    } catch (e) {
+      setNotifications([]);
+    }
+  }, [currentUser.id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(`water_maps_notifications_${currentUser.id}`, JSON.stringify(notifications));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [notifications, currentUser.id]);
 
   // دمج ميزة الرجوع الذكي باستخدام زر الرجوع للجوال والمتصفح لضمان عدم إغلاق التطبيق فجأة
   useEffect(() => {
@@ -391,6 +577,19 @@ export default function App() {
     };
   }, [isLogged, isProjectModalOpen, selectedProjectId, activeTab, showExitModal]);
 
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      const bellContainer = document.getElementById('notifications-bell-container');
+      if (bellContainer && !bellContainer.contains(event.target as Node)) {
+        setShowNotificationsDropdown(false);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => {
+      document.removeEventListener('click', handleOutsideClick);
+    };
+  }, []);
+
   const handleToggleFavorite = (projectId: number) => {
     setFavoriteIds(prev => {
       const isFav = prev.includes(projectId);
@@ -398,6 +597,36 @@ export default function App() {
       showNotification(isFav ? 'تمت الإزالة من المشاريع المفضلة ⭐️' : 'تمت الإضافة إلى المشاريع المفضلة ⭐');
       return updated;
     });
+  };
+
+  const unreadNotificationsCount = useMemo(() => {
+    return notifications.filter(n => !n.read).length;
+  }, [notifications]);
+
+  const handleMarkAllAsRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    showNotification('تم تحديد جميع الإشعارات كمقروءة');
+  };
+
+  const handleClearNotifications = () => {
+    setNotifications([]);
+    showNotification('تم مسح قائمة الإشعارات');
+  };
+
+  const handleNotificationClick = (notif: AppNotification) => {
+    // 1. Mark as read
+    setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+    
+    // 2. Select project and focus on maps tab
+    if (notif.projectId) {
+      setSelectedProjectId(notif.projectId);
+      setActiveTab('maps');
+      setMobileViewMode('map');
+      showNotification(`تم تحديد مشروع: ${notif.projectName}`);
+    }
+    
+    // 3. Close notifications dropdown
+    setShowNotificationsDropdown(false);
   };
 
   // 5. Role-based Project Filtering Logic
@@ -556,6 +785,7 @@ export default function App() {
       }
       setCurrentUser(found);
       setIsLogged(true);
+      setActiveTab('maps');
       localStorage.setItem('water_maps_is_logged', 'true');
       localStorage.setItem('water_maps_active_user_id', found.id);
       showNotification(`مرحباً بك مجدداً المهندس: ${found.name}`);
@@ -571,6 +801,7 @@ export default function App() {
       const adminUser = users.find(u => u.role === 'admin') || INITIAL_USERS[0];
       setCurrentUser(adminUser);
       setIsLogged(true);
+      setActiveTab('maps');
       localStorage.setItem('water_maps_is_logged', 'true');
       localStorage.setItem('water_maps_active_user_id', adminUser.id);
       showNotification('أهلاً بك يا مدير النظام، تم تسجيل الدخول بنجاح.');
@@ -619,6 +850,24 @@ export default function App() {
     });
 
     const exists = projects.some(p => p.id === savedProj.id);
+    const notifType = exists ? 'edit' : 'add';
+    const notifMsg = exists 
+      ? `قمتم بتعديل بيانات المشروع: ${savedProj.name}` 
+      : `قمتم بإضافة مشروع جديد: ${savedProj.name}`;
+    
+    const selfNotif: AppNotification = {
+      id: `self_${notifType}_${savedProj.id || Date.now()}_${Date.now()}`,
+      projectId: savedProj.id || Date.now(),
+      projectName: savedProj.name,
+      type: notifType,
+      message: notifMsg,
+      timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString('ar-SA'),
+      read: true, // It's their own action, so mark as read by default
+      region: savedProj.region || '',
+      scope: typeof savedProj.scope === 'string' ? savedProj.scope : 'صرف صحي'
+    };
+    setNotifications(prev => [selfNotif, ...prev]);
+
     try {
       if (exists) {
         // تحديث مشروع قائم بالسيرفر
@@ -918,12 +1167,114 @@ export default function App() {
               </div>
             </div>
 
-            {/* User status badge & Logout */}
-            <div className="flex items-center gap-3">
+            {/* User status badge, Notification Bell & Logout */}
+            <div className="flex items-center gap-3 relative">
               <div className="hidden sm:block text-right">
                 <span className="text-[10px] text-slate-400 font-bold block">المستخدم الحالي</span>
                 <span className="text-xs text-slate-800 font-extrabold">{currentUser.name}</span>
               </div>
+
+              {/* Notification Bell */}
+              <div className="relative" id="notifications-bell-container">
+                <button
+                  type="button"
+                  onClick={() => setShowNotificationsDropdown(!showNotificationsDropdown)}
+                  className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center relative ${
+                    showNotificationsDropdown
+                      ? 'bg-blue-50 border-blue-200 text-blue-600'
+                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                  title="تنبيهات النظام والمشاريع"
+                >
+                  <Bell className="h-4 w-4" />
+                  {unreadNotificationsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-extrabold h-4 w-4 rounded-full flex items-center justify-center animate-bounce">
+                      {unreadNotificationsCount}
+                    </span>
+                  )}
+                </button>
+
+                {showNotificationsDropdown && (
+                  <div className="absolute left-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 text-right">
+                    {/* Header */}
+                    <div className="p-3.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Bell className="h-4 w-4 text-blue-600" />
+                        <span className="text-xs font-extrabold text-slate-800">إشعارات المشاريع والشبكات</span>
+                      </div>
+                      <div className="flex gap-2">
+                        {unreadNotificationsCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleMarkAllAsRead}
+                            className="text-[10px] text-blue-600 hover:text-blue-800 font-bold cursor-pointer"
+                          >
+                            تحديد الكل كمقروء
+                          </button>
+                        )}
+                        {notifications.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearNotifications}
+                            className="text-[10px] text-slate-400 hover:text-rose-600 font-bold cursor-pointer"
+                          >
+                            مسح الكل
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Notification List */}
+                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                      {notifications.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+                          <Bell className="h-8 w-8 text-slate-200 animate-pulse" />
+                          <span>لا توجد إشعارات نشطة حالياً</span>
+                          <span className="text-[10px] text-slate-300">يتم إشعارك تلقائياً عند إضافة أو تعديل مشاريع مسموحة لك.</span>
+                        </div>
+                      ) : (
+                        notifications.map(notif => (
+                          <div
+                            key={notif.id}
+                            onClick={() => handleNotificationClick(notif)}
+                            className={`p-3.5 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3 items-start ${
+                              !notif.read ? 'bg-blue-50/20' : ''
+                            }`}
+                          >
+                            {/* Icon */}
+                            <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                              notif.type === 'add' 
+                                ? 'bg-emerald-50 text-emerald-600' 
+                                : 'bg-blue-50 text-blue-600'
+                            }`}>
+                              {notif.type === 'add' ? <Plus className="h-3.5 w-3.5" /> : <Layers className="h-3.5 w-3.5" />}
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0 space-y-1">
+                              <p className="text-xs text-slate-700 leading-relaxed font-semibold">
+                                {notif.message}
+                              </p>
+                              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                <span>{notif.timestamp}</span>
+                                <span className="bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-medium text-[9px]">
+                                  {notif.region || notif.scope}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Unread dot */}
+                            {!notif.read && (
+                              <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0 mt-2"></span>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <button
                 onClick={handleLogout}
                 className="p-2 text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 border border-rose-100 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
@@ -1126,7 +1477,7 @@ export default function App() {
                   }`}
                 >
                   <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
-                  <span>قائمة المشاريع ({filteredProjects.length})</span>
+                  <span>قائمة المشاريع ({visibleProjects.length})</span>
                 </button>
               </div>
 

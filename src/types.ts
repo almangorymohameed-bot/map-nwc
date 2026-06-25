@@ -45,3 +45,16 @@ export interface User {
   // صلاحية اختيار مشاريع محددة
   allowedProjectIds?: number[]; // معرفات المشاريع المحددة المسموحة
 }
+
+export interface AppNotification {
+  id: string;
+  projectId: number;
+  projectName: string;
+  type: 'add' | 'edit';
+  message: string;
+  timestamp: string;
+  read: boolean;
+  region: string;
+  scope: string;
+}
+
