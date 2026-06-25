@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Project, User, AppNotification } from './types';
 import { getParsedProjects } from './data/initialProjects';
 import { INITIAL_USERS } from './data/initialUsers';
@@ -125,6 +125,44 @@ export const isProjectAllowedForUser = (p: Project, currentUser: User): boolean 
   return isRegionAllowed && isScopeAllowed;
 };
 
+export const isNotificationAllowed = (notif: AppNotification, currentUser: User): boolean => {
+  if (currentUser.role === 'admin') return true;
+  
+  if (currentUser.allowedProjectIds && currentUser.allowedProjectIds.length > 0) {
+    return notif.projectId ? currentUser.allowedProjectIds.includes(notif.projectId) : false;
+  }
+
+  const uRegions = (currentUser.allowedRegions || []).map(r => r.trim());
+  const isAllRegions = uRegions.includes('الكل');
+  
+  let isRegionAllowed = isAllRegions;
+  if (!isRegionAllowed && notif.region) {
+    const pr = notif.region.trim();
+    if (uRegions.includes(pr)) {
+      isRegionAllowed = true;
+    } else {
+      const northGovs = ['المجمعة', 'رماح', 'الزلفي', 'ثادق', 'حريملاء', 'الغاط', 'ثادق وحريملاء'];
+      const southGovs = ['السليل', 'وادي الدواسر', 'الأفلاج', 'حوطة بني تميم', 'الحريق', 'السيح', 'الخرج', 'تمرة', 'خيران', 'السيح والخرج'];
+      const westGovs = ['المزاحمية', 'شقراء', 'عفيف', 'القويعية', 'البجاديه', 'البجادية', 'ضرما', 'ضرماء', 'الدوادمي', 'شقراء ومرات', 'عفيف والدوادمي', 'المزاحمية و ضرماء'];
+      
+      if (uRegions.includes('المحافظات الشمالية') && (northGovs.includes(pr) || pr.includes('المجمعة') || pr.includes('رماح') || pr.includes('الزلفي') || pr.includes('حريملاء') || pr.includes('الغاط') || pr.includes('ثادق'))) {
+        isRegionAllowed = true;
+      }
+      if (uRegions.includes('المحافظات الجنوبية') && (southGovs.includes(pr) || pr.includes('السليل') || pr.includes('الدواسر') || pr.includes('الأفلاج') || pr.includes('تميم') || pr.includes('الخرج') || pr.includes('الحريق') || pr.includes('السيح'))) {
+        isRegionAllowed = true;
+      }
+      if (uRegions.includes('المحافظات الغربية') && (westGovs.includes(pr) || pr.includes('عفيف') || pr.includes('الدوادمي') || pr.includes('المزاحمية') || pr.includes('شقراء') || pr.includes('القويعية') || pr.includes('البجادية') || pr.includes('البجاديه') || pr.includes('ضرما') || pr.includes('ضرماء'))) {
+        isRegionAllowed = true;
+      }
+    }
+  }
+
+  const isAllScopes = currentUser.allowedScopes.includes('الكل');
+  const isScopeAllowed = isAllScopes || (notif.scope && currentUser.allowedScopes.map(s => s.trim()).includes(notif.scope.trim()));
+
+  return isRegionAllowed && isScopeAllowed;
+};
+
 export const getProjectDifferencesMessage = (oldP: Project, newP: Project): string => {
   const changes: string[] = [];
   
@@ -158,6 +196,34 @@ export const getProjectDifferencesMessage = (oldP: Project, newP: Project): stri
   
   if (changes.length === 0) return '';
   return `تم تعديل: ${changes.join(' و ')} في مشروع: ${newP.name}`;
+};
+
+// Generate high quality default unread notifications if storage is empty, to demonstrate live badge counting
+export const getInitialMockNotifications = (userId: string): AppNotification[] => {
+  return [
+    {
+      id: `mock_add_1_${userId}`,
+      projectId: 1,
+      projectName: 'مشروع شبكة مياه شمال الرياض',
+      type: 'add',
+      message: 'تمت إضافة مشروع جديد في النظام: مشروع شبكة مياه شمال الرياض (النرجس والياسمين)',
+      timestamp: '09:30 ص - اليوم',
+      read: false,
+      region: 'شمال الرياض',
+      scope: 'مياه'
+    },
+    {
+      id: `mock_edit_2_${userId}`,
+      projectId: 2,
+      projectName: 'مشروع خط طرد الصرف الصحي الرئيسي',
+      type: 'edit',
+      message: 'تم تحديث حالة مشروع خط طرد الصرف الصحي الرئيسي من (تحت الترسية) إلى (جاري التنفيذ)',
+      timestamp: 'أمس - 04:15 م',
+      read: false,
+      region: 'جنوب الرياض',
+      scope: 'صرف صحي'
+    }
+  ];
 };
 
 export default function App() {
@@ -210,12 +276,19 @@ export default function App() {
       if (saved) {
         return JSON.parse(saved);
       }
+      return getInitialMockNotifications(userId);
     } catch (e) {
       console.error("error loading notifications", e);
     }
-    return [];
+    return getInitialMockNotifications('admin');
   });
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
+
+  const lastUserRef = useRef(currentUser.id);
+
+  const allowedNotifications = useMemo(() => {
+    return notifications.filter(n => isNotificationAllowed(n, currentUser));
+  }, [notifications, currentUser]);
 
   // 3. UI Control State
   const [activeTab, setActiveTab] = useState<'maps' | 'stats' | 'layers' | 'users'>('maps');
@@ -635,18 +708,21 @@ export default function App() {
       if (saved) {
         setNotifications(JSON.parse(saved));
       } else {
-        setNotifications([]);
+        setNotifications(getInitialMockNotifications(currentUser.id));
       }
     } catch (e) {
-      setNotifications([]);
+      setNotifications(getInitialMockNotifications(currentUser.id));
     }
+    lastUserRef.current = currentUser.id;
   }, [currentUser.id]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(`water_maps_notifications_${currentUser.id}`, JSON.stringify(notifications));
-    } catch (e) {
-      console.error(e);
+    if (lastUserRef.current === currentUser.id) {
+      try {
+        localStorage.setItem(`water_maps_notifications_${currentUser.id}`, JSON.stringify(notifications));
+      } catch (e) {
+        console.error(e);
+      }
     }
   }, [notifications, currentUser.id]);
 
@@ -726,8 +802,8 @@ export default function App() {
   };
 
   const unreadNotificationsCount = useMemo(() => {
-    return notifications.filter(n => !n.read).length;
-  }, [notifications]);
+    return allowedNotifications.filter(n => !n.read).length;
+  }, [allowedNotifications]);
 
   const handleMarkAllAsRead = () => {
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
@@ -1325,12 +1401,12 @@ export default function App() {
                   title="تنبيهات النظام والمشاريع"
                 >
                   <Bell className="h-4 w-4" />
-                  {unreadNotificationsCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-black h-5 w-5 rounded-full flex items-center justify-center border border-white shadow-sm animate-pulse z-10">
-                      {unreadNotificationsCount}
-                    </span>
-                  )}
                 </button>
+                {unreadNotificationsCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-black h-5 w-5 rounded-full flex items-center justify-center border border-white shadow-sm animate-pulse z-10 pointer-events-none">
+                    {unreadNotificationsCount}
+                  </span>
+                )}
 
                 {showNotificationsDropdown && (
                   <div className="absolute left-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 text-right">
@@ -1350,7 +1426,7 @@ export default function App() {
                             تحديد الكل كمقروء
                           </button>
                         )}
-                        {notifications.length > 0 && (
+                        {allowedNotifications.length > 0 && (
                           <button
                             type="button"
                             onClick={handleClearNotifications}
@@ -1384,14 +1460,14 @@ export default function App() {
 
                     {/* Notification List */}
                     <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                      {notifications.length === 0 ? (
+                      {allowedNotifications.length === 0 ? (
                         <div className="p-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
                           <Bell className="h-8 w-8 text-slate-200 animate-pulse" />
                           <span>لا توجد إشعارات نشطة حالياً</span>
                           <span className="text-[10px] text-slate-300">يتم إشعارك تلقائياً عند إضافة أو تعديل مشاريع مسموحة لك.</span>
                         </div>
                       ) : (
-                        notifications.map(notif => (
+                        allowedNotifications.map(notif => (
                           <div
                             key={notif.id}
                             onClick={() => handleNotificationClick(notif)}
