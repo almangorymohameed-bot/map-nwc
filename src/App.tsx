@@ -196,7 +196,7 @@ export default function App() {
     return INITIAL_USERS[0];
   });
 
-  // 3.0.1 Notifications State (تم التعديل لتبدأ كمصفوفة فارغة وتتحمل حياً من سوبابيس)
+  // 3.0.1 Notifications State
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
 
@@ -244,9 +244,33 @@ export default function App() {
     return [];
   });
 
-  // ==========================================
+  // 📢 دالة ذكية لإرسال التنبيهات طوالي لستارة النظام الخارجية بالجوال والكمبيوتر
+  const sendNativeNotification = (title: string, body: string) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, {
+        body: body,
+        icon: '/vite.svg', // حيشيل أيقونة التطبيق حقتك
+        dir: 'rtl'
+      });
+    }
+  };
+
+  // 🔓 دالة تطلب الإذن من المستخدم أول ما يسجل دخول بنجاح
+  const requestNotificationPermission = async (userName: string) => {
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        // تنبيه منزلق فوراً يؤكد نجاح الربط ويرحب به
+        new Notification('شركة المياه الوطنية • NWC', {
+          body: `مرحباً بك المهندس ${userName}، تم ربط بوابة الخرائط التفاعلية بنظام الإشعارات بنجاح.`,
+          icon: '/vite.svg',
+          dir: 'rtl'
+        });
+      }
+    }
+  };
+
   // دالة جلب البيانات من Supabase عند تشغيل الموقع
-  // ==========================================
   const fetchDataFromSupabase = async () => {
     setIsLoading(true);
     try {
@@ -360,13 +384,12 @@ export default function App() {
     fetchDataFromSupabase();
   }, []);
 
-  // 🔄 الـ Effect المطور لـجلب الإشعارات حياً من سوبابيس ومنع الحفظ المحلي المكرر
+  // 🔄 الـ Effect المطور لـجلب الإشعارات حياً وإرسالها متزامنة لستارة النظام الخارجية (Native)
   useEffect(() => {
     const fetchUserNotifications = async () => {
       if (!currentUser || !currentUser.id || !isLogged) return;
       
       try {
-        // حنجلب الإشعارات الموجهة للمستخدم المعني عبر التطابق بالـ ID الحقيقي أو الـ username
         const { data, error } = await supabase
           .from('notifications')
           .select('*')
@@ -380,24 +403,31 @@ export default function App() {
             projectName: n.project_name,
             type: n.type,
             message: n.message,
-            timestamp: new Date(n.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date(n.created_at).toLocaleDateString('ar-SA'),
+            timestamp: new Date(n.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
             read: n.read,
             region: n.region || '',
             scope: n.scope || ''
           }));
+
+          // لو لقى إشعار جديد تماماً ما كان مسجل في الـ State المحلية، يطيره طوالي لستارة الجوال
+          if (notifications.length > 0 && mappedNotifs.length > notifications.length) {
+            const latestNotif = mappedNotifs[0];
+            if (!latestNotif.read) {
+              sendNativeNotification('تنبيه مشروع جديد • NWC', latestNotif.message);
+            }
+          }
+
           setNotifications(mappedNotifs);
         }
       } catch (err) {
-        console.error("خطأ في جلب الإشعارات من السيرفر:", err);
+        console.error(err);
       }
     };
 
     fetchUserNotifications();
-    
-    // سحب الإشعارات الجديدة كل 8 ثواني لايف
     const interval = setInterval(fetchUserNotifications, 8000);
     return () => clearInterval(interval);
-  }, [currentUser.id, isLogged]);
+  }, [currentUser.id, isLogged, notifications.length]);
 
   useEffect(() => {
     localStorage.setItem('water_maps_active_user_id', currentUser.id);
@@ -474,7 +504,13 @@ export default function App() {
     setFavoriteIds(prev => {
       const isFav = prev.includes(projectId);
       const updated = isFav ? prev.filter(id => id !== projectId) : [...prev, projectId];
+      const currentProjName = projects.find(p => p.id === projectId)?.name || '';
+      
       showNotification(isFav ? 'تمت الإزالة من المشاريع المفضلة ⭐️' : 'تمت الإضافة إلى المشاريع المفضلة ⭐');
+      
+      // إرسال لستارة النظام عند تفعيل أو إلغاء المفضلة
+      sendNativeNotification('المشاريع المفضلة ⭐', isFav ? `تمت إزالة: ${currentProjName}` : `تمت إضافة: ${currentProjName}`);
+      
       return updated;
     });
   };
@@ -631,6 +667,9 @@ export default function App() {
       localStorage.setItem('water_maps_is_logged', 'true');
       localStorage.setItem('water_maps_active_user_id', found.id);
       showNotification(`مرحباً بك مجدداً المهندس: ${found.name}`);
+      
+      // طلب الإذن لِـ ستارة الجوال الخارجية فور تسجيل الدخول بنجاح
+      requestNotificationPermission(found.name);
     } else {
       setLoginError('عذراً، هذا البريد غير معتمد ومسجل مسبقاً في النظام.');
     }
@@ -647,6 +686,8 @@ export default function App() {
       localStorage.setItem('water_maps_is_logged', 'true');
       localStorage.setItem('water_maps_active_user_id', adminUser.id);
       showNotification('أهلاً بك يا مدير النظام، تم تسجيل الدخول بنجاح.');
+      
+      requestNotificationPermission('مدير النظام');
     } else {
       setLoginError('كلمة المرور غير صحيحة!');
     }
@@ -659,9 +700,6 @@ export default function App() {
     showNotification('تم تسجيل الخروج بنجاح.');
   };
 
-  // ==========================================
-  // دالة الإدراج المعدلة لتقوم بإدخال سطر لجدول notifications طوالي
-  // ==========================================
   const handleSaveProject = async (savedProj: Project) => {
     const payload = {
       operational_number: savedProj.operationalNumber,
@@ -682,20 +720,22 @@ export default function App() {
     };
 
     const exists = projects.some(p => p.id === savedProj.id);
-    const notifType = exists ? 'edit' : 'add';
 
     try {
       if (exists) {
         const { error } = await supabase.from('projects').update(payload).eq('id', savedProj.id);
         if (!error) {
           showNotification(`تم تحديث بيانات مشروع بالسيرفر: ${savedProj.name}`);
-          // إرسال سطر الإشعار الأولي للسيرفر (والـ Trigger حيتكفل بالباقي)
+          
+          // طيران إشعار فوري لستارة القائم بالعمل
+          sendNativeNotification('تحديث بيانات 💾', `لقد قمت بتعديل بيانات المشروع: ${savedProj.name}`);
+
           await supabase.from('notifications').insert([{
             user_id: currentUser.id,
             project_id: savedProj.id,
             project_name: savedProj.name,
             type: 'edit',
-            message: `قام المهندس ${currentUser.name} بتعديل بيانات المشروع`,
+            message: `قام المهندس ${currentUser.name} بتعديل بيانات المشروع: ${savedProj.name}`,
             region: savedProj.region,
             scope: payload.scope
           }]);
@@ -704,13 +744,15 @@ export default function App() {
         const { data: insertedData, error } = await supabase.from('projects').insert([payload]).select();
         if (!error && insertedData && insertedData[0]) {
           showNotification(`تم إضافة مشروع شبكة جديد بنجاح للسيرفر: ${savedProj.name}`);
-          // إرسال سطر الإشعار الأولي للسيرفر
+          
+          sendNativeNotification('إضافة مشروع جديد 🚀', `لقد قمت بإضافة المشروع بنجاح: ${savedProj.name}`);
+
           await supabase.from('notifications').insert([{
             user_id: currentUser.id,
             project_id: insertedData[0].id,
             project_name: savedProj.name,
             type: 'add',
-            message: `قام المهندس ${currentUser.name} بإضافة مشروع جديد`,
+            message: `قام المهندس ${currentUser.name} بإضافة مشروع جديد: ${savedProj.name}`,
             region: savedProj.region,
             scope: payload.scope
           }]);
