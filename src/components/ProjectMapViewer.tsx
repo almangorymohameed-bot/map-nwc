@@ -914,7 +914,7 @@ export function ProjectMapViewer({
             </div>
           )}
 
-          {hasWriteAccess && !isMasterMap && project && project.mapUrl && canOpenExternalLinks !== false && (
+          {!isMasterMap && project && project.mapUrl && canOpenExternalLinks !== false && (
             <a
               href={project.mapUrl}
               target="_blank"
@@ -938,8 +938,8 @@ export function ProjectMapViewer({
             </button>
           )}
 
-          {/* Admin & Editor features: External map opening (تبويب خارجي) and share link (مشاركة) */}
-          {hasWriteAccess && canOpenExternalLinks !== false && (
+          {/* External map opening (تبويب خارجي) and share link (مشاركة) available based on permission */}
+          {canOpenExternalLinks !== false && (
             <>
               {/* Share map link */}
               <button
@@ -1025,7 +1025,7 @@ export function ProjectMapViewer({
             </span>
           </div>
           <div className="flex items-center gap-1.5 shrink-0 self-auto block">
-            {isAdmin && canOpenExternalLinks !== false && (
+            {canOpenExternalLinks !== false && (
               <a
                 href={project.mapUrl}
                 target="_blank"

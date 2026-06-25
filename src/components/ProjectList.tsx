@@ -263,6 +263,7 @@ export function ProjectList({
           const isSelected = selectedProject?.id === p.id;
           const isWater = (p.scope || '').includes('مياه');
           const isAdmin = currentUser?.role === 'admin';
+          const canOpenExternalLinks = currentUser?.canOpenExternalLinks !== false;
           
           if (viewMode === 'compact') {
             return (
@@ -325,7 +326,7 @@ export function ProjectList({
                       <div className="col-span-full pt-1.5 mt-1 border-t border-dashed border-slate-100 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
                           <strong className="text-slate-400 font-bold text-[9px]">أدوات الخرائط والولوج البصري:</strong>
-                          {p.mapUrl && isAdmin && (
+                          {p.mapUrl && canOpenExternalLinks && (
                             <a
                               href={p.mapUrl}
                               target="_blank"
@@ -337,7 +338,7 @@ export function ProjectList({
                               <span>فتح بنظام ملاحي ↗️</span>
                             </a>
                           )}
-                          {isAdmin && (
+                          {canOpenExternalLinks && (
                             <a
                               href={`https://earth.google.com/web/@${getProjectCoordinates(p).lat},${getProjectCoordinates(p).lng},400d,35y,0h,0t,0r`}
                               target="_blank"
@@ -506,7 +507,7 @@ export function ProjectList({
                   <div className="pt-2.5 mt-2 border-t border-slate-100 flex flex-col gap-2 animate-in fade-in duration-200">
                     <span className="text-[9px] font-bold text-slate-400 text-right">الخرائط ثلاثية الأبعاد والملاحة:</span>
                     <div className="flex flex-wrap gap-1.5 justify-end">
-                      {p.mapUrl && isAdmin && (
+                      {p.mapUrl && canOpenExternalLinks && (
                         <a
                           href={p.mapUrl}
                           target="_blank"
@@ -518,7 +519,7 @@ export function ProjectList({
                           <span>فتح بنظام ملاحي ↗️</span>
                         </a>
                       )}
-                      {isAdmin && (
+                      {canOpenExternalLinks && (
                         <a
                           href={`https://earth.google.com/web/@${getProjectCoordinates(p).lat},${getProjectCoordinates(p).lng},400d,35y,0h,0t,0r`}
                           target="_blank"
