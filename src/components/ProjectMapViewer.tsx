@@ -864,8 +864,8 @@ export function ProjectMapViewer({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h4 className="text-sm font-bold truncate max-w-[210px] sm:max-w-xs md:max-w-md text-right" title={project?.name || "الخريطة العامة والمجمل المالي والربط"}>
-                {project?.name || "الخريطة التفاعلية للمشروعات الجغرافية"}
+              <h4 className="text-[10px] leading-[21px] font-bold truncate max-w-[210px] sm:max-w-xs md:max-w-md text-right" title={project?.name || "الخريطة العامة والمجمل المالي والربط"}>
+                {project?.name || "الخريطة التفاعلية "}
               </h4>
             </div>
           </div>
