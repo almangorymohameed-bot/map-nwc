@@ -242,6 +242,87 @@ export default function App() {
     };
   }, []);
 
+  // 3.0.2 Notification Permission & Service Worker State
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'default';
+  });
+
+  const [isSwRegistered, setIsSwRegistered] = useState(false);
+
+  // Register Service Worker
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .then((reg) => {
+          console.log('NWC Service Worker registered with scope:', reg.scope);
+          setIsSwRegistered(true);
+        })
+        .catch((err) => {
+          console.error('NWC Service Worker registration failed:', err);
+        });
+    }
+  }, []);
+
+  // Request native permission
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) {
+      showNotification('تنبيه: هذا المتصفح أو الجهاز لا يدعم الإشعارات الخارجية.');
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission === 'granted') {
+        showNotification('تم تفعيل استقبال الإشعارات على الجوال بنجاح! 🔔');
+        // Trigger a test notification
+        triggerNativeNotification(
+          'بوابة الخرائط الجغرافية 🌍',
+          'أهلاً بك مهندسنا العزيز! تم ربط جهازك لتلقي إشعارات تحديثات مشاريع المياه والصرف الصحي بنجاح.'
+        );
+      } else if (permission === 'denied') {
+        showNotification('تنبيه: تم رفض إذن الإشعارات المباشرة. يرجى تفعيلها يدوياً من إعدادات المتصفح.');
+      }
+    } catch (err) {
+      console.error('Error requesting notification permission:', err);
+    }
+  };
+
+  // Trigger Native OS notification helper
+  const triggerNativeNotification = async (title: string, body: string) => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+
+    try {
+      // Try using the active Service Worker registration for robust mobile system tray support
+      if ('serviceWorker' in navigator) {
+        const reg = await navigator.serviceWorker.ready.catch(() => null);
+        if (reg && 'showNotification' in reg) {
+          reg.showNotification(title, {
+            body,
+            icon: '/vite.svg',
+            badge: '/vite.svg',
+            dir: 'rtl',
+            tag: 'nwc-water-maps-notif',
+            renotify: true
+          });
+          return;
+        }
+      }
+      
+      // Fallback to standard native Notification constructor
+      new Notification(title, {
+        body,
+        dir: 'rtl',
+        icon: '/vite.svg'
+      });
+    } catch (err) {
+      console.error('Error displaying native notification:', err);
+    }
+  };
+
   // 3.1 Login states
   const [loginTab, setLoginTab] = useState<'nwc' | 'admin'>('nwc');
   const [nwcEmail, setNwcEmail] = useState('');
@@ -364,6 +445,13 @@ export default function App() {
 
             if (newNotifications.length > 0) {
               setNotifications(prev => [...newNotifications, ...prev]);
+              // Trigger native system tray notifications for each fetched project update
+              newNotifications.forEach(n => {
+                triggerNativeNotification(
+                  n.type === 'add' ? 'إضافة مشروع جديد 🆕' : 'تحديث بيانات مشروع 🔄',
+                  n.message
+                );
+              });
             }
           }
           return mappedProjects;
@@ -503,6 +591,15 @@ export default function App() {
     setActiveTab('maps');
     fetchDataFromSupabase();
   }, []);
+
+  // Poll Supabase for new projects / changes every 20 seconds to trigger native background notifications
+  useEffect(() => {
+    if (!isLogged) return;
+    const interval = setInterval(() => {
+      fetchDataFromSupabase();
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [isLogged]);
 
   // حفظ تعديل المفضلة محلياً
   useEffect(() => {
@@ -789,6 +886,8 @@ export default function App() {
   const showNotification = (msg: string) => {
     setSuccessNotification(msg);
     setTimeout(() => setSuccessNotification(''), 4000);
+    // Trigger native OS system notification
+    triggerNativeNotification('بوابة الخرائط الجغرافية 🌍', msg);
   };
 
   // 7. Login Submission Handler
@@ -902,6 +1001,10 @@ export default function App() {
       scope: typeof savedProj.scope === 'string' ? savedProj.scope : 'صرف صحي'
     };
     setNotifications(prev => [selfNotif, ...prev]);
+    triggerNativeNotification(
+      notifType === 'add' ? 'إضافة مشروع جديد 🆕' : 'تحديث بيانات مشروع 🔄',
+      notifMsg
+    );
 
     try {
       if (exists) {
@@ -1259,6 +1362,26 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* Mobile Notification PWA Status Checker */}
+                    <div className="p-2.5 px-3.5 border-b border-slate-100 bg-blue-50/30 flex items-center justify-between text-[11px] font-medium">
+                      <span className="text-slate-500 font-bold">إشعارات الجوال والنظام الخارجية:</span>
+                      {notificationPermission === 'granted' ? (
+                        <span className="text-emerald-600 font-extrabold flex items-center gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                          <span>نشطة ومفعلة</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={requestNotificationPermission}
+                          className="text-blue-600 hover:text-blue-800 font-extrabold flex items-center gap-1 cursor-pointer bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors"
+                        >
+                          <Smartphone className="h-3 w-3" />
+                          <span>تفعيل الإشعارات 🔔</span>
+                        </button>
+                      )}
+                    </div>
+
                     {/* Notification List */}
                     <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
                       {notifications.length === 0 ? (
@@ -1446,6 +1569,41 @@ export default function App() {
             )}
           </div>
         </div>
+
+        {/* مطالبة تفعيل إشعارات الجوال والنظام */}
+        {notificationPermission === 'default' && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100/80 rounded-2xl p-4.5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm animate-in fade-in duration-300 text-right">
+            <div className="flex items-center gap-3.5 w-full md:w-auto">
+              <div className="p-3 bg-blue-600 text-white rounded-xl shrink-0 shadow-sm animate-bounce">
+                <Bell className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-xs font-extrabold text-blue-950 flex items-center gap-1.5">
+                  <span>تفعيل التنبيهات المباشرة للجوال والنظام 🔔</span>
+                  <span className="bg-blue-100 text-blue-700 text-[9px] px-1.5 py-0.5 rounded-full font-bold">موصى به للجوال</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                  هل تود تلقي إشعارات فورية في ستارة هاتفك الخارجية عند إضافة أو تعديل أي من المشاريع والشبكات التابعة لقطاعك؟
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+              <button
+                onClick={() => setNotificationPermission('denied')}
+                className="text-[11px] text-slate-400 hover:text-slate-600 font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
+              >
+                ليس الآن
+              </button>
+              <button
+                onClick={requestNotificationPermission}
+                className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl transition-all shadow-xs hover:shadow-md cursor-pointer flex items-center gap-1.5"
+              >
+                <Smartphone className="h-4 w-4" />
+                <span>تفعيل التنبيهات الخارجية</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Navigation Tabs bar */}
         <div className="border-b border-slate-200 flex justify-between items-center bg-white p-2.5 rounded-2xl border border-slate-100 shadow-2xs">
