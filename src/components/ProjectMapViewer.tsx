@@ -961,20 +961,7 @@ export function ProjectMapViewer({
                 <span>مشاركة</span>
               </button>
 
-              {/* Google Earth Online button */}
-              <a
-                href={isMasterMap 
-                  ? 'https://earth.google.com/web/@24.7136,46.6753,400d,35y,0h,0t,0r' 
-                  : (project ? `https://earth.google.com/web/@${getProjectCoordinates(project).lat},${getProjectCoordinates(project).lng},400d,35y,0h,0t,0r` : 'https://earth.google.com/web/@24.7136,46.6753,400d,35y,0h,0t,0r')
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                title="مشاهدة الموقع مجسماً عبر قوقل إيرث ثلاثي الأبعاد"
-                className="flex items-center gap-1 p-1 px-1.5 sm:px-2.5 bg-blue-700 hover:bg-blue-600 rounded-lg text-[9px] sm:text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs"
-              >
-                <Globe className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 text-blue-200 animate-pulse" />
-                <span>قوقل إيرث</span>
-              </a>
+
 
               {/* External Map opening button */}
               <a

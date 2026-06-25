@@ -338,18 +338,7 @@ export function ProjectList({
                               <span>فتح بنظام ملاحي ↗️</span>
                             </a>
                           )}
-                          {canOpenExternalLinks && (
-                            <a
-                              href={`https://earth.google.com/web/@${getProjectCoordinates(p).lat},${getProjectCoordinates(p).lng},400d,35y,0h,0t,0r`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded hover:bg-indigo-100 transition-colors text-[9px] font-bold"
-                            >
-                              <Globe className="h-2.5 w-2.5 text-indigo-500 animate-pulse" />
-                              <span>عرض مجسم (قوقل إيرث)</span>
-                            </a>
-                          )}
+
                           
                           {p.mapUrl && (
                             <button
@@ -519,18 +508,7 @@ export function ProjectList({
                           <span>فتح بنظام ملاحي ↗️</span>
                         </a>
                       )}
-                      {canOpenExternalLinks && (
-                        <a
-                          href={`https://earth.google.com/web/@${getProjectCoordinates(p).lat},${getProjectCoordinates(p).lng},400d,35y,0h,0t,0r`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded hover:bg-indigo-100 transition-colors text-[9px] font-bold"
-                        >
-                          <Globe className="h-2.5 w-2.5 text-indigo-500 animate-pulse" />
-                          <span>قوقل إيرث</span>
-                        </a>
-                      )}
+
                       {p.mapUrl && (
                         <button
                           type="button"
