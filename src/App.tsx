@@ -103,7 +103,7 @@ export const isProjectAllowedForUser = (p: Project, currentUser: User): boolean 
       if (uRegions.includes('المحافظات الجنوبية') && (southGovs.includes(pr) || pr.includes('السليل') || pr.includes('الدواسر') || pr.includes('الأفلاج') || pr.includes('تميم') || pr.includes('الخرج') || pr.includes('الحريق') || pr.includes('السيح'))) {
         isRegionAllowed = true;
       }
-      if (uRegions.includes('المحافظات الغربية') && (westGovs.includes(pr) || pr.includes('عفيف') || pr.includes('الدوادمي') || pr.includes('المزاحمية') || pr.includes('شقراء', 'مرات') || pr.includes('القويعية') || pr.includes('البجادية') || pr.includes('البجاديه') || pr.includes('ضرما') || pr.includes('ضرماء'))) {
+      if (uRegions.includes('المحافظات الغربية') && (westGovs.includes(pr) || pr.includes('عفيف') || pr.includes('الدوادمي') || pr.includes('المزاحمية') || pr.includes('شقراء') || pr.includes('القويعية') || pr.includes('البجادية') || pr.includes('البجاديه') || pr.includes('ضرما') || pr.includes('ضرماء'))) {
         isRegionAllowed = true;
       }
     }
@@ -150,9 +150,12 @@ export const getProjectDifferencesMessage = (oldP: Project, newP: Project): stri
   if ((oldP.subProgram || '').trim() !== (newP.subProgram || '').trim()) {
     changes.push(`البرنامج الفرعي (من "${oldP.subProgram}" إلى "${oldP.subProgram}")`);
   }
+  if ((oldP.mapUrl || '').trim() !== (newP.mapUrl || '').trim()) {
+    changes.push(`رابط الخارطة التفاعلية`);
+  }
   
   if (changes.length === 0) return '';
-  return `تم تعديل: ${changes.join(' و ')} في مشروع: ${newP.name}`;
+  return `وتم تعديل: ${changes.join(' و ')}`;
 };
 
 export default function App() {
@@ -244,7 +247,7 @@ export default function App() {
     return [];
   });
 
-  // 📢 دالة دمج ميزة إرسال التنبيهات إلى ستارة النظام الخارجية بالجوال والكمبيوتر
+  // 📢 دالة إرسال التنبيهات إلى ستارة النظام الخارجية بالجوال والكمبيوتر
   const sendNativeNotification = (title: string, body: string) => {
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(title, {
@@ -378,6 +381,11 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    setActiveTab('maps');
+    fetchDataFromSupabase();
+  }, []);
+
   // 🔄 المزامنة الحية لِـسحب الإشعارات من سوبابيس وتمرير الأحداث الدقيقة لِـستارة الجوال
   useEffect(() => {
     const fetchUserNotifications = async () => {
@@ -397,7 +405,7 @@ export default function App() {
             projectName: n.project_name,
             type: n.type,
             message: n.message,
-            timestamp: new Date(n.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+            timestamp: new Date(n.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date(n.created_at).toLocaleDateString('ar-SA'),
             read: n.read,
             region: n.region || '',
             scope: n.scope || ''
@@ -664,7 +672,6 @@ export default function App() {
       localStorage.setItem('water_maps_active_user_id', found.id);
       showNotification(`مرحباً بك مجدداً المهندس: ${found.name}`);
       
-      // طلب الإذن لِـستارة الجوال فور الدخول الناجح
       requestNotificationPermission(found.name);
     } else {
       setLoginError('عذراً، هذا البريد غير معتمد ومسجل مسبقاً في النظام.');
@@ -697,7 +704,7 @@ export default function App() {
   };
 
   // ==========================================
-  // دالة الحفظ المعدلة بالكامل لصياغة الفروقات والأحداث التفصيلية
+  // دالة الحفظ المحدثة بالكامل لصياغة الحدث الدقيق مدمجاً باسم المهندس الحقيقي
   // ==========================================
   const handleSaveProject = async (savedProj: Project) => {
     const payload = {
@@ -720,28 +727,32 @@ export default function App() {
 
     const exists = projects.some(p => p.id === savedProj.id);
     
-    // صياغة نص التغيير والحدث التفصيلي الحقيقي (زي تغيير الحالة)
+    // 1️⃣ حساب الفروقات ودمجها بذكاء مع اسم المهندس القام بالحركة لتطير جملة واحدة مقفلة
     let dynamicDiffMsg = '';
     if (exists) {
       const oldProj = projects.find(p => p.id === savedProj.id);
-      dynamicDiffMsg = oldProj ? getProjectDifferencesMessage(oldProj, savedProj) : '';
-      if (!dynamicDiffMsg) {
-        dynamicDiffMsg = `تم تحديث بيانات مشروع: ${savedProj.name}`;
+      const diffDetails = oldProj ? getProjectDifferencesMessage(oldProj, savedProj) : '';
+      
+      if (diffDetails) {
+        dynamicDiffMsg = `قام المهندس ${currentUser.name} بتعديل مشروع: ${savedProj.name}، ${diffDetails}`;
+      } else {
+        dynamicDiffMsg = `قام المهندس ${currentUser.name} بتعديل بيانات في مشروع: ${savedProj.name}`;
       }
     } else {
-      dynamicDiffMsg = `قام المهندس ${currentUser.name} بإضافة مشروع جديد: ${savedProj.name}`;
+      dynamicDiffMsg = `🚀 قام المهندس ${currentUser.name} بإضافة مشروع جديد: ${savedProj.name}`;
     }
 
     try {
       if (exists) {
+        // 2️⃣ الرفع طوالي لقاعدة البيانات
         const { error } = await supabase.from('projects').update(payload).eq('id', savedProj.id);
         if (!error) {
           showNotification(`تم تحديث بيانات مشروع بالسيرفر: ${savedProj.name}`);
           
-          // إرسال التنبيه المنزلق الفوري لستارة صاحب الحركة الحالية لِتأكيد الإجراء
-          sendNativeNotification('تحديث بيانات المشروع 💾', dynamicDiffMsg);
+          // طيران إشعار فوري منزلق لستارة الجوال الخارجية بالحدث المدمج الكامل
+          sendNativeNotification('تعديل مشروع 💾', dynamicDiffMsg);
 
-          // صب التنبيه المفصل في السيرفر ليتوزع آلياً للباقين
+          // إدخال سطر الإشعار الحامِل لِلاسم والحدث الدقيق ليتوزع وراء الستار للباقيين
           await supabase.from('notifications').insert([{
             user_id: currentUser.id,
             project_id: savedProj.id,
@@ -773,6 +784,17 @@ export default function App() {
     } catch (err: any) {
       console.error(err);
     }
+
+    // 3️⃣ تحديث الـ State المحلية ونعش البيانات بعد الإرسال الناجح لضمان سلامة الترتيب وحساب الفروقات
+    setProjects(prev => {
+      const exists = prev.some(p => p.id === savedProj.id);
+      if (exists) {
+        return prev.map(p => p.id === savedProj.id ? savedProj : p);
+      } else {
+        return [savedProj, ...prev];
+      }
+    });
+
     fetchDataFromSupabase();
   };
 
@@ -923,7 +945,7 @@ export default function App() {
                             <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${notif.type === 'add' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>{notif.type === 'add' ? <Plus className="h-3.5 w-3.5" /> : <Layers className="h-3.5 w-3.5" />}</div>
                             <div className="flex-1 min-w-0 space-y-1">
                               <p className="text-xs text-slate-700 leading-relaxed font-semibold">{notif.message}</p>
-                              <div className="flex items-center justify-between text-[10px] text-slate-400"><span>{notif.timestamp}</span><span className="bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-medium text-[9px]"> {notif.region || notif.scope}</span></div>
+                              <div className="flex items-center justify-between text-[10px] text-slate-400"><span>{notif.timestamp}</span><span className="bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-medium text-[9px]">{notif.region || notif.scope}</span></div>
                             </div>
                             {!notif.read && (<span className="w-2 h-2 rounded-full bg-blue-600 shrink-0 mt-2"></span>)}
                           </div>
