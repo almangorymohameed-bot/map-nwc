@@ -125,6 +125,41 @@ export const isProjectAllowedForUser = (p: Project, currentUser: User): boolean 
   return isRegionAllowed && isScopeAllowed;
 };
 
+export const getProjectDifferencesMessage = (oldP: Project, newP: Project): string => {
+  const changes: string[] = [];
+  
+  if ((oldP.name || '').trim() !== (newP.name || '').trim()) {
+    changes.push(`الاسم (من "${oldP.name}" إلى "${newP.name}")`);
+  }
+  if ((oldP.status || '').trim() !== (newP.status || '').trim()) {
+    changes.push(`الحالة (من "${oldP.status}" إلى "${newP.status}")`);
+  }
+  if ((oldP.contractor || '').trim() !== (newP.contractor || '').trim()) {
+    changes.push(`المقاول (من "${oldP.contractor || 'غير محدد'}" إلى "${newP.contractor || 'غير محدد'}")`);
+  }
+  if ((oldP.consultant || '').trim() !== (newP.consultant || '').trim()) {
+    changes.push(`الاستشاري (من "${oldP.consultant || 'غير محدد'}" إلى "${newP.consultant || 'غير محدد'}")`);
+  }
+  if ((oldP.region || '').trim() !== (newP.region || '').trim()) {
+    changes.push(`المنطقة (من "${oldP.region}" إلى "${newP.region}")`);
+  }
+  if ((oldP.classification || '').trim() !== (newP.classification || '').trim()) {
+    changes.push(`التصنيف (من "${oldP.classification}" إلى "${newP.classification}")`);
+  }
+  if ((oldP.po || '').trim() !== (newP.po || '').trim()) {
+    changes.push(`رقم PO (من "${oldP.po || '-'}" إلى "${newP.po || '-'}")`);
+  }
+  if ((oldP.unifierNo || '').trim() !== (newP.unifierNo || '').trim()) {
+    changes.push(`رقم Unifier (من "${oldP.unifierNo || '-'}" إلى "${newP.unifierNo || '-'}")`);
+  }
+  if ((oldP.subProgram || '').trim() !== (newP.subProgram || '').trim()) {
+    changes.push(`البرنامج الفرعي (من "${oldP.subProgram}" إلى "${newP.subProgram}")`);
+  }
+  
+  if (changes.length === 0) return '';
+  return `تم تعديل: ${changes.join(' و ')} في مشروع: ${newP.name}`;
+};
+
 export default function App() {
   // 1. Authentication State
   const [isLogged, setIsLogged] = useState<boolean>(() => {
@@ -305,23 +340,17 @@ export default function App() {
                 }
               } else {
                 // مشروع قائم، فحص التعديلات الهامة
-                const hasChanged = 
-                  newP.name !== oldP.name || 
-                  newP.status !== oldP.status || 
-                  newP.region !== oldP.region || 
-                  newP.scope !== oldP.scope ||
-                  newP.contractor !== oldP.contractor ||
-                  newP.consultant !== oldP.consultant;
+                const diffMsg = getProjectDifferencesMessage(oldP, newP);
                 
-                if (hasChanged && isProjectAllowedForUser(newP, currentUser) && addedCount < 10) {
-                  const uniqueId = `edit_${newP.id}_${newP.name}_${newP.status}`;
+                if (diffMsg && isProjectAllowedForUser(newP, currentUser) && addedCount < 10) {
+                  const uniqueId = `edit_${newP.id}_${newP.status}_${Date.now()}`;
                   if (!notifications.some(n => n.id === uniqueId) && !newNotifications.some(n => n.id === uniqueId)) {
                     newNotifications.push({
                       id: uniqueId,
                       projectId: newP.id,
                       projectName: newP.name,
                       type: 'edit',
-                      message: `تم تعديل بيانات المشروع: ${newP.name} (الحالة الحالية: ${newP.status})`,
+                      message: diffMsg,
                       timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString('ar-SA'),
                       read: false,
                       region: newP.region || '',
@@ -851,9 +880,15 @@ export default function App() {
 
     const exists = projects.some(p => p.id === savedProj.id);
     const notifType = exists ? 'edit' : 'add';
-    const notifMsg = exists 
-      ? `قمتم بتعديل بيانات المشروع: ${savedProj.name}` 
-      : `قمتم بإضافة مشروع جديد: ${savedProj.name}`;
+    
+    let notifMsg = '';
+    if (exists) {
+      const oldProj = projects.find(p => p.id === savedProj.id);
+      const diffStr = oldProj ? getProjectDifferencesMessage(oldProj, savedProj) : '';
+      notifMsg = diffStr || `قمتم بتعديل بيانات المشروع: ${savedProj.name}`;
+    } else {
+      notifMsg = `قمتم بإضافة مشروع جديد: ${savedProj.name}`;
+    }
     
     const selfNotif: AppNotification = {
       id: `self_${notifType}_${savedProj.id || Date.now()}_${Date.now()}`,
@@ -1540,6 +1575,7 @@ export default function App() {
                       }}
                       currentUser={currentUser}
                       onToggleFavorite={handleToggleFavorite}
+                      onEditProject={canEditProjects ? handleStartEditProject : undefined}
                       searchTerm={searchTerm}
                       setSearchTerm={setSearchTerm}
                       selectedSubProgram={selectedSubProgram}
