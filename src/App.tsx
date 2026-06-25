@@ -392,6 +392,26 @@ export default function App() {
         }));
         // مقارنة البيانات الواردة مع البيانات المحلية الحالية لتوليد إشعارات بالتحديثات والإضافات الجديدة المسموحة للمستخدم
         setProjects(prevProjects => {
+          // التحقق مما إذا كان هناك تغيير فعلي في البيانات لتجنب إعادة رندرة الخريطة وتحديثها تلقائياً بدون تغيير
+          let hasActualChanges = false;
+          if (!prevProjects || prevProjects.length !== mappedProjects.length) {
+            hasActualChanges = true;
+          } else {
+            for (let i = 0; i < mappedProjects.length; i++) {
+              const newP = mappedProjects[i];
+              const oldP = prevProjects.find(op => op.id === newP.id);
+              if (!oldP || getProjectDifferencesMessage(oldP, newP) !== '') {
+                hasActualChanges = true;
+                break;
+              }
+            }
+          }
+
+          if (!hasActualChanges) {
+            // لا يوجد تغيير فعلي في المشاريع، نعيد المرجعية القديمة لمنع التحديث التلقائي للخريطة
+            return prevProjects;
+          }
+
           // إذا كانت القائمة فارغة أو تملك فقط القيمة الافتراضية الأولية، فلا نقوم بإغراق المستخدم بالإشعارات
           if (prevProjects && prevProjects.length > 0 && prevProjects.length !== 121) {
             const newNotifications: AppNotification[] = [];
@@ -399,28 +419,8 @@ export default function App() {
             
             mappedProjects.forEach(newP => {
               const oldP = prevProjects.find(op => op.id === newP.id);
-              if (!oldP) {
-                // مشروع جديد تمت إضافته
-                if (isProjectAllowedForUser(newP, currentUser) && addedCount < 10) {
-                  const uniqueId = `add_${newP.id}_${newP.name}`;
-                  // تجنب التكرار
-                  if (!notifications.some(n => n.id === uniqueId) && !newNotifications.some(n => n.id === uniqueId)) {
-                    newNotifications.push({
-                      id: uniqueId,
-                      projectId: newP.id,
-                      projectName: newP.name,
-                      type: 'add',
-                      message: `تمت إضافة مشروع جديد في النظام: ${newP.name}`,
-                      timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString('ar-SA'),
-                      read: false,
-                      region: newP.region || '',
-                      scope: newP.scope || ''
-                    });
-                    addedCount++;
-                  }
-                }
-              } else {
-                // مشروع قائم، فحص التعديلات الهامة
+              if (oldP) {
+                // مشروع قائم، فحص التعديلات الهامة فقط (دون إشعارات المشاريع الجديدة المضافة)
                 const diffMsg = getProjectDifferencesMessage(oldP, newP);
                 
                 if (diffMsg && isProjectAllowedForUser(newP, currentUser) && addedCount < 10) {
@@ -448,7 +448,7 @@ export default function App() {
               // Trigger native system tray notifications for each fetched project update
               newNotifications.forEach(n => {
                 triggerNativeNotification(
-                  n.type === 'add' ? 'إضافة مشروع جديد 🆕' : 'تحديث بيانات مشروع 🔄',
+                  'تحديث بيانات مشروع 🔄',
                   n.message
                 );
               });
@@ -978,33 +978,26 @@ export default function App() {
     });
 
     const exists = projects.some(p => p.id === savedProj.id);
-    const notifType = exists ? 'edit' : 'add';
     
-    let notifMsg = '';
     if (exists) {
       const oldProj = projects.find(p => p.id === savedProj.id);
       const diffStr = oldProj ? getProjectDifferencesMessage(oldProj, savedProj) : '';
-      notifMsg = diffStr || `قمتم بتعديل بيانات المشروع: ${savedProj.name}`;
-    } else {
-      notifMsg = `قمتم بإضافة مشروع جديد: ${savedProj.name}`;
+      const notifMsg = diffStr || `قمتم بتعديل بيانات المشروع: ${savedProj.name}`;
+      
+      const selfNotif: AppNotification = {
+        id: `self_edit_${savedProj.id || Date.now()}_${Date.now()}`,
+        projectId: savedProj.id || Date.now(),
+        projectName: savedProj.name,
+        type: 'edit',
+        message: notifMsg,
+        timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString('ar-SA'),
+        read: false, // اجعله غير مقروء لكي يظهر في جرس الإشعارات الخارجي فوراً كطلب المستخدم
+        region: savedProj.region || '',
+        scope: typeof savedProj.scope === 'string' ? savedProj.scope : 'صرف صحي'
+      };
+      setNotifications(prev => [selfNotif, ...prev]);
+      triggerNativeNotification('تحديث بيانات مشروع 🔄', notifMsg);
     }
-    
-    const selfNotif: AppNotification = {
-      id: `self_${notifType}_${savedProj.id || Date.now()}_${Date.now()}`,
-      projectId: savedProj.id || Date.now(),
-      projectName: savedProj.name,
-      type: notifType,
-      message: notifMsg,
-      timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString('ar-SA'),
-      read: true, // It's their own action, so mark as read by default
-      region: savedProj.region || '',
-      scope: typeof savedProj.scope === 'string' ? savedProj.scope : 'صرف صحي'
-    };
-    setNotifications(prev => [selfNotif, ...prev]);
-    triggerNativeNotification(
-      notifType === 'add' ? 'إضافة مشروع جديد 🆕' : 'تحديث بيانات مشروع 🔄',
-      notifMsg
-    );
 
     try {
       if (exists) {
@@ -1326,7 +1319,7 @@ export default function App() {
                 >
                   <Bell className="h-4 w-4" />
                   {unreadNotificationsCount > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-extrabold h-4 w-4 rounded-full flex items-center justify-center animate-bounce">
+                    <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[10px] font-black h-5 w-5 rounded-full flex items-center justify-center shadow-lg animate-bounce ring-2 ring-white z-10">
                       {unreadNotificationsCount}
                     </span>
                   )}
