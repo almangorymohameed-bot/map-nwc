@@ -38,16 +38,22 @@ const getStatusBadgeClass = (status: string) => {
   if (norm === 'مكتمل' || norm.includes('كامل') || norm.includes('مسلم') || norm.includes('الاستلام')) {
     return 'bg-emerald-50 text-emerald-700 border border-emerald-100';
   }
-  if (norm === 'قيد التنفيذ' || (norm.includes('جاري') && !norm.includes('الاستلام')) || norm === 'نشط') {
-    return 'bg-amber-50 text-amber-700 border border-amber-100';
+  if (norm === 'قيد التنفيذ' || (norm.includes('جاري') && !norm.includes('الاستلام')) || norm === 'نشط' || norm === 'مشروع مستأنف') {
+    return 'bg-blue-50 text-blue-700 border border-blue-100';
+  }
+  if (norm === 'متوقف كليا') {
+    return 'bg-rose-50 text-rose-700 border border-rose-100 font-bold';
+  }
+  if (norm === 'متوقف جزئيا') {
+    return 'bg-amber-50 text-amber-700 border border-amber-150 font-semibold';
   }
   if (norm === 'معلق' || norm === 'متوقف') {
     return 'bg-slate-100 text-slate-600 border border-slate-200';
   }
   if (norm.includes('مسحوب') || norm === 'ملغي') {
-    return 'bg-rose-50 text-rose-700 border border-rose-100';
+    return 'bg-rose-100/50 text-rose-700 border border-rose-200';
   }
-  return 'bg-blue-50 text-blue-700 border border-blue-100';
+  return 'bg-indigo-50 text-indigo-700 border border-indigo-100';
 };
 
 export function ProjectList({
