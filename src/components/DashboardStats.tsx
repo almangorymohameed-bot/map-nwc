@@ -34,7 +34,7 @@ export function DashboardStats({ projects }: DashboardStatsProps) {
 
   const currentCount = projects.filter(p => {
     const statusStr = p.status || '';
-    return (statusStr.includes('جاري') || statusStr.includes('تنفيذ') || statusStr.includes('التنفيذ') || statusStr.includes('مستأنف')) && !statusStr.includes('الاستلام');
+    return (statusStr.includes('جاري') || statusStr.includes('تنفيذ') || statusStr.includes('التنفيذ')) && !statusStr.includes('الاستلام');
   }).length;
   const initialHandoverCount = projects.filter(p => {
     const statusStr = p.status || '';
@@ -42,7 +42,7 @@ export function DashboardStats({ projects }: DashboardStatsProps) {
   }).length;
   const withdrawnCount = projects.filter(p => {
     const statusStr = p.status || '';
-    return statusStr.includes('مسحوب') || statusStr.includes('معلق') || statusStr.includes('متوقف');
+    return statusStr.includes('مسحوب') || statusStr.includes('معلق');
   }).length;
   
   // Contractors breakdown

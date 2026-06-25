@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Project, User } from '../types';
-import { Search, MapPin, SlidersHorizontal, Droplet, Waves, RefreshCw, AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Eye, Globe, List, LayoutGrid, Star, Pencil } from 'lucide-react';
+import { Search, MapPin, SlidersHorizontal, Droplet, Waves, RefreshCw, AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Eye, Globe, List, LayoutGrid, Star } from 'lucide-react';
 import { getProjectCoordinates } from './ProjectMapViewer';
 import { getEmbeddableMapUrl } from '../data/initialProjects';
 
@@ -16,7 +16,6 @@ interface ProjectListProps {
   onSelectProject: (project: Project) => void;
   currentUser: User;
   onToggleFavorite?: (projectId: number) => void;
-  onEditProject?: (project: Project) => void;
 
   searchTerm: string;
   setSearchTerm: (val: string) => void;
@@ -39,22 +38,16 @@ const getStatusBadgeClass = (status: string) => {
   if (norm === 'مكتمل' || norm.includes('كامل') || norm.includes('مسلم') || norm.includes('الاستلام')) {
     return 'bg-emerald-50 text-emerald-700 border border-emerald-100';
   }
-  if (norm === 'قيد التنفيذ' || (norm.includes('جاري') && !norm.includes('الاستلام')) || norm === 'نشط' || norm === 'مشروع مستأنف') {
-    return 'bg-blue-50 text-blue-700 border border-blue-100';
-  }
-  if (norm === 'متوقف كليا') {
-    return 'bg-rose-50 text-rose-700 border border-rose-100 font-bold';
-  }
-  if (norm === 'متوقف جزئيا') {
-    return 'bg-amber-50 text-amber-700 border border-amber-150 font-semibold';
+  if (norm === 'قيد التنفيذ' || (norm.includes('جاري') && !norm.includes('الاستلام')) || norm === 'نشط') {
+    return 'bg-amber-50 text-amber-700 border border-amber-100';
   }
   if (norm === 'معلق' || norm === 'متوقف') {
     return 'bg-slate-100 text-slate-600 border border-slate-200';
   }
   if (norm.includes('مسحوب') || norm === 'ملغي') {
-    return 'bg-rose-100/50 text-rose-700 border border-rose-200';
+    return 'bg-rose-50 text-rose-700 border border-rose-100';
   }
-  return 'bg-indigo-50 text-indigo-700 border border-indigo-100';
+  return 'bg-blue-50 text-blue-700 border border-blue-100';
 };
 
 export function ProjectList({
@@ -64,7 +57,6 @@ export function ProjectList({
   onSelectProject,
   currentUser,
   onToggleFavorite,
-  onEditProject,
   searchTerm,
   setSearchTerm,
   selectedSubProgram,
@@ -412,21 +404,6 @@ export function ProjectList({
                     {p.status}
                   </span>
 
-                  {onEditProject && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEditProject(p);
-                      }}
-                      className="flex items-center gap-1 font-bold px-2.5 py-1 rounded-lg transition-colors text-[10px] whitespace-nowrap shrink-0 cursor-pointer bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200"
-                      title="تعديل بيانات المشروع"
-                    >
-                      <Pencil className="h-3 w-3 text-amber-600" />
-                      <span>تعديل</span>
-                    </button>
-                  )}
-
                   <button
                     type="button"
                     className={`flex items-center gap-1 font-bold px-2.5 py-1 rounded-lg transition-colors text-[10px] whitespace-nowrap shrink-0 cursor-pointer ${
@@ -595,34 +572,17 @@ export function ProjectList({
                   <span>{p.classification}</span>
                 </span>
 
-                <div className="flex items-center gap-2">
-                  {onEditProject && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEditProject(p);
-                      }}
-                      className="flex items-center gap-1.5 font-bold px-3 py-1.5 rounded-lg transition-colors text-[11px] whitespace-nowrap shrink-0 cursor-pointer bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200"
-                      title="تعديل بيانات المشروع"
-                    >
-                      <Pencil className="h-3.5 w-3.5 text-amber-600" />
-                      <span>تعديل</span>
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    className={`flex items-center gap-1.5 font-bold px-3 py-1.5 rounded-lg transition-colors text-[11px] whitespace-nowrap shrink-0 ${
-                      isSelected 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
-                    }`}
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    <span>عرض الخريطة</span>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className={`flex items-center gap-1.5 font-bold px-3 py-1.5 rounded-lg transition-colors text-[11px] whitespace-nowrap shrink-0 ${
+                    isSelected 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
+                  }`}
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  <span>عرض الخريطة</span>
+                </button>
               </div>
             </div>
           );

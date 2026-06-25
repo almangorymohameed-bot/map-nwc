@@ -125,41 +125,6 @@ export const isProjectAllowedForUser = (p: Project, currentUser: User): boolean 
   return isRegionAllowed && isScopeAllowed;
 };
 
-export const getProjectDifferencesMessage = (oldP: Project, newP: Project): string => {
-  const changes: string[] = [];
-  
-  if ((oldP.name || '').trim() !== (newP.name || '').trim()) {
-    changes.push(`الاسم (من "${oldP.name}" إلى "${newP.name}")`);
-  }
-  if ((oldP.status || '').trim() !== (newP.status || '').trim()) {
-    changes.push(`الحالة (من "${oldP.status}" إلى "${newP.status}")`);
-  }
-  if ((oldP.contractor || '').trim() !== (newP.contractor || '').trim()) {
-    changes.push(`المقاول (من "${oldP.contractor || 'غير محدد'}" إلى "${newP.contractor || 'غير محدد'}")`);
-  }
-  if ((oldP.consultant || '').trim() !== (newP.consultant || '').trim()) {
-    changes.push(`الاستشاري (من "${oldP.consultant || 'غير محدد'}" إلى "${newP.consultant || 'غير محدد'}")`);
-  }
-  if ((oldP.region || '').trim() !== (newP.region || '').trim()) {
-    changes.push(`المنطقة (من "${oldP.region}" إلى "${newP.region}")`);
-  }
-  if ((oldP.classification || '').trim() !== (newP.classification || '').trim()) {
-    changes.push(`التصنيف (من "${oldP.classification}" إلى "${newP.classification}")`);
-  }
-  if ((oldP.po || '').trim() !== (newP.po || '').trim()) {
-    changes.push(`رقم PO (من "${oldP.po || '-'}" إلى "${newP.po || '-'}")`);
-  }
-  if ((oldP.unifierNo || '').trim() !== (newP.unifierNo || '').trim()) {
-    changes.push(`رقم Unifier (من "${oldP.unifierNo || '-'}" إلى "${newP.unifierNo || '-'}")`);
-  }
-  if ((oldP.subProgram || '').trim() !== (newP.subProgram || '').trim()) {
-    changes.push(`البرنامج الفرعي (من "${oldP.subProgram}" إلى "${newP.subProgram}")`);
-  }
-  
-  if (changes.length === 0) return '';
-  return `تم تعديل: ${changes.join(' و ')} في مشروع: ${newP.name}`;
-};
-
 export default function App() {
   // 1. Authentication State
   const [isLogged, setIsLogged] = useState<boolean>(() => {
@@ -220,7 +185,7 @@ export default function App() {
   // 3. UI Control State
   const [activeTab, setActiveTab] = useState<'maps' | 'stats' | 'layers' | 'users'>('maps');
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-  const [mobileViewMode, setMobileViewMode] = useState<'map' | 'list'>('map');
+  const [mobileViewMode, setMobileViewMode] = useState<'map' | 'list'>('list');
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [showRoleSwitcherDropdown, setShowRoleSwitcherDropdown] = useState(false);
@@ -241,87 +206,6 @@ export default function App() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
-
-  // 3.0.2 Notification Permission & Service Worker State
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      return Notification.permission;
-    }
-    return 'default';
-  });
-
-  const [isSwRegistered, setIsSwRegistered] = useState(false);
-
-  // Register Service Worker
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
-        .then((reg) => {
-          console.log('NWC Service Worker registered with scope:', reg.scope);
-          setIsSwRegistered(true);
-        })
-        .catch((err) => {
-          console.error('NWC Service Worker registration failed:', err);
-        });
-    }
-  }, []);
-
-  // Request native permission
-  const requestNotificationPermission = async () => {
-    if (!('Notification' in window)) {
-      showNotification('تنبيه: هذا المتصفح أو الجهاز لا يدعم الإشعارات الخارجية.');
-      return;
-    }
-    try {
-      const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
-      if (permission === 'granted') {
-        showNotification('تم تفعيل استقبال الإشعارات على الجوال بنجاح! 🔔');
-        // Trigger a test notification
-        triggerNativeNotification(
-          'بوابة الخرائط الجغرافية 🌍',
-          'أهلاً بك مهندسنا العزيز! تم ربط جهازك لتلقي إشعارات تحديثات مشاريع المياه والصرف الصحي بنجاح.'
-        );
-      } else if (permission === 'denied') {
-        showNotification('تنبيه: تم رفض إذن الإشعارات المباشرة. يرجى تفعيلها يدوياً من إعدادات المتصفح.');
-      }
-    } catch (err) {
-      console.error('Error requesting notification permission:', err);
-    }
-  };
-
-  // Trigger Native OS notification helper
-  const triggerNativeNotification = async (title: string, body: string) => {
-    if (typeof window === 'undefined' || !('Notification' in window)) return;
-    if (Notification.permission !== 'granted') return;
-
-    try {
-      // Try using the active Service Worker registration for robust mobile system tray support
-      if ('serviceWorker' in navigator) {
-        const reg = await navigator.serviceWorker.ready.catch(() => null);
-        if (reg && 'showNotification' in reg) {
-          reg.showNotification(title, {
-            body,
-            icon: '/vite.svg',
-            badge: '/vite.svg',
-            dir: 'rtl',
-            tag: 'nwc-water-maps-notif',
-            renotify: true
-          });
-          return;
-        }
-      }
-      
-      // Fallback to standard native Notification constructor
-      new Notification(title, {
-        body,
-        dir: 'rtl',
-        icon: '/vite.svg'
-      });
-    } catch (err) {
-      console.error('Error displaying native notification:', err);
-    }
-  };
 
   // 3.1 Login states
   const [loginTab, setLoginTab] = useState<'nwc' | 'admin'>('nwc');
@@ -392,26 +276,6 @@ export default function App() {
         }));
         // مقارنة البيانات الواردة مع البيانات المحلية الحالية لتوليد إشعارات بالتحديثات والإضافات الجديدة المسموحة للمستخدم
         setProjects(prevProjects => {
-          // التحقق مما إذا كان هناك تغيير فعلي في البيانات لتجنب إعادة رندرة الخريطة وتحديثها تلقائياً بدون تغيير
-          let hasActualChanges = false;
-          if (!prevProjects || prevProjects.length !== mappedProjects.length) {
-            hasActualChanges = true;
-          } else {
-            for (let i = 0; i < mappedProjects.length; i++) {
-              const newP = mappedProjects[i];
-              const oldP = prevProjects.find(op => op.id === newP.id);
-              if (!oldP || getProjectDifferencesMessage(oldP, newP) !== '') {
-                hasActualChanges = true;
-                break;
-              }
-            }
-          }
-
-          if (!hasActualChanges) {
-            // لا يوجد تغيير فعلي في المشاريع، نعيد المرجعية القديمة لمنع التحديث التلقائي للخريطة
-            return prevProjects;
-          }
-
           // إذا كانت القائمة فارغة أو تملك فقط القيمة الافتراضية الأولية، فلا نقوم بإغراق المستخدم بالإشعارات
           if (prevProjects && prevProjects.length > 0 && prevProjects.length !== 121) {
             const newNotifications: AppNotification[] = [];
@@ -419,19 +283,45 @@ export default function App() {
             
             mappedProjects.forEach(newP => {
               const oldP = prevProjects.find(op => op.id === newP.id);
-              if (oldP) {
-                // مشروع قائم، فحص التعديلات الهامة فقط (دون إشعارات المشاريع الجديدة المضافة)
-                const diffMsg = getProjectDifferencesMessage(oldP, newP);
+              if (!oldP) {
+                // مشروع جديد تمت إضافته
+                if (isProjectAllowedForUser(newP, currentUser) && addedCount < 10) {
+                  const uniqueId = `add_${newP.id}_${newP.name}`;
+                  // تجنب التكرار
+                  if (!notifications.some(n => n.id === uniqueId) && !newNotifications.some(n => n.id === uniqueId)) {
+                    newNotifications.push({
+                      id: uniqueId,
+                      projectId: newP.id,
+                      projectName: newP.name,
+                      type: 'add',
+                      message: `تمت إضافة مشروع جديد في النظام: ${newP.name}`,
+                      timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString('ar-SA'),
+                      read: false,
+                      region: newP.region || '',
+                      scope: newP.scope || ''
+                    });
+                    addedCount++;
+                  }
+                }
+              } else {
+                // مشروع قائم، فحص التعديلات الهامة
+                const hasChanged = 
+                  newP.name !== oldP.name || 
+                  newP.status !== oldP.status || 
+                  newP.region !== oldP.region || 
+                  newP.scope !== oldP.scope ||
+                  newP.contractor !== oldP.contractor ||
+                  newP.consultant !== oldP.consultant;
                 
-                if (diffMsg && isProjectAllowedForUser(newP, currentUser) && addedCount < 10) {
-                  const uniqueId = `edit_${newP.id}_${newP.status}_${Date.now()}`;
+                if (hasChanged && isProjectAllowedForUser(newP, currentUser) && addedCount < 10) {
+                  const uniqueId = `edit_${newP.id}_${newP.name}_${newP.status}`;
                   if (!notifications.some(n => n.id === uniqueId) && !newNotifications.some(n => n.id === uniqueId)) {
                     newNotifications.push({
                       id: uniqueId,
                       projectId: newP.id,
                       projectName: newP.name,
                       type: 'edit',
-                      message: diffMsg,
+                      message: `تم تعديل بيانات المشروع: ${newP.name} (الحالة الحالية: ${newP.status})`,
                       timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString('ar-SA'),
                       read: false,
                       region: newP.region || '',
@@ -445,13 +335,6 @@ export default function App() {
 
             if (newNotifications.length > 0) {
               setNotifications(prev => [...newNotifications, ...prev]);
-              // Trigger native system tray notifications for each fetched project update
-              newNotifications.forEach(n => {
-                triggerNativeNotification(
-                  'تحديث بيانات مشروع 🔄',
-                  n.message
-                );
-              });
             }
           }
           return mappedProjects;
@@ -591,15 +474,6 @@ export default function App() {
     setActiveTab('maps');
     fetchDataFromSupabase();
   }, []);
-
-  // Poll Supabase for new projects / changes every 20 seconds to trigger native background notifications
-  useEffect(() => {
-    if (!isLogged) return;
-    const interval = setInterval(() => {
-      fetchDataFromSupabase();
-    }, 20000);
-    return () => clearInterval(interval);
-  }, [isLogged]);
 
   // حفظ تعديل المفضلة محلياً
   useEffect(() => {
@@ -886,8 +760,6 @@ export default function App() {
   const showNotification = (msg: string) => {
     setSuccessNotification(msg);
     setTimeout(() => setSuccessNotification(''), 4000);
-    // Trigger native OS system notification
-    triggerNativeNotification('بوابة الخرائط الجغرافية 🌍', msg);
   };
 
   // 7. Login Submission Handler
@@ -978,26 +850,23 @@ export default function App() {
     });
 
     const exists = projects.some(p => p.id === savedProj.id);
+    const notifType = exists ? 'edit' : 'add';
+    const notifMsg = exists 
+      ? `قمتم بتعديل بيانات المشروع: ${savedProj.name}` 
+      : `قمتم بإضافة مشروع جديد: ${savedProj.name}`;
     
-    if (exists) {
-      const oldProj = projects.find(p => p.id === savedProj.id);
-      const diffStr = oldProj ? getProjectDifferencesMessage(oldProj, savedProj) : '';
-      const notifMsg = diffStr || `قمتم بتعديل بيانات المشروع: ${savedProj.name}`;
-      
-      const selfNotif: AppNotification = {
-        id: `self_edit_${savedProj.id || Date.now()}_${Date.now()}`,
-        projectId: savedProj.id || Date.now(),
-        projectName: savedProj.name,
-        type: 'edit',
-        message: notifMsg,
-        timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString('ar-SA'),
-        read: false, // اجعله غير مقروء لكي يظهر في جرس الإشعارات الخارجي فوراً كطلب المستخدم
-        region: savedProj.region || '',
-        scope: typeof savedProj.scope === 'string' ? savedProj.scope : 'صرف صحي'
-      };
-      setNotifications(prev => [selfNotif, ...prev]);
-      triggerNativeNotification('تحديث بيانات مشروع 🔄', notifMsg);
-    }
+    const selfNotif: AppNotification = {
+      id: `self_${notifType}_${savedProj.id || Date.now()}_${Date.now()}`,
+      projectId: savedProj.id || Date.now(),
+      projectName: savedProj.name,
+      type: notifType,
+      message: notifMsg,
+      timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString('ar-SA'),
+      read: true, // It's their own action, so mark as read by default
+      region: savedProj.region || '',
+      scope: typeof savedProj.scope === 'string' ? savedProj.scope : 'صرف صحي'
+    };
+    setNotifications(prev => [selfNotif, ...prev]);
 
     try {
       if (exists) {
@@ -1319,7 +1188,7 @@ export default function App() {
                 >
                   <Bell className="h-4 w-4" />
                   {unreadNotificationsCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[10px] font-black h-5 w-5 rounded-full flex items-center justify-center shadow-lg animate-bounce ring-2 ring-white z-10">
+                    <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-extrabold h-4 w-4 rounded-full flex items-center justify-center animate-bounce">
                       {unreadNotificationsCount}
                     </span>
                   )}
@@ -1353,26 +1222,6 @@ export default function App() {
                           </button>
                         )}
                       </div>
-                    </div>
-
-                    {/* Mobile Notification PWA Status Checker */}
-                    <div className="p-2.5 px-3.5 border-b border-slate-100 bg-blue-50/30 flex items-center justify-between text-[11px] font-medium">
-                      <span className="text-slate-500 font-bold">إشعارات الجوال والنظام الخارجية:</span>
-                      {notificationPermission === 'granted' ? (
-                        <span className="text-emerald-600 font-extrabold flex items-center gap-1.5">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                          <span>نشطة ومفعلة</span>
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={requestNotificationPermission}
-                          className="text-blue-600 hover:text-blue-800 font-extrabold flex items-center gap-1 cursor-pointer bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded-lg transition-colors"
-                        >
-                          <Smartphone className="h-3 w-3" />
-                          <span>تفعيل الإشعارات 🔔</span>
-                        </button>
-                      )}
                     </div>
 
                     {/* Notification List */}
@@ -1563,41 +1412,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* مطالبة تفعيل إشعارات الجوال والنظام */}
-        {notificationPermission === 'default' && (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100/80 rounded-2xl p-4.5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm animate-in fade-in duration-300 text-right">
-            <div className="flex items-center gap-3.5 w-full md:w-auto">
-              <div className="p-3 bg-blue-600 text-white rounded-xl shrink-0 shadow-sm animate-bounce">
-                <Bell className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-xs font-extrabold text-blue-950 flex items-center gap-1.5">
-                  <span>تفعيل التنبيهات المباشرة للجوال والنظام 🔔</span>
-                  <span className="bg-blue-100 text-blue-700 text-[9px] px-1.5 py-0.5 rounded-full font-bold">موصى به للجوال</span>
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                  هل تود تلقي إشعارات فورية في ستارة هاتفك الخارجية عند إضافة أو تعديل أي من المشاريع والشبكات التابعة لقطاعك؟
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 w-full md:w-auto justify-end">
-              <button
-                onClick={() => setNotificationPermission('denied')}
-                className="text-[11px] text-slate-400 hover:text-slate-600 font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
-              >
-                ليس الآن
-              </button>
-              <button
-                onClick={requestNotificationPermission}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl transition-all shadow-xs hover:shadow-md cursor-pointer flex items-center gap-1.5"
-              >
-                <Smartphone className="h-4 w-4" />
-                <span>تفعيل التنبيهات الخارجية</span>
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Navigation Tabs bar */}
         <div className="border-b border-slate-200 flex justify-between items-center bg-white p-2.5 rounded-2xl border border-slate-100 shadow-2xs">
           <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
@@ -1726,7 +1540,6 @@ export default function App() {
                       }}
                       currentUser={currentUser}
                       onToggleFavorite={handleToggleFavorite}
-                      onEditProject={canEditProjects ? handleStartEditProject : undefined}
                       searchTerm={searchTerm}
                       setSearchTerm={setSearchTerm}
                       selectedSubProgram={selectedSubProgram}
