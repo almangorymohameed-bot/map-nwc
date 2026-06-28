@@ -1275,7 +1275,7 @@ export function ProjectMapViewer({
         {isMasterMap ? (
           <div className="flex items-center gap-1.5 text-blue-700 font-bold text-[11px] bg-blue-50 border border-blue-100 px-3 py-1 rounded-lg">
             <Sparkles className="h-3.5 w-3.5 animate-pulse text-indigo-600" />
-            <span>مشاريع القطاع الاوسط</span>
+            <span>  </span>
           </div>
         ) : (
           <div className="flex items-center gap-1.5">
