@@ -263,7 +263,7 @@ export default function App() {
     if ('Notification' in window) {
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
-        new Notification('شركة المياه الوطنية • NWC', {
+        new Notification('   • ', {
           body: `مرحباً بك المهندس ${userName}، تم تفعيل ميزة إشعارات ستارة الجوال الخارجية بنجاح.`,
           icon: '/vite.svg',
           dir: 'rtl'
@@ -654,7 +654,7 @@ export default function App() {
     const email = nwcEmail.trim().toLowerCase();
     const nwcRegex = /^[a-zA-Z0-9._%+-]+@nwc\.com\.sa$/;
     if (!nwcRegex.test(email)) {
-      setLoginError('الرجاء استخدام البريد الإلكتروني الرسمي لشركة المياه الوطنية والمنتهي بنطاق @nwc.com.sa');
+      setLoginError('يرجى التواصل مع مدير النظام almangoyo@gmail.com');
       return;
     }
     const prefix = email.split('@')[0];
@@ -861,9 +861,9 @@ export default function App() {
             </div>
             <div>
               <span className="px-2.5 py-0.5 text-[9.5px] tracking-wide font-extrabold text-blue-800 bg-blue-50 rounded-full uppercase border border-blue-100">
-                شركة المياه الوطنية • NWC
+                   • 
               </span>
-              <h2 className="text-base font-extrabold text-slate-900 mt-2">الخرائط التفاعلية بالقطاع الاوسط</h2>
+              <h2 className="text-base font-extrabold text-slate-900 mt-2">الخرائط التفاعلية </h2>
             </div>
           </div>
 
@@ -912,8 +912,8 @@ export default function App() {
             <div className="flex items-center gap-3">
               <NWCLogo size="sm" className="h-11 w-auto" />
               <div>
-                <h1 className="text-sm font-extrabold tracking-tight text-slate-900">الخرائط التفاعلية بالقطاع الاوسط</h1>
-                <p className="text-[10px] text-slate-500 font-medium">شركة المياه الوطنية • مشروعات المياه والصرف الصحي بالقطاع الأوسط</p>
+                <h1 className="text-sm font-extrabold tracking-tight text-slate-900">الخرائط التفاعلية </h1>
+                <p className="text-[10px] text-slate-500 font-medium"> </p>
               </div>
             </div>
 
@@ -1046,7 +1046,7 @@ export default function App() {
 
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-6 mt-12 text-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p>© {new Date().getFullYear()} نظام الخرائط التفاعلية الآمن • شركة المياه الوطنية</p>
+          <p>© {new Date().getFullYear()} نظام الخرائط التفاعلية الآمن •   </p>
         </div>
       </footer>
     </div>
