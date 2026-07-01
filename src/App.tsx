@@ -158,6 +158,52 @@ export const getProjectDifferencesMessage = (oldP: Project, newP: Project): stri
   return `وتم تعديل: ${changes.join(' و ')}`;
 };
 
+export const isNotificationAllowed = (notif: AppNotification, user: User): boolean => {
+  if (user.role === 'admin') return true;
+  
+  if (user.allowedProjectIds && user.allowedProjectIds.length > 0) {
+    return user.allowedProjectIds.includes(Number(notif.projectId));
+  }
+
+  const uRegions = (user.allowedRegions || []).map(r => r.trim());
+  const isAllRegions = uRegions.includes('الكل');
+  
+  let isRegionAllowed = isAllRegions;
+  if (!isRegionAllowed && notif.region) {
+    const pr = notif.region.trim();
+    if (uRegions.includes(pr)) {
+      isRegionAllowed = true;
+    } else {
+      const northGovs = ['المجمعة', 'رماح', 'الزلفي', 'ثادق', 'حريملاء', 'الغاط', 'ثادق وحريملاء'];
+      const southGovs = ['السليل', 'وادي الدواسر', 'الأفلاج', 'حوطة بني تميم', 'الحريق', 'السيح', 'الخرج', 'تمرة', 'خيران', 'السيح والخرج'];
+      const westGovs = ['المزاحمية', 'شقراء', 'عفيف', 'القويعية', 'البجاديه', 'البجادية', 'ضرما', 'ضرماء', 'الدوادمي', 'شقراء ومرات', 'عفيف والدوادمي', 'المزاحمية و ضرماء'];
+      
+      if (uRegions.includes('المحافظات الشمالية') && (northGovs.includes(pr) || pr.includes('المجمعة') || pr.includes('رماح') || pr.includes('الزلفي') || pr.includes('حريملاء') || pr.includes('الغاط') || pr.includes('ثادق'))) {
+        isRegionAllowed = true;
+      }
+      if (uRegions.includes('المحافظات الجنوبية') && (southGovs.includes(pr) || pr.includes('السليل') || pr.includes('الدواسر') || pr.includes('الأفلاج') || pr.includes('تميم') || pr.includes('الخرج') || pr.includes('الحريق') || pr.includes('السيح'))) {
+        isRegionAllowed = true;
+      }
+      if (uRegions.includes('المحافظات الغربية') && (westGovs.includes(pr) || pr.includes('عفيف') || pr.includes('الدوادمي') || pr.includes('المزاحمية') || pr.includes('شقراء') || pr.includes('القويعية') || pr.includes('البجادية') || pr.includes('البجاديه') || pr.includes('ضرما') || pr.includes('ضرماء'))) {
+        isRegionAllowed = true;
+      }
+    }
+  }
+
+  const isAllScopes = user.allowedScopes.includes('الكل');
+  let isScopeAllowed = isAllScopes;
+  if (!isScopeAllowed && notif.scope) {
+    const ns = notif.scope.trim();
+    isScopeAllowed = user.allowedScopes.some(scopeType => {
+      const uScope = scopeType.trim();
+      if (!uScope) return false;
+      return ns === uScope || (ns.includes('صرف') && uScope.includes('صرف')) || (ns.includes('مياه') && uScope.includes('مياه'));
+    });
+  }
+
+  return isRegionAllowed && isScopeAllowed;
+};
+
 export default function App() {
   // 1. Authentication State
   const [isLogged, setIsLogged] = useState<boolean>(() => {
@@ -392,31 +438,53 @@ export default function App() {
       if (!currentUser || !currentUser.id || !isLogged) return;
       
       try {
+        // سحب آخر 100 إشعار مشاريع من السيرفر بشكل عام لجميع المستخدمين
         const { data, error } = await supabase
           .from('notifications')
           .select('*')
-          .or(`user_id.eq.${currentUser.id},user_id.eq.${currentUser.username}`)
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(100);
 
         if (!error && data) {
-          const mappedNotifs = data.map((n: any) => ({
-            id: n.id,
-            projectId: n.project_id,
-            projectName: n.project_name,
-            type: n.type,
-            message: n.message,
-            timestamp: new Date(n.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date(n.created_at).toLocaleDateString('ar-SA'),
-            read: n.read,
-            region: n.region || '',
-            scope: n.scope || ''
-          }));
+          // استدعاء معرفات الإشعارات المقروءة والممسوحة المخزنة محلياً لهذا المستخدم بالذات لعدم التداخل
+          const readIdsKey = `water_maps_read_notifs_${currentUser.id}`;
+          const clearedIdsKey = `water_maps_cleared_notifs_${currentUser.id}`;
+          
+          let readIds: string[] = [];
+          let clearedIds: string[] = [];
+          
+          try {
+            const savedRead = localStorage.getItem(readIdsKey);
+            readIds = savedRead ? JSON.parse(savedRead) : [];
+          } catch (e) {}
+          
+          try {
+            const savedCleared = localStorage.getItem(clearedIdsKey);
+            clearedIds = savedCleared ? JSON.parse(savedCleared) : [];
+          } catch (e) {}
 
-          // عند لقط إشعار جديد غير مقروء قادم من السيرفر، يتم دفعه لِـستارة الجوال فوراً
-          if (notifications.length > 0 && mappedNotifs.length > notifications.length) {
-            const latestNotif = mappedNotifs[0];
-            if (!latestNotif.read) {
-              sendNativeNotification('تنبيه مشاريع NWC 🔔', latestNotif.message);
-            }
+          const mappedNotifs = data
+            .map((n: any) => ({
+              id: String(n.id),
+              projectId: n.project_id,
+              projectName: n.project_name,
+              type: n.type,
+              message: n.message,
+              timestamp: new Date(n.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date(n.created_at).toLocaleDateString('ar-SA'),
+              read: readIds.includes(String(n.id)),
+              region: n.region || '',
+              scope: n.scope || ''
+            }))
+            .filter((notif: any) => isNotificationAllowed(notif, currentUser) && !clearedIds.includes(String(notif.id)));
+
+          // عند لقط إشعار جديد غير مقروء ومسموح به قادم من السيرفر، يتم دفعه لِـستارة الجوال فوراً
+          if (notifications.length > 0 && mappedNotifs.length > 0) {
+            const newNotifs = mappedNotifs.filter(mn => !notifications.some(n => n.id === mn.id));
+            newNotifs.forEach(newNotif => {
+              if (!newNotif.read) {
+                sendNativeNotification('تنبيه مشاريع NWC 🔔', newNotif.message);
+              }
+            });
           }
 
           setNotifications(mappedNotifs);
@@ -523,27 +591,34 @@ export default function App() {
     return notifications.filter(n => !n.read).length;
   }, [notifications]);
 
-  const handleMarkAllAsRead = async () => {
+  const handleMarkAllAsRead = () => {
+    const readIdsKey = `water_maps_read_notifs_${currentUser.id}`;
+    const allIds = notifications.map(n => String(n.id));
+    localStorage.setItem(readIdsKey, JSON.stringify(allIds));
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     showNotification('تم تحديد جميع الإشعارات كمقروءة');
-    try {
-      await supabase.from('notifications').update({ read: true }).eq('user_id', currentUser.id);
-    } catch (e) { }
   };
 
-  const handleClearNotifications = async () => {
+  const handleClearNotifications = () => {
+    const clearedIdsKey = `water_maps_cleared_notifs_${currentUser.id}`;
+    const allIds = notifications.map(n => String(n.id));
+    localStorage.setItem(clearedIdsKey, JSON.stringify(allIds));
     setNotifications([]);
     showNotification('تم مسح قائمة الإشعارات');
-    try {
-      await supabase.from('notifications').delete().eq('user_id', currentUser.id);
-    } catch (e) { }
   };
 
-  const handleNotificationClick = async (notif: AppNotification) => {
-    setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+  const handleNotificationClick = (notif: AppNotification) => {
+    const readIdsKey = `water_maps_read_notifs_${currentUser.id}`;
     try {
-      await supabase.from('notifications').update({ read: true }).eq('id', notif.id);
+      const saved = localStorage.getItem(readIdsKey);
+      const readIds = saved ? JSON.parse(saved) : [];
+      if (!readIds.includes(String(notif.id))) {
+        readIds.push(String(notif.id));
+        localStorage.setItem(readIdsKey, JSON.stringify(readIds));
+      }
     } catch (e) { }
+    
+    setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
     
     if (notif.projectId) {
       setSelectedProjectId(notif.projectId);
