@@ -340,7 +340,15 @@ export default function App() {
   };
 
   // دالة جلب البيانات من Supabase عند تشغيل الموقع
-  const fetchDataFromSupabase = async () => {
+  const fetchDataFromSupabase = async (userToUse?: User) => {
+    const activeUser = userToUse || currentUser;
+    const isActuallyLogged = isLogged || !!userToUse;
+    
+    if (!isActuallyLogged) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       const { data: dbProjects, error: projError } = await supabase
@@ -348,22 +356,11 @@ export default function App() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      const { data: dbUsers, error: userError } = await supabase
-        .from('users')
-        .select('*');
-
-      if (userError || projError) {
-        const errorDetails = [
-          userError ? `جدول المستخدمين: ${userError.message}` : null,
-          projError ? `جدول المشاريع: ${projError.message}` : null
-        ].filter(Boolean).join(" | ");
-        console.warn("فشل الاتصال بـ Supabase:", errorDetails);
-        setSupabaseError(errorDetails);
-      } else {
+      if (projError) {
+        console.warn("فشل الاتصال بـ Supabase:", projError.message);
+        setSupabaseError(projError.message);
+      } else if (dbProjects) {
         setSupabaseError(null);
-      }
-
-      if (!projError && dbProjects) {
         const mappedProjects = dbProjects.map((p: any) => ({
           id: p.id,
           operationalNumber: p.operational_number,
@@ -391,55 +388,66 @@ export default function App() {
         }
       }
 
-      if (!userError && dbUsers) {
-        const mappedUsers = dbUsers.map((u: any) => {
-          let allowedRegions: string[] = ['الكل'];
-          if (u.allowed_regions) {
-            if (Array.isArray(u.allowed_regions)) { allowedRegions = u.allowed_regions; } 
-            else { try { allowedRegions = JSON.parse(u.allowed_regions); } catch (e) { allowedRegions = [u.allowed_regions]; } }
-          }
-          let allowedScopes: string[] = ['الكل'];
-          if (u.allowed_scopes) {
-            if (Array.isArray(u.allowed_scopes)) { allowedScopes = u.allowed_scopes; } 
-            else { try { allowedScopes = JSON.parse(u.allowed_scopes); } catch (e) { allowedScopes = [u.allowed_scopes]; } }
-          }
-          let allowedTabs = ['maps', 'stats', 'layers'];
-          if (u.allowed_tabs) {
-            if (Array.isArray(u.allowed_tabs)) { allowedTabs = u.allowed_tabs; } 
-            else { try { allowedTabs = JSON.parse(u.allowed_tabs); } catch (e) { } }
-          }
-          let allowedProjectIds: number[] = [];
-          if (u.allowed_project_ids) {
-            if (Array.isArray(u.allowed_project_ids)) { allowedProjectIds = u.allowed_project_ids.map(Number); } 
-            else { try { allowedProjectIds = JSON.parse(u.allowed_project_ids).map(Number); } catch (e) { } }
-          }
+      // لا يتم جلب جدول المستخدمين إلا إذا كان المستخدم الحالي مديراً للنظام لضمان الخصوصية والأمان التام
+      if (activeUser && activeUser.role === 'admin') {
+        const { data: dbUsers, error: userError } = await supabase
+          .from('users')
+          .select('*');
 
-          return {
-            id: u.id,
-            username: u.username,
-            name: u.name,
-            role: u.role,
-            allowedRegions: allowedRegions,
-            allowedScopes: allowedScopes,
-            password: u.password,
-            allowedTabs: allowedTabs,
-            canOpenExternalLinks: u.can_open_external_links !== false,
-            canFilter: u.can_filter !== false,
-            canInsert: u.can_insert !== false,
-            department: u.department || '',
-            jobTitle: u.job_title || '',
-            allowedProjectIds: allowedProjectIds
-          };
-        });
+        if (userError) {
+          console.warn("فشل جلب المستخدمين:", userError.message);
+        } else if (dbUsers) {
+          const mappedUsers = dbUsers.map((u: any) => {
+            let allowedRegions: string[] = ['الكل'];
+            if (u.allowed_regions) {
+              if (Array.isArray(u.allowed_regions)) { allowedRegions = u.allowed_regions; } 
+              else { try { allowedRegions = JSON.parse(u.allowed_regions); } catch (e) { allowedRegions = [u.allowed_regions]; } }
+            }
+            let allowedScopes: string[] = ['الكل'];
+            if (u.allowed_scopes) {
+              if (Array.isArray(u.allowed_scopes)) { allowedScopes = u.allowed_scopes; } 
+              else { try { allowedScopes = JSON.parse(u.allowed_scopes); } catch (e) { allowedScopes = [u.allowed_scopes]; } }
+            }
+            let allowedTabs = ['maps', 'stats', 'layers'];
+            if (u.allowed_tabs) {
+              if (Array.isArray(u.allowed_tabs)) { allowedTabs = u.allowed_tabs; } 
+              else { try { allowedTabs = JSON.parse(u.allowed_tabs); } catch (e) { } }
+            }
+            let allowedProjectIds: number[] = [];
+            if (u.allowed_project_ids) {
+              if (Array.isArray(u.allowed_project_ids)) { allowedProjectIds = u.allowed_project_ids.map(Number); } 
+              else { try { allowedProjectIds = JSON.parse(u.allowed_project_ids).map(Number); } catch (e) { } }
+            }
 
-        setUsers(mappedUsers);
-        localStorage.setItem('water_maps_cached_users', JSON.stringify(mappedUsers));
+            return {
+              id: u.id,
+              username: u.username,
+              name: u.name,
+              role: u.role,
+              allowedRegions: allowedRegions,
+              allowedScopes: allowedScopes,
+              password: u.password,
+              allowedTabs: allowedTabs,
+              canOpenExternalLinks: u.can_open_external_links !== false,
+              canFilter: u.can_filter !== false,
+              canInsert: u.can_insert !== false,
+              department: u.department || '',
+              jobTitle: u.job_title || '',
+              allowedProjectIds: allowedProjectIds
+            };
+          });
 
-        const savedAndActive = localStorage.getItem('water_maps_active_user_id');
-        if (savedAndActive) {
-          const found = mappedUsers.find(u => u.id === savedAndActive);
-          if (found) setCurrentUser(found);
+          setUsers(mappedUsers);
+          localStorage.setItem('water_maps_cached_users', JSON.stringify(mappedUsers));
+
+          const savedAndActive = localStorage.getItem('water_maps_active_user_id');
+          if (savedAndActive) {
+            const found = mappedUsers.find(u => u.id === savedAndActive);
+            if (found) setCurrentUser(found);
+          }
         }
+      } else {
+        setUsers([]);
       }
     } catch (err) {
       console.warn(err);
@@ -450,8 +458,12 @@ export default function App() {
 
   useEffect(() => {
     setActiveTab('maps');
-    fetchDataFromSupabase();
-  }, []);
+    if (isLogged) {
+      fetchDataFromSupabase();
+    } else {
+      setIsLoading(false);
+    }
+  }, [isLogged]);
 
   // 🔄 المزامنة الحية لِـسحب الإشعارات من سوبابيس وتمرير الأحداث الدقيقة لِـستارة الجوال
   useEffect(() => {
@@ -744,7 +756,7 @@ export default function App() {
     setTimeout(() => setSuccessNotification(''), 4000);
   };
 
-  const handleNwcSubmit = (e: React.FormEvent) => {
+  const handleNwcSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
     const email = nwcEmail.trim().toLowerCase();
@@ -754,52 +766,172 @@ export default function App() {
       return;
     }
     const prefix = email.split('@')[0];
-    const found = users.find(u => u.username.toLowerCase() === prefix);
+    
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', prefix);
 
-    if (found) {
-      if (nwcPassword.trim() !== (found.password || 'nwc1234')) {
-        setLoginError('كلمة المرور المدخلة غير صحيحة!');
+      if (error || !data || data.length === 0) {
+        setLoginError('عذراً، هذا البريد غير معتمد ومسجل مسبقاً في النظام.');
+        setIsLoading(false);
         return;
       }
-      setCurrentUser(found);
+
+      const found = data[0];
+      if (nwcPassword.trim() !== (found.password || 'nwc1234')) {
+        setLoginError('كلمة المرور المدخلة غير صحيحة!');
+        setIsLoading(false);
+        return;
+      }
+
+      let allowedRegions: string[] = ['الكل'];
+      if (found.allowed_regions) {
+        if (Array.isArray(found.allowed_regions)) { allowedRegions = found.allowed_regions; } 
+        else { try { allowedRegions = JSON.parse(found.allowed_regions); } catch (e) { allowedRegions = [found.allowed_regions]; } }
+      }
+      let allowedScopes: string[] = ['الكل'];
+      if (found.allowed_scopes) {
+        if (Array.isArray(found.allowed_scopes)) { allowedScopes = found.allowed_scopes; } 
+        else { try { allowedScopes = JSON.parse(found.allowed_scopes); } catch (e) { allowedScopes = [found.allowed_scopes]; } }
+      }
+      let allowedTabs = ['maps', 'stats', 'layers'];
+      if (found.allowed_tabs) {
+        if (Array.isArray(found.allowed_tabs)) { allowedTabs = found.allowed_tabs; } 
+        else { try { allowedTabs = JSON.parse(found.allowed_tabs); } catch (e) { } }
+      }
+      let allowedProjectIds: number[] = [];
+      if (found.allowed_project_ids) {
+        if (Array.isArray(found.allowed_project_ids)) { allowedProjectIds = found.allowed_project_ids.map(Number); } 
+        else { try { allowedProjectIds = JSON.parse(found.allowed_project_ids).map(Number); } catch (e) { } }
+      }
+
+      const mappedUser = {
+        id: found.id,
+        username: found.username,
+        name: found.name,
+        role: found.role,
+        allowedRegions: allowedRegions,
+        allowedScopes: allowedScopes,
+        password: found.password,
+        allowedTabs: allowedTabs,
+        canOpenExternalLinks: found.can_open_external_links !== false,
+        canFilter: found.can_filter !== false,
+        canInsert: found.can_insert !== false,
+        department: found.department || '',
+        jobTitle: found.job_title || '',
+        allowedProjectIds: allowedProjectIds
+      };
+
+      setCurrentUser(mappedUser);
       setIsLogged(true);
       setActiveTab('maps');
       localStorage.setItem('water_maps_is_logged', 'true');
-      localStorage.setItem('water_maps_active_user_id', found.id);
-      showNotification(`مرحباً بك مجدداً المهندس: ${found.name}`);
+      localStorage.setItem('water_maps_active_user_id', mappedUser.id);
+      localStorage.setItem('water_maps_cached_users', JSON.stringify([mappedUser]));
+      showNotification(`مرحباً بك مجدداً المهندس: ${mappedUser.name}`);
       
-      requestNotificationPermission(found.name);
-    } else {
-      setLoginError('عذراً، هذا البريد غير معتمد ومسجل مسبقاً في النظام.');
+      requestNotificationPermission(mappedUser.name);
+
+      await fetchDataFromSupabase(mappedUser);
+    } catch (err) {
+      console.error(err);
+      setLoginError('حدث خطأ أثناء الاتصال بقاعدة البيانات.');
+      setIsLoading(false);
     }
   };
 
-  const handleAdminSubmit = (e: React.FormEvent) => {
+  const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
-    
-    const adminUser = users.find(u => u.role === 'admin');
-    if (adminUser) {
-      if (adminPassword.trim() === adminUser.password) {
-        setCurrentUser(adminUser);
-        setIsLogged(true);
-        setActiveTab('maps');
-        localStorage.setItem('water_maps_is_logged', 'true');
-        localStorage.setItem('water_maps_active_user_id', adminUser.id);
-        showNotification('أهلاً بك يا مدير النظام، تم تسجيل الدخول بنجاح.');
-        
-        requestNotificationPermission('مدير النظام');
-      } else {
-        setLoginError('كلمة المرور غير صحيحة!');
+    setIsLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('role', 'admin');
+
+      if (error || !data || data.length === 0) {
+        setLoginError('لم يتم العثور على حساب مدير النظام.');
+        setIsLoading(false);
+        return;
       }
-    } else {
-      setLoginError('جاري تحميل بيانات السيرفر أو لم يتم العثور على حساب مدير النظام. يرجى التأكد من اتصال قاعدة البيانات.');
+
+      const found = data.find((u: any) => u.password === adminPassword.trim());
+      if (!found) {
+        setLoginError('كلمة المرور غير صحيحة!');
+        setIsLoading(false);
+        return;
+      }
+
+      let allowedRegions: string[] = ['الكل'];
+      if (found.allowed_regions) {
+        if (Array.isArray(found.allowed_regions)) { allowedRegions = found.allowed_regions; } 
+        else { try { allowedRegions = JSON.parse(found.allowed_regions); } catch (e) { allowedRegions = [found.allowed_regions]; } }
+      }
+      let allowedScopes: string[] = ['الكل'];
+      if (found.allowed_scopes) {
+        if (Array.isArray(found.allowed_scopes)) { allowedScopes = found.allowed_scopes; } 
+        else { try { allowedScopes = JSON.parse(found.allowed_scopes); } catch (e) { allowedScopes = [found.allowed_scopes]; } }
+      }
+      let allowedTabs = ['maps', 'stats', 'layers'];
+      if (found.allowed_tabs) {
+        if (Array.isArray(found.allowed_tabs)) { allowedTabs = found.allowed_tabs; } 
+        else { try { allowedTabs = JSON.parse(found.allowed_tabs); } catch (e) { } }
+      }
+      let allowedProjectIds: number[] = [];
+      if (found.allowed_project_ids) {
+        if (Array.isArray(found.allowed_project_ids)) { allowedProjectIds = found.allowed_project_ids.map(Number); } 
+        else { try { allowedProjectIds = JSON.parse(found.allowed_project_ids).map(Number); } catch (e) { } }
+      }
+
+      const mappedUser = {
+        id: found.id,
+        username: found.username,
+        name: found.name,
+        role: found.role,
+        allowedRegions: allowedRegions,
+        allowedScopes: allowedScopes,
+        password: found.password,
+        allowedTabs: allowedTabs,
+        canOpenExternalLinks: found.can_open_external_links !== false,
+        canFilter: found.can_filter !== false,
+        canInsert: found.can_insert !== false,
+        department: found.department || '',
+        jobTitle: found.job_title || '',
+        allowedProjectIds: allowedProjectIds
+      };
+
+      setCurrentUser(mappedUser);
+      setIsLogged(true);
+      setActiveTab('maps');
+      localStorage.setItem('water_maps_is_logged', 'true');
+      localStorage.setItem('water_maps_active_user_id', mappedUser.id);
+      localStorage.setItem('water_maps_cached_users', JSON.stringify([mappedUser]));
+      showNotification('أهلاً بك يا مدير النظام، تم تسجيل الدخول بنجاح.');
+      
+      requestNotificationPermission('مدير النظام');
+
+      await fetchDataFromSupabase(mappedUser);
+    } catch (err) {
+      console.error(err);
+      setLoginError('حدث خطأ أثناء الاتصال بقاعدة البيانات.');
+      setIsLoading(false);
     }
   };
 
   const handleLogout = () => {
     setIsLogged(false);
     localStorage.removeItem('water_maps_is_logged');
+    localStorage.removeItem('water_maps_active_user_id');
+    localStorage.removeItem('water_maps_cached_users');
+    localStorage.removeItem('water_maps_cached_projects');
+    setProjects([]);
+    setUsers([]);
+    setNotifications([]);
     setSelectedProjectId(null);
     showNotification('تم تسجيل الخروج بنجاح.');
   };
