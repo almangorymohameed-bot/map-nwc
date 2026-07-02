@@ -231,18 +231,39 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    return INITIAL_USERS;
+    return [];
   });
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const savedAndActive = localStorage.getItem('water_maps_active_user_id');
+    try {
+      const cached = localStorage.getItem('water_maps_cached_users');
+      if (cached) {
+        const cachedUsers = JSON.parse(cached);
+        if (savedAndActive) {
+          const matched = cachedUsers.find((u: any) => u.id === savedAndActive);
+          if (matched) return matched;
+        } else {
+          if (cachedUsers.length > 0) return cachedUsers[0];
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
     if (savedAndActive) {
-      const matchedLocal = INITIAL_USERS.find(u => u.id === savedAndActive);
-      if (matchedLocal) return matchedLocal;
       return { id: savedAndActive, username: 'admin', name: 'جاري التحميل...', role: 'admin', allowedRegions: ['الكل'], allowedScopes: ['الكل'], password: '' };
     }
-    return INITIAL_USERS[0];
+    return {
+      id: 'guest',
+      username: 'guest',
+      name: 'زائر',
+      role: 'viewer',
+      allowedRegions: ['الكل'],
+      allowedScopes: ['الكل'],
+      password: ''
+    };
   });
 
   // 3.0.1 Notifications State
@@ -756,18 +777,23 @@ export default function App() {
   const handleAdminSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
-    if (adminPassword === '20302060') {
-      const adminUser = users.find(u => u.role === 'admin') || INITIAL_USERS[0];
-      setCurrentUser(adminUser);
-      setIsLogged(true);
-      setActiveTab('maps');
-      localStorage.setItem('water_maps_is_logged', 'true');
-      localStorage.setItem('water_maps_active_user_id', adminUser.id);
-      showNotification('أهلاً بك يا مدير النظام، تم تسجيل الدخول بنجاح.');
-      
-      requestNotificationPermission('مدير النظام');
+    
+    const adminUser = users.find(u => u.role === 'admin');
+    if (adminUser) {
+      if (adminPassword.trim() === adminUser.password) {
+        setCurrentUser(adminUser);
+        setIsLogged(true);
+        setActiveTab('maps');
+        localStorage.setItem('water_maps_is_logged', 'true');
+        localStorage.setItem('water_maps_active_user_id', adminUser.id);
+        showNotification('أهلاً بك يا مدير النظام، تم تسجيل الدخول بنجاح.');
+        
+        requestNotificationPermission('مدير النظام');
+      } else {
+        setLoginError('كلمة المرور غير صحيحة!');
+      }
     } else {
-      setLoginError('كلمة المرور غير صحيحة!');
+      setLoginError('جاري تحميل بيانات السيرفر أو لم يتم العثور على حساب مدير النظام. يرجى التأكد من اتصال قاعدة البيانات.');
     }
   };
 
