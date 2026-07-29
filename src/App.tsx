@@ -23,7 +23,7 @@ import { ProjectLayersViewer } from './components/ProjectLayersViewer';
 // Icons
 import { 
   Layers, 
-  Map, 
+  Map as MapIcon, 
   Users, 
   Plus, 
   ChevronDown, 
@@ -152,6 +152,12 @@ export const getProjectDifferencesMessage = (oldP: Project, newP: Project): stri
   }
   if ((oldP.mapUrl || '').trim() !== (newP.mapUrl || '').trim()) {
     changes.push(`رابط الخارطة التفاعلية`);
+  }
+  if ((oldP.surveyorName || '').trim() !== (newP.surveyorName || '').trim()) {
+    changes.push(`اسم المساح (من "${oldP.surveyorName || 'غير محدد'}" إلى "${newP.surveyorName || 'غير محدد'}")`);
+  }
+  if ((oldP.surveyorPhone || '').trim() !== (newP.surveyorPhone || '').trim()) {
+    changes.push(`رقم تواصل المساح (من "${oldP.surveyorPhone || 'غير محدد'}" إلى "${newP.surveyorPhone || 'غير محدد'}")`);
   }
   
   if (changes.length === 0) return '';
@@ -377,7 +383,9 @@ export default function App() {
           subProgram: p.sub_program || '',
           mapUrl: p.map_url || '',
           x: p.x !== undefined && p.x !== null ? Number(p.x) : null,
-          y: p.y !== undefined && p.y !== null ? Number(p.y) : null
+          y: p.y !== undefined && p.y !== null ? Number(p.y) : null,
+          surveyorName: p.surveyor_name || '',
+          surveyorPhone: p.surveyor_phone || ''
         }));
 
         setProjects(mappedProjects);
@@ -620,9 +628,40 @@ export default function App() {
     });
   };
 
-  const unreadNotificationsCount = useMemo(() => {
-    return notifications.filter(n => !n.read).length;
+  // تجميع الإشعارات المتشابهة حسب المشروع لعدم التكرار وإظهار عداد التحديثات المجمعة
+  const groupedNotifications = useMemo(() => {
+    if (!notifications || notifications.length === 0) return [];
+
+    const map = new Map<string, AppNotification>();
+    const orderKeys: string[] = [];
+
+    for (const notif of notifications) {
+      const key = notif.projectId ? `proj_${notif.projectId}` : (notif.projectName ? `name_${notif.projectName}` : `id_${notif.id}`);
+
+      if (!map.has(key)) {
+        orderKeys.push(key);
+        map.set(key, {
+          ...notif,
+          groupedCount: 1,
+          groupedIds: [String(notif.id)]
+        });
+      } else {
+        const existing = map.get(key)!;
+        existing.groupedCount = (existing.groupedCount || 1) + 1;
+        if (!existing.groupedIds) existing.groupedIds = [String(existing.id)];
+        existing.groupedIds.push(String(notif.id));
+        if (!notif.read) {
+          existing.read = false;
+        }
+      }
+    }
+
+    return orderKeys.map(k => map.get(k)!);
   }, [notifications]);
+
+  const unreadNotificationsCount = useMemo(() => {
+    return groupedNotifications.filter(n => !n.read).length;
+  }, [groupedNotifications]);
 
   const handleMarkAllAsRead = () => {
     const readIdsKey = `water_maps_read_notifs_${currentUser.id}`;
@@ -644,14 +683,22 @@ export default function App() {
     const readIdsKey = `water_maps_read_notifs_${currentUser.id}`;
     try {
       const saved = localStorage.getItem(readIdsKey);
-      const readIds = saved ? JSON.parse(saved) : [];
-      if (!readIds.includes(String(notif.id))) {
-        readIds.push(String(notif.id));
+      let readIds: string[] = saved ? JSON.parse(saved) : [];
+      const idsToMark = notif.groupedIds && notif.groupedIds.length > 0 ? notif.groupedIds : [String(notif.id)];
+      let changed = false;
+      idsToMark.forEach(id => {
+        if (!readIds.includes(id)) {
+          readIds.push(id);
+          changed = true;
+        }
+      });
+      if (changed) {
         localStorage.setItem(readIdsKey, JSON.stringify(readIds));
       }
     } catch (e) { }
     
-    setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n));
+    const idsToSet = new Set(notif.groupedIds || [String(notif.id)]);
+    setNotifications(prev => prev.map(n => idsToSet.has(String(n.id)) ? { ...n, read: true } : n));
     
     if (notif.projectId) {
       setSelectedProjectId(notif.projectId);
@@ -940,7 +987,7 @@ export default function App() {
   // دالة الحفظ المحدثة بالكامل لصياغة الحدث الدقيق مدمجاً باسم المهندس الحقيقي
   // ==========================================
   const handleSaveProject = async (savedProj: Project) => {
-    const payload = {
+    const payload: any = {
       operational_number: savedProj.operationalNumber,
       name: savedProj.name,
       po: savedProj.po,
@@ -955,7 +1002,9 @@ export default function App() {
       sub_program: savedProj.subProgram,
       map_url: savedProj.mapUrl,
       x: savedProj.x !== undefined && savedProj.x !== null ? Number(savedProj.x) : null,
-      y: savedProj.y !== undefined && savedProj.y !== null ? Number(savedProj.y) : null
+      y: savedProj.y !== undefined && savedProj.y !== null ? Number(savedProj.y) : null,
+      surveyor_name: savedProj.surveyorName || '',
+      surveyor_phone: savedProj.surveyorPhone || ''
     };
 
     const exists = projects.some(p => p.id === savedProj.id);
@@ -978,7 +1027,17 @@ export default function App() {
     try {
       if (exists) {
         // 2️⃣ الرفع طوالي لقاعدة البيانات
-        const { error } = await supabase.from('projects').update(payload).eq('id', savedProj.id);
+        let { error } = await supabase.from('projects').update(payload).eq('id', savedProj.id);
+        
+        // إذا لم تكن الأعمدة surveyor_name / surveyor_phone مضافة بعد في جدول Supabase
+        if (error && (error.code === '42703' || error.message.includes('surveyor_name') || error.message.includes('surveyor_phone'))) {
+          const fallbackPayload = { ...payload };
+          delete fallbackPayload.surveyor_name;
+          delete fallbackPayload.surveyor_phone;
+          const retryRes = await supabase.from('projects').update(fallbackPayload).eq('id', savedProj.id);
+          error = retryRes.error;
+        }
+
         if (!error) {
           showNotification(`تم تحديث بيانات مشروع بالسيرفر: ${savedProj.name}`);
           
@@ -997,7 +1056,18 @@ export default function App() {
           }]);
         }
       } else {
-        const { data: insertedData, error } = await supabase.from('projects').insert([payload]).select();
+        let { data: insertedData, error } = await supabase.from('projects').insert([payload]).select();
+        
+        // إذا لم تكن الأعمدة مضافة بعد في Supabase
+        if (error && (error.code === '42703' || error.message.includes('surveyor_name') || error.message.includes('surveyor_phone'))) {
+          const fallbackPayload = { ...payload };
+          delete fallbackPayload.surveyor_name;
+          delete fallbackPayload.surveyor_phone;
+          const retryRes = await supabase.from('projects').insert([fallbackPayload]).select();
+          insertedData = retryRes.data;
+          error = retryRes.error;
+        }
+
         if (!error && insertedData && insertedData[0]) {
           showNotification(`تم إضافة مشروع شبكة جديد بنجاح للسيرفر: ${savedProj.name}`);
           
@@ -1170,15 +1240,33 @@ export default function App() {
                     </div>
 
                     <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                      {notifications.length === 0 ? (
+                      {groupedNotifications.length === 0 ? (
                         <div className="p-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2"><Bell className="h-8 w-8 text-slate-200" /><span>لا توجد إشعارات نشطة حالياً</span></div>
                       ) : (
-                        notifications.map(notif => (
+                        groupedNotifications.map(notif => (
                           <div key={notif.id} onClick={() => handleNotificationClick(notif)} className={`p-3.5 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3 items-start ${!notif.read ? 'bg-blue-50/20' : ''}`}>
                             <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${notif.type === 'add' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>{notif.type === 'add' ? <Plus className="h-3.5 w-3.5" /> : <Layers className="h-3.5 w-3.5" />}</div>
                             <div className="flex-1 min-w-0 space-y-1">
-                              <p className="text-xs text-slate-700 leading-relaxed font-semibold">{notif.message}</p>
-                              <div className="flex items-center justify-between text-[10px] text-slate-400"><span>{notif.timestamp}</span><span className="bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-medium text-[9px]">{notif.region || notif.scope}</span></div>
+                              <div className="flex items-center justify-between gap-1">
+                                <p className="text-xs text-slate-800 font-extrabold truncate">{notif.projectName ? `مشروع: ${notif.projectName}` : 'تحديث مشروع'}</p>
+                                {notif.groupedCount && notif.groupedCount > 1 ? (
+                                  <span className="bg-blue-100 text-blue-700 font-extrabold text-[9.5px] px-2 py-0.5 rounded-full border border-blue-200 shrink-0 flex items-center gap-0.5">
+                                    <span>×{notif.groupedCount} تحديثات</span>
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="text-xs text-slate-600 leading-relaxed font-semibold">{notif.message}</p>
+                              <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                                <span>{notif.timestamp}</span>
+                                <div className="flex items-center gap-1.5">
+                                  {notif.groupedCount && notif.groupedCount > 1 ? (
+                                    <span className="bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.2 rounded font-bold text-[9px]">
+                                      مجمعة ({notif.groupedCount})
+                                    </span>
+                                  ) : null}
+                                  <span className="bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-medium text-[9px]">{notif.region || notif.scope}</span>
+                                </div>
+                              </div>
                             </div>
                             {!notif.read && (<span className="w-2 h-2 rounded-full bg-blue-600 shrink-0 mt-2"></span>)}
                           </div>
@@ -1220,7 +1308,7 @@ export default function App() {
         <div className="border-b border-slate-200 flex justify-between items-center bg-white p-2.5 rounded-2xl border border-slate-100 shadow-2xs">
           <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
             {[
-              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('maps')) ? [{ id: 'maps', label: 'الخرائط التفاعلية', icon: Map }] : []),
+              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('maps')) ? [{ id: 'maps', label: 'الخرائط التفاعلية', icon: MapIcon }] : []),
               ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('stats')) ? [{ id: 'stats', label: ' الإحصائيات ', icon: Layers }] : []),
               ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('layers')) ? [{ id: 'layers', label: 'طبقات المشاريع', icon: Compass }] : []),
               ...(currentUser.role === 'admin' ? [{ id: 'users', label: 'إدارة وتوزيع صلاحيات الحسابات', icon: Users }] : [])
@@ -1237,7 +1325,7 @@ export default function App() {
           {activeTab === 'maps' && (
             <div className="flex flex-col space-y-4">
               <div className="xl:hidden bg-white p-1 rounded-2xl border border-slate-200 shadow-xs flex">
-                <button type="button" onClick={() => setMobileViewMode('map')} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileViewMode === 'map' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}><Map className="h-3.5 w-3.5 shrink-0" /><span>الخارطة التفاعلية</span></button>
+                <button type="button" onClick={() => setMobileViewMode('map')} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileViewMode === 'map' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}><MapIcon className="h-3.5 w-3.5 shrink-0" /><span>الخارطة التفاعلية</span></button>
                 <button type="button" onClick={() => setMobileViewMode('list')} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileViewMode === 'list' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}><FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /><span>قائمة المشاريع ({visibleProjects.length})</span></button>
               </div>
 

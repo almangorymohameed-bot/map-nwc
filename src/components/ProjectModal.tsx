@@ -72,7 +72,9 @@ export function ProjectModal({ isOpen, project, onClose, onSave }: ProjectModalP
     subProgram: '',
     mapUrl: '',
     x: null,
-    y: null
+    y: null,
+    surveyorName: '',
+    surveyorPhone: ''
   });
 
   const [error, setError] = useState('');
@@ -83,6 +85,8 @@ export function ProjectModal({ isOpen, project, onClose, onSave }: ProjectModalP
         ...project,
         x: project.x !== undefined && project.x !== null ? project.x : null,
         y: project.y !== undefined && project.y !== null ? project.y : null,
+        surveyorName: project.surveyorName || '',
+        surveyorPhone: project.surveyorPhone || '',
       });
     } else {
       setFormData({
@@ -100,7 +104,9 @@ export function ProjectModal({ isOpen, project, onClose, onSave }: ProjectModalP
         subProgram: 'شمال الرياض - صرف',
         mapUrl: '',
         x: null,
-        y: null
+        y: null,
+        surveyorName: '',
+        surveyorPhone: ''
       });
     }
     setError('');
@@ -137,6 +143,8 @@ export function ProjectModal({ isOpen, project, onClose, onSave }: ProjectModalP
       mapUrl: formData.mapUrl || '',
       x: formData.x !== undefined && formData.x !== null ? Number(formData.x) : null,
       y: formData.y !== undefined && formData.y !== null ? Number(formData.y) : null,
+      surveyorName: formData.surveyorName || '',
+      surveyorPhone: formData.surveyorPhone || '',
     };
 
     onSave(savedProject);
@@ -250,6 +258,30 @@ export function ProjectModal({ isOpen, project, onClose, onSave }: ProjectModalP
                 className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
                 value={formData.consultant || ''}
                 onChange={e => setFormData({ ...formData, consultant: e.target.value })}
+              />
+            </div>
+
+            {/* Surveyor Name */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">اسم المساح المسؤول</label>
+              <input
+                type="text"
+                placeholder="مثال: م. أحمد الخالد"
+                className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white"
+                value={formData.surveyorName || ''}
+                onChange={e => setFormData({ ...formData, surveyorName: e.target.value })}
+              />
+            </div>
+
+            {/* Surveyor Phone */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">رقم التواصل للمساح</label>
+              <input
+                type="tel"
+                placeholder="مثال: 0501234567"
+                className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white font-mono"
+                value={formData.surveyorPhone || ''}
+                onChange={e => setFormData({ ...formData, surveyorPhone: e.target.value })}
               />
             </div>
 

@@ -21,6 +21,8 @@ export interface Project {
   isFavorite?: boolean;
   x?: number | null; // خط الطول (X)
   y?: number | null; // خط العرض (Y)
+  surveyorName?: string; // اسم المساح
+  surveyorPhone?: string; // رقم التواصل للمساح
 }
 
 export interface User {
@@ -56,5 +58,7 @@ export interface AppNotification {
   read: boolean;
   region: string;
   scope: string;
+  groupedCount?: number;
+  groupedIds?: string[];
 }
 

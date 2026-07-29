@@ -325,11 +325,13 @@ export function ProjectList({
 
                   {/* Expanded additional project details comfortably in compact list when selected */}
                   {isSelected && (
-                    <div className="text-[10px] text-slate-600 grid grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-1.5 pt-2 mt-2 border-t border-slate-100/80 animate-in fade-in duration-200">
+                    <div className="text-[10px] text-slate-600 grid grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1.5 pt-2 mt-2 border-t border-slate-100/80 animate-in fade-in duration-200">
                       <div><strong className="text-slate-400 font-bold">المقاول:</strong> <span className="text-slate-700 font-medium">{p.contractor || 'غير محدد'}</span></div>
                       <div><strong className="text-slate-400 font-bold">الاستشاري:</strong> <span className="text-slate-700 font-medium">{p.consultant || 'مكتب الياردة'}</span></div>
                       <div><strong className="text-slate-400 font-bold">رقم PO:</strong> <span className="text-slate-700 font-mono font-bold">{p.po || '-'}</span></div>
                       <div><strong className="text-slate-400 font-bold">Unifier:</strong> <span className="text-slate-700 font-mono font-bold">{p.unifierNo || '-'}</span></div>
+                      <div><strong className="text-slate-400 font-bold">اسم المساح:</strong> <span className="text-slate-700 font-semibold">{p.surveyorName || 'غير محدد'}</span></div>
+                      <div><strong className="text-slate-400 font-bold">رقم التواصل:</strong> <span className="text-slate-700 font-mono font-semibold" dir="ltr">{p.surveyorPhone || 'غير محدد'}</span></div>
                       
                       <div className="col-span-full pt-1.5 mt-1 border-t border-dashed border-slate-100 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
@@ -506,12 +508,14 @@ export function ProjectList({
                     <span className="text-slate-700 font-medium truncate text-right mt-0.5" title={p.consultant}>{p.consultant || 'مكتب الياردة'}</span>
                   </div>
                   <div className="min-w-0 flex flex-col">
-                    <span className="text-[9px] text-slate-400 font-bold block text-right">رقم PO</span>
-                    <span className="text-slate-700 font-semibold font-mono truncate text-right mt-0.5" title={p.po}>{p.po || '-'}</span>
+                    <span className="text-[9px] text-slate-400 font-bold block text-right">رقم PO / Unifier</span>
+                    <span className="text-slate-700 font-semibold font-mono truncate text-right mt-0.5" title={`${p.po || '-'} / ${p.unifierNo || '-'}`}>{p.po || '-'} / {p.unifierNo || '-'}</span>
                   </div>
                   <div className="min-w-0 flex flex-col">
-                    <span className="text-[9px] text-slate-400 font-bold block text-right">رقم Unifier</span>
-                    <span className="text-slate-700 font-semibold font-mono truncate text-right mt-0.5" title={p.unifierNo}>{p.unifierNo || '-'}</span>
+                    <span className="text-[9px] text-slate-400 font-bold block text-right">المساح ورقم التواصل</span>
+                    <span className="text-slate-700 font-semibold truncate text-right mt-0.5" title={`${p.surveyorName || 'غير محدد'} (${p.surveyorPhone || 'غير محدد'})`}>
+                      {p.surveyorName || 'غير محدد'} {p.surveyorPhone ? `(${p.surveyorPhone})` : ''}
+                    </span>
                   </div>
                 </div>
 
