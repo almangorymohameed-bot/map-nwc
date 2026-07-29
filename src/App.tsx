@@ -1337,7 +1337,34 @@ export default function App() {
                 <div className={`xl:col-span-5 flex flex-col ${mobileViewMode === 'list' ? 'block' : 'hidden xl:flex'}`}>
                   <div className="bg-white p-4 rounded-t-2xl border flex items-center justify-between"><div className="flex items-center gap-2"><FileSpreadsheet className="h-4 w-4 text-slate-500" /><span className="text-xs font-bold text-slate-800">قائمة المشاريع</span></div><span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">{filteredProjects.length} عدد المشاريع</span></div>
                   <div className="bg-slate-50/50 p-4 border rounded-b-2xl max-h-[580px] overflow-y-auto w-full">
-                    <ProjectList projects={visibleProjects} filteredProjects={filteredProjects} selectedProject={selectedProject} onSelectProject={(proj) => { setSelectedProjectId(proj.id); setMobileViewMode('map'); showNotification(`تم تحديد مشروع: ${proj.name}`); }} currentUser={currentUser} onToggleFavorite={handleToggleFavorite} onEditProject={canEditProjects ? handleStartEditProject : undefined} searchTerm={searchTerm} setSearchTerm={setSearchTerm} selectedSubProgram={selectedSubProgram} setSelectedSubProgram={setSelectedSubProgram} selectedClassification={selectedClassification} setSelectedClassification={setSelectedClassification} selectedStatus={selectedStatus} setSelectedStatus={setSelectedStatus} showFilters={showFilters} setShowFilters={setShowFilters} showOnlyFavorites={showOnlyFavorites} setShowOnlyFavorites={setShowOnlyFavorites} />
+                    <ProjectList 
+                      projects={visibleProjects} 
+                      filteredProjects={filteredProjects} 
+                      selectedProject={selectedProject} 
+                      onSelectProject={(proj) => { 
+                        setSelectedProjectId(selectedProjectId === proj.id ? null : proj.id);
+                      }}
+                      onGoToMap={(proj) => {
+                        setSelectedProjectId(proj.id);
+                        setMobileViewMode('map');
+                        showNotification(`تم الانتقال لخريطة مشروع: ${proj.name}`);
+                      }}
+                      currentUser={currentUser} 
+                      onToggleFavorite={handleToggleFavorite} 
+                      onEditProject={canEditProjects ? handleStartEditProject : undefined} 
+                      searchTerm={searchTerm} 
+                      setSearchTerm={setSearchTerm} 
+                      selectedSubProgram={selectedSubProgram} 
+                      setSelectedSubProgram={setSelectedSubProgram} 
+                      selectedClassification={selectedClassification} 
+                      setSelectedClassification={setSelectedClassification} 
+                      selectedStatus={selectedStatus} 
+                      setSelectedStatus={setSelectedStatus} 
+                      showFilters={showFilters} 
+                      setShowFilters={setShowFilters} 
+                      showOnlyFavorites={showOnlyFavorites} 
+                      setShowOnlyFavorites={setShowOnlyFavorites} 
+                    />
                   </div>
                 </div>
               </div>

@@ -5,15 +5,18 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Project, User } from '../types';
-import { Search, MapPin, SlidersHorizontal, Droplet, Waves, RefreshCw, AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Eye, Globe, List, LayoutGrid, Star, Pencil } from 'lucide-react';
+import { Search, MapPin, SlidersHorizontal, Droplet, Waves, RefreshCw, AlertTriangle, CheckCircle, ChevronLeft, ChevronRight, Eye, Globe, List, LayoutGrid, Star, Pencil, MessageCircle, Phone } from 'lucide-react';
 import { getProjectCoordinates } from './ProjectMapViewer';
 import { getEmbeddableMapUrl } from '../data/initialProjects';
+import { VoiceSearchButton } from './VoiceSearchButton';
+import { getWhatsAppLink, WhatsAppIcon } from '../utils/whatsapp';
 
 interface ProjectListProps {
   projects: Project[]; // All authenticated visible projects
   filteredProjects: Project[]; // Precomputed filtered projects based on active filter choices
   selectedProject: Project | null;
   onSelectProject: (project: Project) => void;
+  onGoToMap?: (project: Project) => void;
   currentUser: User;
   onToggleFavorite?: (projectId: number) => void;
   onEditProject?: (project: Project) => void;
@@ -62,6 +65,7 @@ export function ProjectList({
   filteredProjects,
   selectedProject,
   onSelectProject,
+  onGoToMap,
   currentUser,
   onToggleFavorite,
   onEditProject,
@@ -129,11 +133,18 @@ export function ProjectList({
               <Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="البحث بالاسم، الرقم التشغيلي، المقاول، الاستشاري أو رقم PO..."
-                className="w-full text-xs pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-right"
+                placeholder="البحث بالاسم، الرقم التشغيلي، المقاول، الاستشاري أو بالصوت..."
+                className="w-full text-xs pr-10 pl-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-right"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
+              <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex items-center">
+                <VoiceSearchButton
+                  size="sm"
+                  onSpeechResult={(text) => setSearchTerm(text)}
+                  placeholderHint="تحدث باسم المشروع، المقاول، أو الرقم التشغيلي..."
+                />
+              </div>
             </div>
             <button
               type="button"
@@ -331,7 +342,41 @@ export function ProjectList({
                       <div><strong className="text-slate-400 font-bold">رقم PO:</strong> <span className="text-slate-700 font-mono font-bold">{p.po || '-'}</span></div>
                       <div><strong className="text-slate-400 font-bold">Unifier:</strong> <span className="text-slate-700 font-mono font-bold">{p.unifierNo || '-'}</span></div>
                       <div><strong className="text-slate-400 font-bold">اسم المساح:</strong> <span className="text-slate-700 font-semibold">{p.surveyorName || 'غير محدد'}</span></div>
-                      <div><strong className="text-slate-400 font-bold">رقم التواصل:</strong> <span className="text-slate-700 font-mono font-semibold" dir="ltr">{p.surveyorPhone || 'غير محدد'}</span></div>
+                      
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <strong className="text-slate-400 font-bold">التواصل عبر الواتساب:</strong>
+                        {p.surveyorPhone ? (
+                          <a
+                            href={getWhatsAppLink(p.surveyorPhone, p.name, p.operationalNumber)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 text-white font-mono font-bold bg-[#25D366] hover:bg-[#20bd5a] px-2.5 py-0.5 rounded-md transition-all shadow-2xs hover:scale-105 active:scale-95 text-[10px]"
+                            title={`محادثة واتساب مباشرة: ${p.surveyorPhone}`}
+                          >
+                            <WhatsAppIcon className="h-3.5 w-3.5 text-white fill-white" />
+                            <span dir="ltr">{p.surveyorPhone}</span>
+                          </a>
+                        ) : (
+                          <div className="inline-flex items-center gap-1 text-slate-600">
+                            <WhatsAppIcon className="h-3.5 w-3.5 text-[#25D366]" />
+                            <span className="font-medium text-slate-500">غير محدد</span>
+                            {onEditProject && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onEditProject(p);
+                                }}
+                                className="text-[9px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                                title="إضافة رقم الواتساب"
+                              >
+                                + رقم
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       
                       <div className="col-span-full pt-1.5 mt-1 border-t border-dashed border-slate-100 space-y-2">
                         <div className="flex flex-wrap items-center gap-2">
@@ -349,7 +394,6 @@ export function ProjectList({
                             </a>
                           )}
 
-                          
                           {p.mapUrl && (
                             <button
                               type="button"
@@ -408,8 +452,8 @@ export function ProjectList({
                   )}
                 </div>
 
-                {/* Badges / Small Action Button */}
-                <div className="flex items-center justify-between sm:justify-end gap-2.5 pr-3.5 sm:pr-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+                {/* Badges / Action Buttons */}
+                <div className="flex items-center justify-between sm:justify-end gap-2 pr-3.5 sm:pr-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
                   <span className={`text-[9px] px-2 py-0.5 rounded font-bold whitespace-nowrap ${getStatusBadgeClass(p.status)}`}>
                     {p.status}
                   </span>
@@ -431,15 +475,35 @@ export function ProjectList({
 
                   <button
                     type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectProject(p);
+                    }}
                     className={`flex items-center gap-1 font-bold px-2.5 py-1 rounded-lg transition-colors text-[10px] whitespace-nowrap shrink-0 cursor-pointer ${
                       isSelected 
-                        ? 'bg-blue-600 text-white shadow-xs' 
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200' 
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
+                    title="عرض البيانات التفصيلية في القائمة"
                   >
                     <Eye className="h-3 w-3" />
-                    <span>تحديد</span>
+                    <span>{isSelected ? 'إخفاء البيانات' : 'عرض البيانات'}</span>
                   </button>
+
+                  {onGoToMap && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onGoToMap(p);
+                      }}
+                      className="flex items-center gap-1 font-extrabold px-2.5 py-1 rounded-lg transition-all text-[10px] whitespace-nowrap shrink-0 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
+                      title="الانتقال للموقع في الخريطة التفاعلية"
+                    >
+                      <MapPin className="h-3 w-3" />
+                      <span>الذهاب للخريطة 🗺️</span>
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -511,11 +575,48 @@ export function ProjectList({
                     <span className="text-[9px] text-slate-400 font-bold block text-right">رقم PO / Unifier</span>
                     <span className="text-slate-700 font-semibold font-mono truncate text-right mt-0.5" title={`${p.po || '-'} / ${p.unifierNo || '-'}`}>{p.po || '-'} / {p.unifierNo || '-'}</span>
                   </div>
-                  <div className="min-w-0 flex flex-col">
-                    <span className="text-[9px] text-slate-400 font-bold block text-right">المساح ورقم التواصل</span>
-                    <span className="text-slate-700 font-semibold truncate text-right mt-0.5" title={`${p.surveyorName || 'غير محدد'} (${p.surveyorPhone || 'غير محدد'})`}>
-                      {p.surveyorName || 'غير محدد'} {p.surveyorPhone ? `(${p.surveyorPhone})` : ''}
-                    </span>
+                  <div className="min-w-0 flex flex-col col-span-2 bg-slate-100/70 p-2 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="min-w-0">
+                        <span className="text-[8.5px] text-slate-500 font-extrabold block text-right">المساح المسؤول</span>
+                        <span className="text-slate-800 font-bold text-[11px] truncate block text-right" title={p.surveyorName || 'غير محدد'}>
+                          {p.surveyorName || 'غير محدد'}
+                        </span>
+                      </div>
+                      <div className="shrink-0">
+                        {p.surveyorPhone ? (
+                          <a
+                            href={getWhatsAppLink(p.surveyorPhone, p.name, p.operationalNumber)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 bg-[#25D366] hover:bg-[#20bd5a] text-white text-[10.5px] font-extrabold px-2.5 py-1 rounded-lg transition-all shadow-xs hover:scale-105 active:scale-95"
+                            title={`محادثة واتساب مباشرة للمساح: ${p.surveyorPhone}`}
+                          >
+                            <WhatsAppIcon className="h-3.5 w-3.5 fill-white text-white" />
+                            <span dir="ltr">واتساب ({p.surveyorPhone})</span>
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <WhatsAppIcon className="h-4 w-4 text-[#25D366]" />
+                            <span className="text-[10px] text-slate-500 font-semibold">غير محدد</span>
+                            {onEditProject && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onEditProject(p);
+                                }}
+                                className="text-[9px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                                title="إضافة رقم الواتساب للمساح"
+                              >
+                                + رقم
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -617,15 +718,35 @@ export function ProjectList({
 
                   <button
                     type="button"
-                    className={`flex items-center gap-1.5 font-bold px-3 py-1.5 rounded-lg transition-colors text-[11px] whitespace-nowrap shrink-0 ${
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectProject(p);
+                    }}
+                    className={`flex items-center gap-1.5 font-bold px-3 py-1.5 rounded-lg transition-colors text-[11px] whitespace-nowrap shrink-0 cursor-pointer ${
                       isSelected 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200 font-extrabold' 
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
+                    title="عرض البيانات في القائمة"
                   >
-                    <Eye className="h-3.5 w-3.5" />
-                    <span>عرض الخريطة</span>
+                    <Eye className="h-3.5 w-3.5 text-slate-500" />
+                    <span>{isSelected ? 'إخفاء التفاصيل' : 'عرض البيانات'}</span>
                   </button>
+
+                  {onGoToMap && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onGoToMap(p);
+                      }}
+                      className="flex items-center gap-1.5 font-extrabold px-3.5 py-1.5 rounded-lg transition-all text-[11px] whitespace-nowrap shrink-0 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white shadow-xs hover:shadow-md"
+                      title="الانتقال لعرض الموقع على الخريطة التفاعلية"
+                    >
+                      <MapPin className="h-3.5 w-3.5" />
+                      <span>الذهاب للخريطة 🗺️</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

@@ -8,6 +8,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Project } from '../types';
 import { getEmbeddableMapUrl } from '../data/initialProjects';
+import { VoiceSearchButton } from './VoiceSearchButton';
+import { getWhatsAppLink } from '../utils/whatsapp';
 
 if (typeof window !== 'undefined') {
   (window as any).L = L;
@@ -686,7 +688,15 @@ export function ProjectMapViewer({
             <div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">المقاول:</strong> <span class="text-slate-800 font-extrabold text-left leading-tight">${p.contractor}</span></div>
             <div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">الاستشاري:</strong> <span class="text-slate-800 font-extrabold text-left leading-tight">${p.consultant}</span></div>
             ${p.surveyorName ? `<div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">اسم المساح:</strong> <span class="text-slate-800 font-extrabold text-left leading-tight">${p.surveyorName}</span></div>` : ''}
-            ${p.surveyorPhone ? `<div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">رقم التواصل:</strong> <span class="text-slate-800 font-extrabold font-mono text-left">${p.surveyorPhone}</span></div>` : ''}
+            ${p.surveyorPhone ? `
+              <div class="flex justify-between items-center gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60">
+                <strong class="text-slate-400 shrink-0 font-bold">واتساب المساح:</strong>
+                <a href="${getWhatsAppLink(p.surveyorPhone, p.name, p.operationalNumber)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-emerald-600 font-extrabold font-mono hover:underline bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" style="text-decoration:none;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="#059669" stroke="none"><path d="M12.031 2c-5.514 0-9.998 4.485-9.998 9.999 0 1.944.557 3.754 1.522 5.295l-1.555 5.706 5.86-1.537c1.472.846 3.179 1.335 4.996 1.335 5.514 0 9.998-4.485 9.998-9.999 0-5.514-4.484-9.999-9.998-9.999zm4.444 14.129c-.279.785-1.427 1.442-1.956 1.488-.507.043-1.166.195-3.832-.888-3.033-1.233-4.949-4.322-5.099-4.522-.15-.2-1.222-1.628-1.222-3.102 0-1.474.772-2.197 1.047-2.493.275-.296.598-.37.797-.37.2 0 .4.002.573.011.183.01.428-.069.67.51.246.589.843 2.059.917 2.208.074.15.123.324.025.523-.099.199-.15.324-.298.498-.148.174-.312.389-.446.523-.148.148-.302.31-.13.606.172.296.766 1.264 1.643 2.046 1.127 1.004 2.077 1.316 2.373 1.464.296.148.47.123.644-.075.174-.199.746-.869.944-1.168.198-.298.396-.248.669-.148.273.099 1.734.818 2.031.966.297.148.495.223.568.347.074.124.074.717-.205 1.502z"/></svg>
+                  <span dir="ltr">${p.surveyorPhone}</span>
+                </a>
+              </div>
+            ` : ''}
             <div class="flex justify-between items-start gap-1.5"><strong class="text-slate-400 shrink-0 font-bold">النطاق:</strong> <span class="text-slate-800 font-extrabold text-left">${p.region}</span></div>
           </div>
           
@@ -1007,20 +1017,27 @@ export function ProjectMapViewer({
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="ابحث بالاسم، الشارع، الحي، أو الإحداثيات..."
-                      className="w-full text-right text-xs pr-2.5 pl-7 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-800 font-bold placeholder-slate-400"
+                      placeholder="ابحث بالاسم، الحي، الإحداثيات، أو بالصوت..."
+                      className="w-full text-right text-xs pr-2.5 pl-14 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-800 font-bold placeholder-slate-400"
                       dir="rtl"
                     />
-                    {searchQuery && (
-                      <button
-                        type="button"
-                        onClick={clearSearchMarker}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 cursor-pointer transition-colors"
-                        title="مسح البحث والرجوع"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    )}
+                    <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={clearSearchMarker}
+                          className="p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 cursor-pointer transition-colors"
+                          title="مسح البحث والرجوع"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                      <VoiceSearchButton
+                        size="sm"
+                        onSpeechResult={(text) => setSearchQuery(text)}
+                        placeholderHint="تحدث بـاسم المشروع، الشارع، أو الإحداثيات..."
+                      />
+                    </div>
                   </div>
                   <button
                     type="submit"

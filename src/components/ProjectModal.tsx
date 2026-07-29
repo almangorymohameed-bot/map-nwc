@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { Project } from '../types';
 import { X, Save, AlertTriangle, Info, Map, CheckCircle } from 'lucide-react';
+import { getWhatsAppLink, WhatsAppIcon } from '../utils/whatsapp';
 
 interface ProjectModalProps {
   isOpen: boolean;
@@ -275,7 +276,24 @@ export function ProjectModal({ isOpen, project, onClose, onSave }: ProjectModalP
 
             {/* Surveyor Phone */}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-700">رقم التواصل للمساح</label>
+              <div className="flex justify-between items-center">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <WhatsAppIcon className="h-4 w-4 text-[#25D366]" />
+                  <span>رقم التواصل للمساح (واتساب)</span>
+                </label>
+                {formData.surveyorPhone && (
+                  <a
+                    href={getWhatsAppLink(formData.surveyorPhone, formData.name, formData.operationalNumber)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10.5px] text-white bg-[#25D366] hover:bg-[#20bd5a] font-bold px-2 py-0.5 rounded shadow-2xs"
+                    title="تجربة فتح المحادثة المباشرة في واتساب"
+                  >
+                    <WhatsAppIcon className="h-3 w-3 text-white fill-white" />
+                    <span>محادثة تجريبية 💬</span>
+                  </a>
+                )}
+              </div>
               <input
                 type="tel"
                 placeholder="مثال: 0501234567"
