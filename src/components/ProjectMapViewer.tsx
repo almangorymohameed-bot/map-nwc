@@ -823,8 +823,8 @@ export function ProjectMapViewer({
 
   return (
     <div 
-      className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col transition-all duration-300 ${
-        isFullscreen ? 'fixed inset-4 z-50 shadow-2xl bg-white' : 'relative z-10 h-[620px]'
+      className={`bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col transition-all duration-300 ${
+        isFullscreen ? 'fixed inset-4 z-50 shadow-2xl bg-white dark:bg-slate-900' : 'relative z-10 h-[620px]'
       }`}
     >
       <style>{`

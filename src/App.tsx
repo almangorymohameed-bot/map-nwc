@@ -40,7 +40,9 @@ import {
   LogOut,
   Smartphone,
   CheckCircle2,
-  Bell
+  Bell,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 // Helper to determine the actual effective scope of a project (resolving any data classification discrepancies)
@@ -211,6 +213,22 @@ export const isNotificationAllowed = (notif: AppNotification, user: User): boole
 };
 
 export default function App() {
+  // 0. Dark Mode State & Global Class Sync
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    return localStorage.getItem('water_maps_dark_mode') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('water_maps_dark_mode', String(darkMode));
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
+    }
+  }, [darkMode]);
+
   // 1. Authentication State
   const [isLogged, setIsLogged] = useState<boolean>(() => {
     return localStorage.getItem('water_maps_is_logged') === 'true';
@@ -1208,63 +1226,87 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex flex-col font-sans" id="app-root">
-      <header className="bg-white border-b border-slate-200 text-slate-800 shadow-xs sticky top-0 z-40">
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-slate-950 flex flex-col font-sans transition-colors duration-200" id="app-root">
+      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 shadow-xs sticky top-0 z-40 transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
               <NWCLogo size="sm" className="h-11 w-auto" />
               <div>
-                <h1 className="text-sm font-extrabold tracking-tight text-slate-900">الخرائط التفاعلية </h1>
-                <p className="text-[10px] text-slate-500 font-medium"> </p>
+                <h1 className="text-sm font-extrabold tracking-tight text-slate-900 dark:text-white">الخرائط التفاعلية </h1>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium"> </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 relative">
+            <div className="flex items-center gap-2 sm:gap-3 relative">
               <div className="hidden sm:block text-right">
-                <span className="text-[10px] text-slate-400 font-bold block">المستخدم الحالي</span>
-                <span className="text-xs text-slate-800 font-extrabold">{currentUser.name}</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold block">المستخدم الحالي</span>
+                <span className="text-xs text-slate-800 dark:text-slate-200 font-extrabold">{currentUser.name}</span>
               </div>
 
+              {/* Dark Mode Toggle Switch Button */}
+              <button
+                type="button"
+                onClick={() => setDarkMode(!darkMode)}
+                className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold ${
+                  darkMode
+                    ? 'bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700 shadow-2xs'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs'
+                }`}
+                title={darkMode ? 'التبديل إلى الوضع النهاري' : 'التبديل إلى الوضع الليلي'}
+              >
+                {darkMode ? (
+                  <>
+                    <Sun className="h-4 w-4 text-amber-400 fill-amber-400" />
+                    <span className="hidden sm:inline text-amber-300">نهاري ☀️</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon className="h-4 w-4 text-slate-600 fill-slate-200" />
+                    <span className="hidden sm:inline">ليلي 🌙</span>
+                  </>
+                )}
+              </button>
+
               <div className="relative" id="notifications-bell-container">
-                <button type="button" onClick={() => setShowNotificationsDropdown(!showNotificationsDropdown)} className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center relative ${showNotificationsDropdown ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}><Bell className="h-4 w-4" />{unreadNotificationsCount > 0 && (<span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-extrabold h-4 w-4 rounded-full flex items-center justify-center animate-bounce">{unreadNotificationsCount}</span>)}</button>
+                <button type="button" onClick={() => setShowNotificationsDropdown(!showNotificationsDropdown)} className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center relative ${showNotificationsDropdown ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}><Bell className="h-4 w-4" />{unreadNotificationsCount > 0 && (<span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-extrabold h-4 w-4 rounded-full flex items-center justify-center animate-bounce">{unreadNotificationsCount}</span>)}</button>
 
                 {showNotificationsDropdown && (
-                  <div className="absolute left-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden text-right">
-                    <div className="p-3.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center gap-2"><Bell className="h-4 w-4 text-blue-600" /><span className="text-xs font-extrabold text-slate-800">إشعارات المشاريع والشبكات</span></div>
+                  <div className="absolute left-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 overflow-hidden text-right">
+                    <div className="p-3.5 bg-slate-50 dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                      <div className="flex items-center gap-2"><Bell className="h-4 w-4 text-blue-600 dark:text-blue-400" /><span className="text-xs font-extrabold text-slate-800 dark:text-slate-200">إشعارات المشاريع والشبكات</span></div>
                       <div className="flex gap-2">
-                        {unreadNotificationsCount > 0 && (<button type="button" onClick={handleMarkAllAsRead} className="text-[10px] text-blue-600 font-bold cursor-pointer">تحديد الكل كمقروء</button>)}
+                        {unreadNotificationsCount > 0 && (<button type="button" onClick={handleMarkAllAsRead} className="text-[10px] text-blue-600 dark:text-blue-400 font-bold cursor-pointer">تحديد الكل كمقروء</button>)}
                         {notifications.length > 0 && (<button type="button" onClick={handleClearNotifications} className="text-[10px] text-slate-400 hover:text-rose-600 font-bold cursor-pointer">مسح الكل</button>)}
                       </div>
                     </div>
 
-                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
                       {groupedNotifications.length === 0 ? (
-                        <div className="p-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2"><Bell className="h-8 w-8 text-slate-200" /><span>لا توجد إشعارات نشطة حالياً</span></div>
+                        <div className="p-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2"><Bell className="h-8 w-8 text-slate-200 dark:text-slate-700" /><span>لا توجد إشعارات نشطة حالياً</span></div>
                       ) : (
                         groupedNotifications.map(notif => (
-                          <div key={notif.id} onClick={() => handleNotificationClick(notif)} className={`p-3.5 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3 items-start ${!notif.read ? 'bg-blue-50/20' : ''}`}>
-                            <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${notif.type === 'add' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>{notif.type === 'add' ? <Plus className="h-3.5 w-3.5" /> : <Layers className="h-3.5 w-3.5" />}</div>
+                          <div key={notif.id} onClick={() => handleNotificationClick(notif)} className={`p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors cursor-pointer flex gap-3 items-start ${!notif.read ? 'bg-blue-50/20 dark:bg-blue-950/30' : ''}`}>
+                            <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${notif.type === 'add' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400' : 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400'}`}>{notif.type === 'add' ? <Plus className="h-3.5 w-3.5" /> : <Layers className="h-3.5 w-3.5" />}</div>
                             <div className="flex-1 min-w-0 space-y-1">
                               <div className="flex items-center justify-between gap-1">
-                                <p className="text-xs text-slate-800 font-extrabold truncate">{notif.projectName ? `مشروع: ${notif.projectName}` : 'تحديث مشروع'}</p>
+                                <p className="text-xs text-slate-800 dark:text-slate-200 font-extrabold truncate">{notif.projectName ? `مشروع: ${notif.projectName}` : 'تحديث مشروع'}</p>
                                 {notif.groupedCount && notif.groupedCount > 1 ? (
-                                  <span className="bg-blue-100 text-blue-700 font-extrabold text-[9.5px] px-2 py-0.5 rounded-full border border-blue-200 shrink-0 flex items-center gap-0.5">
+                                  <span className="bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-extrabold text-[9.5px] px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 shrink-0 flex items-center gap-0.5">
                                     <span>×{notif.groupedCount} تحديثات</span>
                                   </span>
                                 ) : null}
                               </div>
-                              <p className="text-xs text-slate-600 leading-relaxed font-semibold">{notif.message}</p>
-                              <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-semibold">{notif.message}</p>
+                              <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 pt-0.5">
                                 <span>{notif.timestamp}</span>
                                 <div className="flex items-center gap-1.5">
                                   {notif.groupedCount && notif.groupedCount > 1 ? (
-                                    <span className="bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.2 rounded font-bold text-[9px]">
+                                    <span className="bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 px-1.5 py-0.2 rounded font-bold text-[9px]">
                                       مجمعة ({notif.groupedCount})
                                     </span>
                                   ) : null}
-                                  <span className="bg-slate-100 text-slate-500 px-1.5 py-0.2 rounded font-medium text-[9px]">{notif.region || notif.scope}</span>
+                                  <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.2 rounded font-medium text-[9px]">{notif.region || notif.scope}</span>
                                 </div>
                               </div>
                             </div>
@@ -1277,7 +1319,7 @@ export default function App() {
                 )}
               </div>
 
-              <button onClick={handleLogout} className="p-2 text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 border border-rose-100 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"><LogOut className="h-4 w-4" /><span className="hidden sm:inline">تسجيل الخروج</span></button>
+              <button onClick={handleLogout} className="p-2 text-rose-600 hover:text-white bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 dark:hover:bg-rose-600 border border-rose-100 dark:border-rose-900 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"><LogOut className="h-4 w-4" /><span className="hidden sm:inline">تسجيل الخروج</span></button>
             </div>
           </div>
         </div>
@@ -1292,7 +1334,7 @@ export default function App() {
       )}
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        <div className="bg-slate-900 leading-normal p-4.5 rounded-2xl border border-slate-700/60 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-md relative overflow-hidden">
+        <div className="bg-slate-900 dark:bg-slate-900/90 leading-normal p-4.5 rounded-2xl border border-slate-700/60 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-md relative overflow-hidden">
           <div className="flex items-center gap-3 relative z-10">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></div>
             <div>
@@ -1301,11 +1343,11 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-2 relative z-10">
-            {canEditProjects && (<button onClick={handleStartAddNewProject} className="flex items-center gap-1.5 bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm cursor-pointer"><Plus className="h-4 w-4" /><span>إدراج مشروع خارطة جديد</span></button>)}
+            {canEditProjects && (<button onClick={handleStartAddNewProject} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm cursor-pointer"><Plus className="h-4 w-4" /><span>إدراج مشروع خارطة جديد</span></button>)}
           </div>
         </div>
 
-        <div className="border-b border-slate-200 flex justify-between items-center bg-white p-2.5 rounded-2xl border border-slate-100 shadow-2xs">
+        <div className="border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-2xs transition-colors">
           <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
             {[
               ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('maps')) ? [{ id: 'maps', label: 'الخرائط التفاعلية', icon: MapIcon }] : []),
@@ -1315,7 +1357,7 @@ export default function App() {
             ].map(tab => {
               const Icon = tab.icon;
               return (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'}`}><Icon className="h-4 w-4 shrink-0" /><span>{tab.label}</span></button>
+                <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'}`}><Icon className="h-4 w-4 shrink-0" /><span>{tab.label}</span></button>
               );
             })}
           </div>
@@ -1324,9 +1366,9 @@ export default function App() {
         <div className="space-y-6">
           {activeTab === 'maps' && (
             <div className="flex flex-col space-y-4">
-              <div className="xl:hidden bg-white p-1 rounded-2xl border border-slate-200 shadow-xs flex">
-                <button type="button" onClick={() => setMobileViewMode('map')} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileViewMode === 'map' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}><MapIcon className="h-3.5 w-3.5 shrink-0" /><span>الخارطة التفاعلية</span></button>
-                <button type="button" onClick={() => setMobileViewMode('list')} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileViewMode === 'list' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}><FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /><span>قائمة المشاريع ({visibleProjects.length})</span></button>
+              <div className="xl:hidden bg-white dark:bg-slate-900 p-1 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex">
+                <button type="button" onClick={() => setMobileViewMode('map')} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileViewMode === 'map' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400'}`}><MapIcon className="h-3.5 w-3.5 shrink-0" /><span>الخارطة التفاعلية</span></button>
+                <button type="button" onClick={() => setMobileViewMode('list')} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileViewMode === 'list' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400'}`}><FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /><span>قائمة المشاريع ({visibleProjects.length})</span></button>
               </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
@@ -1335,8 +1377,8 @@ export default function App() {
                 </div>
 
                 <div className={`xl:col-span-5 flex flex-col ${mobileViewMode === 'list' ? 'block' : 'hidden xl:flex'}`}>
-                  <div className="bg-white p-4 rounded-t-2xl border flex items-center justify-between"><div className="flex items-center gap-2"><FileSpreadsheet className="h-4 w-4 text-slate-500" /><span className="text-xs font-bold text-slate-800">قائمة المشاريع</span></div><span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">{filteredProjects.length} عدد المشاريع</span></div>
-                  <div className="bg-slate-50/50 p-4 border rounded-b-2xl max-h-[580px] overflow-y-auto w-full">
+                  <div className="bg-white dark:bg-slate-900 p-4 rounded-t-2xl border dark:border-slate-800 flex items-center justify-between"><div className="flex items-center gap-2"><FileSpreadsheet className="h-4 w-4 text-slate-500 dark:text-slate-400" /><span className="text-xs font-bold text-slate-800 dark:text-slate-200">قائمة المشاريع</span></div><span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded font-bold">{filteredProjects.length} عدد المشاريع</span></div>
+                  <div className="bg-slate-50/50 dark:bg-slate-950/50 p-4 border dark:border-slate-800 rounded-b-2xl max-h-[580px] overflow-y-auto w-full">
                     <ProjectList 
                       projects={visibleProjects} 
                       filteredProjects={filteredProjects} 
