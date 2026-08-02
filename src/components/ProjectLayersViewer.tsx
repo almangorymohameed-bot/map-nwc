@@ -213,6 +213,22 @@ export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
     }
   };
 
+  const hasAnyLayerAllowed = isLayerAllowed('water') || isLayerAllowed('sewage') || isLayerAllowed('materials');
+
+  if (!hasAnyLayerAllowed) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center flex flex-col items-center justify-center space-y-4 min-h-[400px]">
+        <div className="p-4 bg-amber-50 text-amber-600 rounded-full">
+          <Lock className="h-8 w-8" />
+        </div>
+        <h3 className="text-lg font-bold text-slate-800">لا توجد طبقات مشاريع مسموحة</h3>
+        <p className="text-sm text-slate-500 max-w-md leading-relaxed">
+          عفواً، لا تملك صلاحيات لاستعراض أي من طبقات المشاريع. يرجى التواصل مع مسؤول النظام لتحديد الطبقات المسموحة لك.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div 
       className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col transition-all duration-300 ${
@@ -243,20 +259,7 @@ export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
           <div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-700/60 shrink-0 shadow-xs">
             {(['water', 'sewage', 'materials'] as const).map(key => {
               const allowed = isLayerAllowed(key);
-              if (!allowed) {
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    disabled
-                    title="غير مصرح لك باستعراض هذه الطبقة"
-                    className="px-2.5 py-1.5 text-xs font-bold rounded-md opacity-40 cursor-not-allowed flex items-center gap-1 text-slate-400 bg-slate-800"
-                  >
-                    <Lock className="h-3 w-3 text-rose-400" />
-                    <span>{layers[key].badge}</span>
-                  </button>
-                );
-              }
+              if (!allowed) return null;
 
               return (
                 <button
@@ -288,7 +291,7 @@ export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
           </div>
 
           {/* External Links Allowed Checklist */}
-          {canOpenExternalLinks ? (
+          {canOpenExternalLinks && (
             <>
               {/* Share Layer */}
               <button
@@ -319,11 +322,6 @@ export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
                 <span>تبويب خارجي ↗️</span>
               </a>
             </>
-          ) : (
-            <div className="flex items-center gap-1 text-[10px] bg-slate-800 text-slate-400 px-2 py-1 rounded-lg border border-slate-700" title="مغلق بواسطة مدير النظام">
-              <Lock className="h-3 w-3 text-rose-500" />
-              <span>الروابط الخارجية معطلة</span>
-            </div>
           )}
 
           <button

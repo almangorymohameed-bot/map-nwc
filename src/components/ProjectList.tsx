@@ -356,17 +356,21 @@ export function ProjectList({
                       <div className="flex items-center gap-2 flex-wrap">
                         <strong className="text-slate-400 dark:text-slate-400 font-bold">واتساب المساح:</strong>
                         {p.surveyorPhone ? (
-                          <a
-                            href={getWhatsAppLink(p.surveyorPhone, p.name, p.operationalNumber)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1.5 text-white font-mono font-extrabold bg-[#25D366] hover:bg-[#20bd5a] px-2.5 py-1 rounded-md transition-all shadow-2xs hover:scale-105 active:scale-95 text-xs"
-                            title={`محادثة واتساب مباشرة: ${p.surveyorPhone}`}
-                          >
-                            <WhatsAppIcon className="h-4 w-4 text-white fill-white shrink-0" />
-                            <span dir="ltr">{p.surveyorPhone}</span>
-                          </a>
+                          canOpenExternalLinks ? (
+                            <a
+                              href={getWhatsAppLink(p.surveyorPhone, p.name, p.operationalNumber)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1.5 text-white font-mono font-extrabold bg-[#25D366] hover:bg-[#20bd5a] px-2.5 py-1 rounded-md transition-all shadow-2xs hover:scale-105 active:scale-95 text-xs"
+                              title={`محادثة واتساب مباشرة: ${p.surveyorPhone}`}
+                            >
+                              <WhatsAppIcon className="h-4 w-4 text-white fill-white shrink-0" />
+                              <span dir="ltr">{p.surveyorPhone}</span>
+                            </a>
+                          ) : (
+                            <span dir="ltr" className="font-mono text-slate-700 dark:text-slate-300 font-bold text-xs">{p.surveyorPhone}</span>
+                          )
                         ) : (
                           <div className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
                             <WhatsAppIcon className="h-4 w-4 text-[#25D366] shrink-0" />
@@ -595,17 +599,21 @@ export function ProjectList({
                       </div>
                       <div className="shrink-0">
                         {p.surveyorPhone ? (
-                          <a
-                            href={getWhatsAppLink(p.surveyorPhone, p.name, p.operationalNumber)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1.5 bg-[#25D366] hover:bg-[#20bd5a] text-white text-[10.5px] font-extrabold px-2.5 py-1 rounded-lg transition-all shadow-xs hover:scale-105 active:scale-95"
-                            title={`محادثة واتساب مباشرة للمساح: ${p.surveyorPhone}`}
-                          >
-                            <WhatsAppIcon className="h-3.5 w-3.5 fill-white text-white" />
-                            <span dir="ltr">واتساب ({p.surveyorPhone})</span>
-                          </a>
+                          canOpenExternalLinks ? (
+                            <a
+                              href={getWhatsAppLink(p.surveyorPhone, p.name, p.operationalNumber)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1.5 bg-[#25D366] hover:bg-[#20bd5a] text-white text-[10.5px] font-extrabold px-2.5 py-1 rounded-lg transition-all shadow-xs hover:scale-105 active:scale-95"
+                              title={`محادثة واتساب مباشرة للمساح: ${p.surveyorPhone}`}
+                            >
+                              <WhatsAppIcon className="h-3.5 w-3.5 fill-white text-white" />
+                              <span dir="ltr">واتساب ({p.surveyorPhone})</span>
+                            </a>
+                          ) : (
+                            <span dir="ltr" className="font-mono text-slate-700 dark:text-slate-300 font-bold text-xs">{p.surveyorPhone}</span>
+                          )
                         ) : (
                           <div className="flex items-center gap-1.5">
                             <WhatsAppIcon className="h-4 w-4 text-[#25D366]" />

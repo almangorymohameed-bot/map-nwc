@@ -710,7 +710,7 @@ export function ProjectMapViewer({
               <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:2px;"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
               المعاينة والتفاصيل 🔍
             </button>
-            ${hasWriteAccess ? `
+            ${canOpenExternalLinks ? `
             <button 
               type="button"
               data-map-url="${p.mapUrl || `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`}"
