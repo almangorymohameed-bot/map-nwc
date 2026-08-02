@@ -112,15 +112,26 @@ export const isProjectAllowedForUser = (p: Project, currentUser: User): boolean 
     }
   }
 
-  const isAllScopes = currentUser.allowedScopes.includes('الكل');
   const actualScope = getActualProjectScope(p);
-  const isScopeAllowed = isAllScopes || currentUser.allowedScopes.some(scopeType => {
+
+  const uScopes = (currentUser.allowedScopes || ['الكل']).map(s => s.trim());
+  const isAllScopes = uScopes.includes('الكل');
+  const isScopeAllowed = isAllScopes || uScopes.some(scopeType => {
     const uScope = scopeType.trim();
     if (!uScope) return false;
     return actualScope === uScope;
   });
 
-  return isRegionAllowed && isScopeAllowed;
+  const uLayers = (currentUser.allowedLayers || ['water', 'sewage', 'materials']).map(l => l.trim());
+  const isAllLayers = uLayers.includes('الكل') || (uLayers.includes('water') && uLayers.includes('sewage') && uLayers.includes('materials'));
+  
+  let isLayerAllowed = true;
+  if (!isAllLayers) {
+    const projLayer = actualScope === 'مياه' ? 'water' : actualScope === 'صرف صحي' ? 'sewage' : 'materials';
+    isLayerAllowed = uLayers.includes(projLayer);
+  }
+
+  return isRegionAllowed && isScopeAllowed && isLayerAllowed;
 };
 
 export const getProjectDifferencesMessage = (oldP: Project, newP: Project): string => {

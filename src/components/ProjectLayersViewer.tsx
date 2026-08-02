@@ -34,8 +34,21 @@ interface ProjectLayersViewerProps {
 export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
   const isLayerAllowed = (layerId: 'water' | 'sewage' | 'materials'): boolean => {
     if (currentUser.role === 'admin') return true;
-    if (!currentUser.allowedLayers || currentUser.allowedLayers.length === 0 || currentUser.allowedLayers.includes('الكل')) return true;
-    return currentUser.allowedLayers.includes(layerId);
+    
+    // Check allowedLayers
+    const uLayers = currentUser.allowedLayers || ['water', 'sewage', 'materials'];
+    const isLayerInAllowedLayers = uLayers.includes('الكل') || uLayers.includes(layerId);
+    
+    // Check allowedScopes
+    const uScopes = currentUser.allowedScopes || ['الكل'];
+    let isLayerInAllowedScopes = true;
+    if (!uScopes.includes('الكل')) {
+      if (layerId === 'water') isLayerInAllowedScopes = uScopes.includes('مياه');
+      else if (layerId === 'sewage') isLayerInAllowedScopes = uScopes.includes('صرف صحي');
+      // materials is shared, so allowed if any scope is allowed or if materials layer is explicitly in allowedLayers
+    }
+
+    return isLayerInAllowedLayers && isLayerInAllowedScopes;
   };
 
   const [activeLayer, setActiveLayer] = useState<'water' | 'sewage' | 'materials'>(() => {

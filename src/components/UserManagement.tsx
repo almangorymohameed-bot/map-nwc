@@ -172,10 +172,14 @@ export function UserManagement({
     const list = formData[field] || [];
     
     if (value === 'الكل') {
-      setFormData({
+      const nextData: Partial<User> = {
         ...formData,
         [field]: ['الكل']
-      });
+      };
+      if (field === 'allowedScopes') {
+        nextData.allowedLayers = ['water', 'sewage', 'materials'];
+      }
+      setFormData(nextData);
       return;
     }
 
@@ -190,10 +194,22 @@ export function UserManagement({
       newList = ['الكل'];
     }
 
-    setFormData({
+    const nextData: Partial<User> = {
       ...formData,
       [field]: newList
-    });
+    };
+
+    if (field === 'allowedScopes') {
+      if (newList.includes('الكل') || (newList.includes('مياه') && newList.includes('صرف صحي'))) {
+        nextData.allowedLayers = ['water', 'sewage', 'materials'];
+      } else if (newList.includes('مياه')) {
+        nextData.allowedLayers = ['water', 'materials'];
+      } else if (newList.includes('صرف صحي')) {
+        nextData.allowedLayers = ['sewage', 'materials'];
+      }
+    }
+
+    setFormData(nextData);
   };
 
   const handleTabToggle = (tabId: string) => {
@@ -648,7 +664,27 @@ export function UserManagement({
                             } else {
                               newLayers = [...baseList, layer.id];
                             }
-                            setFormData({ ...formData, allowedLayers: newLayers });
+                            if (newLayers.length === 0) {
+                              newLayers = ['water', 'sewage', 'materials'];
+                            }
+
+                            // Sync allowedScopes
+                            let newScopes: string[] = [];
+                            if (newLayers.includes('water') && newLayers.includes('sewage')) {
+                              newScopes = ['الكل'];
+                            } else if (newLayers.includes('water')) {
+                              newScopes = ['مياه'];
+                            } else if (newLayers.includes('sewage')) {
+                              newScopes = ['صرف صحي'];
+                            } else {
+                              newScopes = ['الكل'];
+                            }
+
+                            setFormData({
+                              ...formData,
+                              allowedLayers: newLayers,
+                              allowedScopes: newScopes
+                            });
                           }}
                           className={`flex items-center justify-between p-2.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
                             isAllowed
