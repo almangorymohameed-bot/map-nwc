@@ -78,7 +78,8 @@ export const isProjectAllowedForUser = (p: Project, currentUser: User): boolean 
   if (currentUser.role === 'admin') return true;
   
   if (currentUser.allowedProjectIds && currentUser.allowedProjectIds.length > 0) {
-    return currentUser.allowedProjectIds.includes(p.id);
+    const allowed = currentUser.allowedProjectIds.map(Number);
+    return allowed.includes(Number(p.id));
   }
 
   const uRegions = (currentUser.allowedRegions || []).map(r => r.trim());
@@ -376,35 +377,47 @@ export default function App() {
 
     setIsLoading(true);
     try {
-      const { data: dbProjects, error: projError } = await supabase
+      let dbProjects: any[] | null = null;
+      let projError: any = null;
+
+      // محاولة الجلب مرتباً بحسب created_at أولاً، وإن فشل نجلب السجلات بدون ترتيب
+      const res1 = await supabase
         .from('projects')
         .select('*')
         .order('created_at', { ascending: false });
 
+      if (res1.error) {
+        const res2 = await supabase.from('projects').select('*');
+        dbProjects = res2.data;
+        projError = res2.error;
+      } else {
+        dbProjects = res1.data;
+      }
+
       if (projError) {
         console.warn("فشل الاتصال بـ Supabase:", projError.message);
         setSupabaseError(projError.message);
-      } else if (dbProjects) {
+      } else if (dbProjects && dbProjects.length > 0) {
         setSupabaseError(null);
         const mappedProjects = dbProjects.map((p: any) => ({
-          id: p.id,
-          operationalNumber: p.operational_number,
-          name: p.name,
+          id: Number(p.id) || p.id,
+          operationalNumber: p.operational_number || p.operationalNumber || '',
+          name: p.name || '',
           po: p.po || '',
-          unifierNo: p.unifier_no || '',
-          contractor: p.contractor,
-          consultant: p.consultant,
-          status: p.status,
+          unifierNo: p.unifier_no || p.unifierNo || '',
+          contractor: p.contractor || '',
+          consultant: p.consultant || '',
+          status: p.status || '',
           scope: p.scope || '',
-          classification: p.classification,
-          businessUnit: p.business_unit,
-          region: p.region,
-          subProgram: p.sub_program || '',
-          mapUrl: p.map_url || '',
+          classification: p.classification || '',
+          businessUnit: p.business_unit || p.businessUnit || '',
+          region: p.region || '',
+          subProgram: p.sub_program || p.subProgram || '',
+          mapUrl: p.map_url || p.mapUrl || '',
           x: p.x !== undefined && p.x !== null ? Number(p.x) : null,
           y: p.y !== undefined && p.y !== null ? Number(p.y) : null,
-          surveyorName: p.surveyor_name || '',
-          surveyorPhone: p.surveyor_phone || ''
+          surveyorName: p.surveyor_name || p.surveyorName || '',
+          surveyorPhone: p.surveyor_phone || p.surveyorPhone || ''
         }));
 
         setProjects(mappedProjects);
@@ -413,6 +426,10 @@ export default function App() {
         } catch (cacheErr) {
           console.error(cacheErr);
         }
+      } else if (dbProjects && dbProjects.length === 0) {
+        // إذا عاد الاستعلام فارغاً نحافظ على المشاريع الموجودة أو المحفوظة في التطبيق بدلاً من المسح
+        const initial = getParsedProjects();
+        setProjects(prev => (prev && prev.length > 0 ? prev : initial));
       }
 
       // لا يتم جلب جدول المستخدمين إلا إذا كان المستخدم الحالي مديراً للنظام لضمان الخصوصية والأمان التام
@@ -751,55 +768,12 @@ export default function App() {
 
   // 5. Role-based Project Filtering Logic
   const visibleProjects = useMemo(() => {
-    return projects.filter(p => {
-      if (currentUser.role === 'admin') return true;
-      if (currentUser.allowedProjectIds && currentUser.allowedProjectIds.length > 0) {
-        return currentUser.allowedProjectIds.includes(p.id);
-      }
-
-      const uRegions = (currentUser.allowedRegions || []).map(r => r.trim());
-      const isAllRegions = uRegions.includes('الكل');
-      
-      let isRegionAllowed = isAllRegions;
-      if (!isRegionAllowed) {
-        const pr = (p.region || '').trim();
-        const pb = (p.businessUnit || '').trim();
-        const ps = (p.subProgram || '').trim();
-        
-        if (uRegions.includes(pr) || uRegions.includes(pb) || uRegions.includes(ps)) {
-          isRegionAllowed = true;
-        }
-        
-        if (!isRegionAllowed) {
-          const northGovs = ['المجمعة', 'رماح', 'الزلفي', 'ثادق', 'حريملاء', 'الغاط', 'ثادق وحريملاء'];
-          const southGovs = ['السليل', 'وادي الدواسر', 'الأفلاج', 'حوطة بني تميم', 'الحريق', 'السيح', 'الخرج', 'تمرة', 'خيران', 'السيح والخرج'];
-          const westGovs = ['المزاحمية', 'شقراء', 'عفيف', 'القويعية', 'البجاديه', 'البجادية', 'ضرما', 'ضرماء', 'الدوادمي', 'شقراء ومرات', 'عفيف والدوادمي', 'المزاحمية و ضرماء'];
-          
-          if (uRegions.includes('المحافظات الشمالية') && (northGovs.includes(pr) || pr.includes('المجمعة') || pr.includes('رماح') || pr.includes('الزلفي') || pr.includes('حريملاء') || pr.includes('الغاط') || pr.includes('ثادق'))) {
-            isRegionAllowed = true;
-          }
-          if (uRegions.includes('المحافظات الجنوبية') && (southGovs.includes(pr) || pr.includes('السليل') || pr.includes('الدواسر') || pr.includes('الأفلاج') || pr.includes('تميم') || pr.includes('الخرج') || pr.includes('الحريق') || pr.includes('السيح'))) {
-            isRegionAllowed = true;
-          }
-          if (uRegions.includes('المحافظات الغربية') && (westGovs.includes(pr) || pr.includes('عفيف') || pr.includes('الدوادمي') || pr.includes('المزاحمية') || pr.includes('شقراء') || pr.includes('القويعية') || pr.includes('البجادية') || pr.includes('البجاديه') || pr.includes('ضرما') || pr.includes('ضرماء'))) {
-            isRegionAllowed = true;
-          }
-        }
-      }
-
-      const isAllScopes = currentUser.allowedScopes.includes('الكل');
-      const actualScope = getActualProjectScope(p);
-      const isScopeAllowed = isAllScopes || currentUser.allowedScopes.some(scopeType => {
-        const uScope = scopeType.trim();
-        if (!uScope) return false;
-        return actualScope === uScope;
-      });
-
-      return isRegionAllowed && isScopeAllowed;
-    }).map(p => ({
-      ...p,
-      isFavorite: favoriteIds.includes(p.id)
-    }));
+    return projects
+      .filter(p => isProjectAllowedForUser(p, currentUser))
+      .map(p => ({
+        ...p,
+        isFavorite: favoriteIds.includes(Number(p.id)) || favoriteIds.includes(p.id as any)
+      }));
   }, [projects, currentUser, favoriteIds]);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -942,22 +916,61 @@ export default function App() {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase
+      let data: any[] | null = null;
+
+      const res = await supabase
         .from('users')
         .select('*')
-        .eq('role', 'admin');
+        .or('role.eq.admin,username.eq.admin');
 
-      if (error || !data || data.length === 0) {
-        setLoginError('لم يتم العثور على حساب مدير النظام.');
-        setIsLoading(false);
-        return;
+      if (!res.error && res.data && res.data.length > 0) {
+        data = res.data;
+      } else {
+        const allRes = await supabase.from('users').select('*');
+        if (allRes.data) {
+          data = allRes.data.filter((u: any) => u.role === 'admin' || u.username === 'admin');
+        }
       }
 
-      const found = data.find((u: any) => u.password === adminPassword.trim());
+      let found: any = null;
+
+      if (data && data.length > 0) {
+        found = data.find((u: any) => u.password === adminPassword.trim());
+      }
+
       if (!found) {
-        setLoginError('كلمة المرور غير صحيحة!');
-        setIsLoading(false);
-        return;
+        if (data && data.length > 0) {
+          setLoginError('كلمة المرور غير صحيحة!');
+          setIsLoading(false);
+          return;
+        }
+
+        // إذا لم يكن هناك أي حساب مدير في قاعدة البيانات نهائياً، ننشئ حساب مدير تلقائياً ونحفظه في سوبابيس
+        const defaultPassword = adminPassword.trim() || 'admin123';
+        const newAdminUser = {
+          id: 'admin-' + Date.now(),
+          username: 'admin',
+          name: 'مدير النظام الرئيسي',
+          role: 'admin',
+          password: defaultPassword,
+          allowed_regions: ['الكل'],
+          allowed_scopes: ['الكل'],
+          allowed_tabs: ['maps', 'stats', 'layers', 'users'],
+          allowed_layers: ['water', 'sewage', 'materials'],
+          can_open_external_links: true,
+          can_filter: true,
+          can_insert: true,
+          department: 'إدارة النظام',
+          job_title: 'مدير النظام'
+        };
+
+        try {
+          await supabase.from('users').insert([newAdminUser]);
+        } catch (insertErr) {
+          console.warn("تعذر إضافة مدير النظام تلقائياً لسوبابيس:", insertErr);
+        }
+
+        found = newAdminUser;
       }
 
       let allowedRegions: string[] = ['الكل'];
@@ -970,7 +983,7 @@ export default function App() {
         if (Array.isArray(found.allowed_scopes)) { allowedScopes = found.allowed_scopes; } 
         else { try { allowedScopes = JSON.parse(found.allowed_scopes); } catch (e) { allowedScopes = [found.allowed_scopes]; } }
       }
-      let allowedTabs = ['maps', 'stats', 'layers'];
+      let allowedTabs = ['maps', 'stats', 'layers', 'users'];
       if (found.allowed_tabs) {
         if (Array.isArray(found.allowed_tabs)) { allowedTabs = found.allowed_tabs; } 
         else { try { allowedTabs = JSON.parse(found.allowed_tabs); } catch (e) { } }
@@ -986,14 +999,14 @@ export default function App() {
         else { try { allowedProjectIds = JSON.parse(found.allowed_project_ids).map(Number); } catch (e) { } }
       }
 
-      const mappedUser = {
+      const mappedUser: User = {
         id: found.id,
-        username: found.username,
-        name: found.name,
-        role: found.role,
+        username: found.username || 'admin',
+        name: found.name || 'مدير النظام',
+        role: 'admin',
         allowedRegions: allowedRegions,
         allowedScopes: allowedScopes,
-        password: found.password,
+        password: found.password || adminPassword.trim(),
         allowedTabs: allowedTabs,
         allowedLayers: allowedLayers,
         canOpenExternalLinks: found.can_open_external_links !== false,
