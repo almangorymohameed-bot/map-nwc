@@ -424,7 +424,13 @@ export default function App() {
         if (userError) {
           console.warn("فشل جلب المستخدمين:", userError.message);
         } else if (dbUsers) {
+          const cachedUsersFromStorage = (() => {
+            try { return JSON.parse(localStorage.getItem('water_maps_cached_users') || '[]'); } catch (e) { return []; }
+          })();
+
           const mappedUsers = dbUsers.map((u: any) => {
+            const existingLocal = users.find(existing => existing.id === u.id) || cachedUsersFromStorage.find((existing: any) => existing.id === u.id);
+
             let allowedRegions: string[] = ['الكل'];
             if (u.allowed_regions) {
               if (Array.isArray(u.allowed_regions)) { allowedRegions = u.allowed_regions; } 
@@ -435,18 +441,21 @@ export default function App() {
               if (Array.isArray(u.allowed_scopes)) { allowedScopes = u.allowed_scopes; } 
               else { try { allowedScopes = JSON.parse(u.allowed_scopes); } catch (e) { allowedScopes = [u.allowed_scopes]; } }
             }
-            let allowedTabs = ['maps', 'stats', 'layers'];
-            if (u.allowed_tabs) {
+
+            let allowedTabs = existingLocal?.allowedTabs || ['maps', 'stats', 'layers'];
+            if (u.allowed_tabs !== undefined && u.allowed_tabs !== null) {
               if (Array.isArray(u.allowed_tabs)) { allowedTabs = u.allowed_tabs; } 
               else { try { allowedTabs = JSON.parse(u.allowed_tabs); } catch (e) { } }
             }
-            let allowedLayers: string[] = ['water', 'sewage', 'materials'];
-            if (u.allowed_layers) {
+
+            let allowedLayers: string[] = existingLocal?.allowedLayers || ['water', 'sewage', 'materials'];
+            if (u.allowed_layers !== undefined && u.allowed_layers !== null) {
               if (Array.isArray(u.allowed_layers)) { allowedLayers = u.allowed_layers; } 
               else { try { allowedLayers = JSON.parse(u.allowed_layers); } catch (e) { allowedLayers = [u.allowed_layers]; } }
             }
-            let allowedProjectIds: number[] = [];
-            if (u.allowed_project_ids) {
+
+            let allowedProjectIds: number[] = existingLocal?.allowedProjectIds || [];
+            if (u.allowed_project_ids !== undefined && u.allowed_project_ids !== null) {
               if (Array.isArray(u.allowed_project_ids)) { allowedProjectIds = u.allowed_project_ids.map(Number); } 
               else { try { allowedProjectIds = JSON.parse(u.allowed_project_ids).map(Number); } catch (e) { } }
             }
@@ -461,11 +470,17 @@ export default function App() {
               password: u.password,
               allowedTabs: allowedTabs,
               allowedLayers: allowedLayers,
-              canOpenExternalLinks: u.can_open_external_links !== false,
-              canFilter: u.can_filter !== false,
-              canInsert: u.can_insert !== false,
-              department: u.department || '',
-              jobTitle: u.job_title || '',
+              canOpenExternalLinks: u.can_open_external_links !== undefined && u.can_open_external_links !== null
+                ? u.can_open_external_links !== false
+                : (existingLocal?.canOpenExternalLinks !== false),
+              canFilter: u.can_filter !== undefined && u.can_filter !== null
+                ? u.can_filter !== false
+                : (existingLocal?.canFilter !== false),
+              canInsert: u.can_insert !== undefined && u.can_insert !== null
+                ? u.can_insert !== false
+                : (existingLocal?.canInsert !== false),
+              department: u.department || existingLocal?.department || '',
+              jobTitle: u.job_title || existingLocal?.jobTitle || '',
               allowedProjectIds: allowedProjectIds
             };
           });
@@ -1151,6 +1166,24 @@ export default function App() {
   };
 
   const handleSaveUserPermissions = async (updatedUser: User) => {
+    // 1. Update local users state and local storage immediately
+    setUsers(prev => {
+      const exists = prev.some(u => u.id === updatedUser.id);
+      const nextUsers = exists 
+        ? prev.map(u => u.id === updatedUser.id ? updatedUser : u)
+        : [updatedUser, ...prev];
+      try {
+        localStorage.setItem('water_maps_cached_users', JSON.stringify(nextUsers));
+      } catch (e) {
+        console.error(e);
+      }
+      return nextUsers;
+    });
+
+    if (currentUser.id === updatedUser.id) {
+      setCurrentUser(updatedUser);
+    }
+
     const payload = {
       username: updatedUser.username,
       name: updatedUser.name,
@@ -1168,16 +1201,25 @@ export default function App() {
       allowed_project_ids: updatedUser.allowedProjectIds || []
     };
 
-    if (currentUser.id === updatedUser.id) {
-      setCurrentUser(updatedUser);
-    }
-
     const exists = users.some(u => u.id === updatedUser.id);
     try {
-      if (exists) {
-        await supabase.from('users').update(payload).eq('id', updatedUser.id);
-      } else {
-        await supabase.from('users').insert([{ id: updatedUser.id, ...payload }]);
+      let { error } = exists
+        ? await supabase.from('users').update(payload).eq('id', updatedUser.id)
+        : await supabase.from('users').insert([{ id: updatedUser.id, ...payload }]);
+
+      if (error) {
+        console.warn("تعذر إضافة الأعمدة المتقدمة في Supabase، جاري الحفظ بالأعمدة الأساسية:", error.message);
+        const fallbackPayload = {
+          username: updatedUser.username,
+          name: updatedUser.name,
+          role: updatedUser.role,
+          allowed_regions: updatedUser.allowedRegions,
+          allowed_scopes: updatedUser.allowedScopes,
+          password: updatedUser.password || 'nwc1234'
+        };
+        await (exists
+          ? supabase.from('users').update(fallbackPayload).eq('id', updatedUser.id)
+          : supabase.from('users').insert([{ id: updatedUser.id, ...fallbackPayload }]));
       }
     } catch (err: any) {
       console.error(err);
