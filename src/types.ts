@@ -46,6 +46,9 @@ export interface User {
   
   // صلاحية اختيار مشاريع محددة
   allowedProjectIds?: number[]; // معرفات المشاريع المحددة المسموحة
+
+  // صلاحية طبقات المشاريع المفصلة
+  allowedLayers?: string[]; // المعرفات المسموحة: ["water", "sewage", "materials"]
 }
 
 export interface AppNotification {

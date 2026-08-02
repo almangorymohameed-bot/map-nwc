@@ -57,6 +57,12 @@ const TAB_OPTIONS = [
   { id: 'layers', label: 'طبقات المشاريع 🥞' }
 ];
 
+const LAYER_OPTIONS = [
+  { id: 'water', label: 'طبقة المياه 💧' },
+  { id: 'sewage', label: 'طبقة الصرف 🌿' },
+  { id: 'materials', label: 'طبقة مواد التشوين 📦' }
+];
+
 export function UserManagement({ 
   users, 
   currentUser, 
@@ -130,6 +136,7 @@ export function UserManagement({
       allowedRegions: ['الكل'],
       allowedScopes: ['الكل'],
       allowedTabs: ['maps', 'stats', 'layers'],
+      allowedLayers: ['water', 'sewage', 'materials'],
       canOpenExternalLinks: true,
       canFilter: true,
       canInsert: true,
@@ -151,6 +158,7 @@ export function UserManagement({
       ...selectedUser,
       username: displayedUsername,
       allowedTabs: selectedUser.allowedTabs || ['maps', 'stats', 'layers'],
+      allowedLayers: selectedUser.allowedLayers || ['water', 'sewage', 'materials'],
       canOpenExternalLinks: selectedUser.canOpenExternalLinks !== false,
       canFilter: selectedUser.canFilter !== false,
       canInsert: selectedUser.canInsert !== false,
@@ -617,6 +625,44 @@ export function UserManagement({
                     </button>
                   </div>
                 </div>
+
+                {/* B4. Project Layers Permissions */}
+                <div className="space-y-2 col-span-1 md:col-span-2 border-t border-slate-200/60 pt-3 mt-1">
+                  <label className="text-xs font-bold text-slate-700 block">صلاحيات رؤية طبقات المشاريع التفصيلية:</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {LAYER_OPTIONS.map(layer => {
+                      const currentLayers = formData.allowedLayers || ['water', 'sewage', 'materials'];
+                      const isAllowed = currentLayers.includes(layer.id) || currentLayers.includes('الكل');
+                      return (
+                        <button
+                          type="button"
+                          key={layer.id}
+                          onClick={() => {
+                            let newLayers: string[];
+                            if (currentLayers.includes(layer.id)) {
+                              newLayers = currentLayers.filter(l => l !== layer.id);
+                            } else {
+                              newLayers = [...currentLayers, layer.id];
+                            }
+                            setFormData({ ...formData, allowedLayers: newLayers });
+                          }}
+                          className={`flex items-center justify-between p-2.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                            isAllowed
+                              ? 'bg-amber-50/70 border-amber-300 text-amber-900 shadow-xs'
+                              : 'bg-white/50 border-slate-200 text-slate-400'
+                          }`}
+                        >
+                          <span>{layer.label}</span>
+                          {isAllowed ? (
+                            <CheckSquare className="h-4 w-4 text-amber-600 shrink-0" />
+                          ) : (
+                            <Square className="h-4 w-4 text-slate-300 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -951,6 +997,18 @@ export function UserManagement({
                           إدراج وإضافة مشاريع: {selectedUser.canInsert !== false ? 'مسموح ✅' : 'معطل 🔒'}
                         </span>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Layers allowed */}
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-100 md:col-span-2">
+                    <span className="text-[10px] text-slate-400 font-bold block mb-1">طبقات المشاريع المسموح برؤيتها:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {((selectedUser.allowedLayers && selectedUser.allowedLayers.length > 0) ? selectedUser.allowedLayers : ['water', 'sewage', 'materials']).map(l => (
+                        <span key={l} className="px-2 py-0.5 bg-amber-50 text-amber-900 border border-amber-200/60 rounded text-[10px] font-bold">
+                          {l === 'water' ? '💧 المياه' : l === 'sewage' ? '🌿 الصرف الصحي' : l === 'materials' ? '📦 مواد التشوين' : l}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 </div>

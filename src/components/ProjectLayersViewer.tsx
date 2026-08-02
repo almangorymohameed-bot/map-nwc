@@ -9,6 +9,7 @@ import { getEmbeddableMapUrl } from '../data/initialProjects';
 import { 
   Droplet, 
   Waves, 
+  Package,
   Globe, 
   ExternalLink, 
   Maximize2, 
@@ -31,7 +32,18 @@ interface ProjectLayersViewerProps {
 }
 
 export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
-  const [activeLayer, setActiveLayer] = useState<'water' | 'sewage'>('water');
+  const isLayerAllowed = (layerId: 'water' | 'sewage' | 'materials'): boolean => {
+    if (currentUser.role === 'admin') return true;
+    if (!currentUser.allowedLayers || currentUser.allowedLayers.length === 0 || currentUser.allowedLayers.includes('الكل')) return true;
+    return currentUser.allowedLayers.includes(layerId);
+  };
+
+  const [activeLayer, setActiveLayer] = useState<'water' | 'sewage' | 'materials'>(() => {
+    if (isLayerAllowed('water')) return 'water';
+    if (isLayerAllowed('sewage')) return 'sewage';
+    if (isLayerAllowed('materials')) return 'materials';
+    return 'water';
+  });
   const [isIframeLoading, setIsIframeLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState('');
@@ -54,16 +66,28 @@ export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
 
   const layers = {
     water: {
+      id: 'water' as const,
       title: 'مشاريع المياه بالقطاع الأوسط',
       url: 'https://www.google.com/maps/d/edit?hl=ar&mid=1hrnowKe74j1S5v2l_gSWIQ3iwVjJjr4&ll=24.702632565864192%2C46.65687544661741&z=10',
       description: 'مخطط طبقة شبكات مياه الشرب، خطوط النقل، الخزانات الاستراتيجية، ومحطات الضخ المغذية للقطاع الأوسط.',
-      color: 'blue'
+      color: 'blue',
+      badge: 'طبقة المياه 💧'
     },
     sewage: {
+      id: 'sewage' as const,
       title: 'مشاريع الصرف الصحي بالقطاع الأوسط',
       url: 'https://www.google.com/maps/d/edit?mid=13p8cYCEMXWhXBIfrfHNynb0pmCNq-Jo&ll=24.766901986769675%2C46.808473494494145&z=10',
       description: 'مخطط طبقة شبكات تجميع الصرف الصحي، خطوط الطرد الرئيسية، محطات الرفع، ومحطات المعالجة البيئية.',
-      color: 'emerald'
+      color: 'emerald',
+      badge: 'طبقة الصرف 🌿'
+    },
+    materials: {
+      id: 'materials' as const,
+      title: 'مواقع مواد التشوين بالقطاع الأوسط',
+      url: 'https://www.google.com/maps/d/edit?mid=1xOG_18lYoUbDqJHewEHR3grDvj9H38g&usp=sharing',
+      description: 'مخطط طبقة مواقع ومستودعات ومناطق مواد التشوين والمستلزمات التشغيلية بالقطاع الأوسط.',
+      color: 'amber',
+      badge: 'مواد التشوين 📦'
     }
   };
 
@@ -192,8 +216,8 @@ export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
         <div className="absolute inset-0 opacity-5 polish-dot-grid pointer-events-none"></div>
         
         <div className="flex items-center gap-3 relative z-10 min-w-0">
-          <div className={`p-2 rounded-lg text-white shrink-0 ${activeLayer === 'water' ? 'bg-blue-600' : 'bg-emerald-600'}`}>
-            {activeLayer === 'water' ? <Droplet className="h-5 w-5" /> : <Waves className="h-5 w-5" />}
+          <div className={`p-2 rounded-lg text-white shrink-0 ${activeLayer === 'water' ? 'bg-blue-600' : activeLayer === 'sewage' ? 'bg-emerald-600' : 'bg-amber-600'}`}>
+            {activeLayer === 'water' ? <Droplet className="h-5 w-5" /> : activeLayer === 'sewage' ? <Waves className="h-5 w-5" /> : <Package className="h-5 w-5" />}
           </div>
           <div className="min-w-0">
             <h4 className="text-sm font-bold truncate text-right">
@@ -209,40 +233,50 @@ export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
         <div className="flex flex-wrap items-center gap-1.5 self-stretch sm:self-auto relative z-10 shrink-0 justify-end w-full sm:w-auto select-none">
           {/* Layer Selector */}
           <div className="flex bg-slate-900 p-0.5 rounded-lg border border-slate-700/60 shrink-0 shadow-xs">
-            <button
-              type="button"
-              onClick={() => {
-                if (activeLayer !== 'water') {
-                  setActiveLayer('water');
-                  setIsIframeLoading(true);
-                }
-              }}
-              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer flex items-center gap-1 ${
-                activeLayer === 'water'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Droplet className="h-3 w-3" />
-              <span>طبقة المياه 💧</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (activeLayer !== 'sewage') {
-                  setActiveLayer('sewage');
-                  setIsIframeLoading(true);
-                }
-              }}
-              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer flex items-center gap-1 ${
-                activeLayer === 'sewage'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Waves className="h-3 w-3" />
-              <span>طبقة الصرف 🌿</span>
-            </button>
+            {(['water', 'sewage', 'materials'] as const).map(key => {
+              const allowed = isLayerAllowed(key);
+              if (!allowed) {
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled
+                    title="غير مصرح لك باستعراض هذه الطبقة"
+                    className="px-2.5 py-1.5 text-xs font-bold rounded-md opacity-40 cursor-not-allowed flex items-center gap-1 text-slate-400 bg-slate-800"
+                  >
+                    <Lock className="h-3 w-3 text-rose-400" />
+                    <span>{layers[key].badge}</span>
+                  </button>
+                );
+              }
+
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    if (activeLayer !== key) {
+                      setActiveLayer(key);
+                      setIsIframeLoading(true);
+                    }
+                  }}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer flex items-center gap-1 ${
+                    activeLayer === key
+                      ? key === 'water' 
+                        ? 'bg-blue-600 text-white shadow-xs' 
+                        : key === 'sewage' 
+                          ? 'bg-emerald-600 text-white shadow-xs' 
+                          : 'bg-amber-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {key === 'water' && <Droplet className="h-3 w-3" />}
+                  {key === 'sewage' && <Waves className="h-3 w-3" />}
+                  {key === 'materials' && <Package className="h-3 w-3" />}
+                  <span>{layers[key].badge}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* External Links Allowed Checklist */}
@@ -266,7 +300,11 @@ export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
                 rel="noopener noreferrer"
                 title="فتح الخريطة والإحداثيات في نافذة مستقلة"
                 className={`flex items-center gap-1 p-1.5 px-2.5 rounded-lg text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs ${
-                  activeLayer === 'water' ? 'bg-blue-700 hover:bg-blue-600' : 'bg-emerald-700 hover:bg-emerald-600'
+                  activeLayer === 'water' 
+                    ? 'bg-blue-700 hover:bg-blue-600' 
+                    : activeLayer === 'sewage' 
+                      ? 'bg-emerald-700 hover:bg-emerald-600' 
+                      : 'bg-amber-700 hover:bg-amber-600'
                 }`}
               >
                 <ExternalLink className="h-3.5 w-3.5 shrink-0 text-white/80" />
@@ -490,7 +528,7 @@ export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
             نوع العرض:
           </span>
           <span className="text-slate-600">
-            طبقة جغرافية شاملة للقطاع الأوسط ({activeLayer === 'water' ? 'مياه شرب' : 'صرف صحي'})
+            طبقة جغرافية شاملة للقطاع الأوسط ({activeLayer === 'water' ? 'مياه شرب' : activeLayer === 'sewage' ? 'صرف صحي' : 'مواد التشوين'})
           </span>
         </div>
         

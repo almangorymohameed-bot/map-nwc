@@ -87,7 +87,7 @@ export function DashboardStats({ projects }: DashboardStatsProps) {
             <h3 className="text-3xl font-bold text-cyan-600 dark:text-cyan-400 tracking-tight">{waterCount}</h3>
             <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-600 dark:bg-cyan-400"></span>
-              <span>نسبة مئوية: {total > 0 ? Math.round((waterCount / total) * 105) / 1.05 : 0}%</span>
+              <span>نسبة مئوية: %{total > 0 ? ((waterCount / total) * 100).toFixed(2) : '0.00'}</span>
             </div>
           </div>
           <div className="p-3 bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 rounded-2xl">
@@ -102,7 +102,7 @@ export function DashboardStats({ projects }: DashboardStatsProps) {
             <h3 className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 tracking-tight">{sewageCount}</h3>
             <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400"></span>
-              <span>نسبة مئوية: {total > 0 ? Math.round((sewageCount / total) * 100) : 0}%</span>
+              <span>نسبة مئوية: %{total > 0 ? ((sewageCount / total) * 100).toFixed(2) : '0.00'}</span>
             </div>
           </div>
           <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-2xl">
@@ -142,7 +142,7 @@ export function DashboardStats({ projects }: DashboardStatsProps) {
                 <div key={regionName} className="space-y-1.5">
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-semibold text-slate-700 dark:text-slate-200">{regionName}</span>
-                    <span className="text-slate-500 dark:text-slate-400 font-medium">{count} مشروع ({Math.round(pet)}%)</span>
+                    <span className="text-slate-500 dark:text-slate-400 font-medium">{count} مشروع ({pet.toFixed(2)}%)</span>
                   </div>
                   <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
                     <div 
