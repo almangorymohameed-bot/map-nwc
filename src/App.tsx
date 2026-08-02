@@ -277,7 +277,7 @@ export default function App() {
     }
 
     if (savedAndActive) {
-      return { id: savedAndActive, username: 'admin', name: 'جاري التحميل...', role: 'admin', allowedRegions: ['الكل'], allowedScopes: ['الكل'], password: '' };
+      return { id: savedAndActive, username: 'admin', name: 'جاري التحميل...', role: 'admin', allowedRegions: ['الكل'], allowedScopes: ['الكل'], allowedLayers: ['water', 'sewage', 'materials'], password: '' };
     }
     return {
       id: 'guest',
@@ -286,6 +286,7 @@ export default function App() {
       role: 'viewer',
       allowedRegions: ['الكل'],
       allowedScopes: ['الكل'],
+      allowedLayers: ['water', 'sewage', 'materials'],
       password: ''
     };
   });
@@ -439,6 +440,11 @@ export default function App() {
               if (Array.isArray(u.allowed_tabs)) { allowedTabs = u.allowed_tabs; } 
               else { try { allowedTabs = JSON.parse(u.allowed_tabs); } catch (e) { } }
             }
+            let allowedLayers: string[] = ['water', 'sewage', 'materials'];
+            if (u.allowed_layers) {
+              if (Array.isArray(u.allowed_layers)) { allowedLayers = u.allowed_layers; } 
+              else { try { allowedLayers = JSON.parse(u.allowed_layers); } catch (e) { allowedLayers = [u.allowed_layers]; } }
+            }
             let allowedProjectIds: number[] = [];
             if (u.allowed_project_ids) {
               if (Array.isArray(u.allowed_project_ids)) { allowedProjectIds = u.allowed_project_ids.map(Number); } 
@@ -454,6 +460,7 @@ export default function App() {
               allowedScopes: allowedScopes,
               password: u.password,
               allowedTabs: allowedTabs,
+              allowedLayers: allowedLayers,
               canOpenExternalLinks: u.can_open_external_links !== false,
               canFilter: u.can_filter !== false,
               canInsert: u.can_insert !== false,
@@ -867,6 +874,11 @@ export default function App() {
         if (Array.isArray(found.allowed_tabs)) { allowedTabs = found.allowed_tabs; } 
         else { try { allowedTabs = JSON.parse(found.allowed_tabs); } catch (e) { } }
       }
+      let allowedLayers: string[] = ['water', 'sewage', 'materials'];
+      if (found.allowed_layers) {
+        if (Array.isArray(found.allowed_layers)) { allowedLayers = found.allowed_layers; } 
+        else { try { allowedLayers = JSON.parse(found.allowed_layers); } catch (e) { allowedLayers = [found.allowed_layers]; } }
+      }
       let allowedProjectIds: number[] = [];
       if (found.allowed_project_ids) {
         if (Array.isArray(found.allowed_project_ids)) { allowedProjectIds = found.allowed_project_ids.map(Number); } 
@@ -882,6 +894,7 @@ export default function App() {
         allowedScopes: allowedScopes,
         password: found.password,
         allowedTabs: allowedTabs,
+        allowedLayers: allowedLayers,
         canOpenExternalLinks: found.can_open_external_links !== false,
         canFilter: found.can_filter !== false,
         canInsert: found.can_insert !== false,
@@ -947,6 +960,11 @@ export default function App() {
         if (Array.isArray(found.allowed_tabs)) { allowedTabs = found.allowed_tabs; } 
         else { try { allowedTabs = JSON.parse(found.allowed_tabs); } catch (e) { } }
       }
+      let allowedLayers: string[] = ['water', 'sewage', 'materials'];
+      if (found.allowed_layers) {
+        if (Array.isArray(found.allowed_layers)) { allowedLayers = found.allowed_layers; } 
+        else { try { allowedLayers = JSON.parse(found.allowed_layers); } catch (e) { allowedLayers = [found.allowed_layers]; } }
+      }
       let allowedProjectIds: number[] = [];
       if (found.allowed_project_ids) {
         if (Array.isArray(found.allowed_project_ids)) { allowedProjectIds = found.allowed_project_ids.map(Number); } 
@@ -962,6 +980,7 @@ export default function App() {
         allowedScopes: allowedScopes,
         password: found.password,
         allowedTabs: allowedTabs,
+        allowedLayers: allowedLayers,
         canOpenExternalLinks: found.can_open_external_links !== false,
         canFilter: found.can_filter !== false,
         canInsert: found.can_insert !== false,
@@ -1140,6 +1159,7 @@ export default function App() {
       allowed_scopes: updatedUser.allowedScopes,
       password: updatedUser.password || 'nwc1234',
       allowed_tabs: updatedUser.allowedTabs || ['maps', 'stats', 'layers'],
+      allowed_layers: updatedUser.allowedLayers || ['water', 'sewage', 'materials'],
       can_open_external_links: updatedUser.canOpenExternalLinks !== false,
       can_filter: updatedUser.canFilter !== false,
       can_insert: updatedUser.canInsert !== false,
@@ -1147,6 +1167,10 @@ export default function App() {
       job_title: updatedUser.jobTitle || '',
       allowed_project_ids: updatedUser.allowedProjectIds || []
     };
+
+    if (currentUser.id === updatedUser.id) {
+      setCurrentUser(updatedUser);
+    }
 
     const exists = users.some(u => u.id === updatedUser.id);
     try {

@@ -278,6 +278,7 @@ export function UserManagement({
       
       // New fields mapping
       allowedTabs: formData.allowedTabs || ['maps', 'stats', 'layers'],
+      allowedLayers: formData.allowedLayers || ['water', 'sewage', 'materials'],
       canOpenExternalLinks: formData.canOpenExternalLinks !== false,
       canFilter: formData.canFilter !== false,
       canInsert: formData.canInsert !== false,
@@ -631,18 +632,21 @@ export function UserManagement({
                   <label className="text-xs font-bold text-slate-700 block">صلاحيات رؤية طبقات المشاريع التفصيلية:</label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {LAYER_OPTIONS.map(layer => {
-                      const currentLayers = formData.allowedLayers || ['water', 'sewage', 'materials'];
-                      const isAllowed = currentLayers.includes(layer.id) || currentLayers.includes('الكل');
+                      const list = formData.allowedLayers || ['water', 'sewage', 'materials'];
+                      const isAllowed = list.includes(layer.id) || list.includes('الكل');
                       return (
                         <button
                           type="button"
                           key={layer.id}
                           onClick={() => {
+                            let baseList = list.includes('الكل') 
+                              ? ['water', 'sewage', 'materials'] 
+                              : list.filter(l => l !== 'الكل');
                             let newLayers: string[];
-                            if (currentLayers.includes(layer.id)) {
-                              newLayers = currentLayers.filter(l => l !== layer.id);
+                            if (baseList.includes(layer.id)) {
+                              newLayers = baseList.filter(l => l !== layer.id);
                             } else {
-                              newLayers = [...currentLayers, layer.id];
+                              newLayers = [...baseList, layer.id];
                             }
                             setFormData({ ...formData, allowedLayers: newLayers });
                           }}

@@ -44,6 +44,14 @@ export function ProjectLayersViewer({ currentUser }: ProjectLayersViewerProps) {
     if (isLayerAllowed('materials')) return 'materials';
     return 'water';
   });
+
+  React.useEffect(() => {
+    if (!isLayerAllowed(activeLayer)) {
+      if (isLayerAllowed('water')) setActiveLayer('water');
+      else if (isLayerAllowed('sewage')) setActiveLayer('sewage');
+      else if (isLayerAllowed('materials')) setActiveLayer('materials');
+    }
+  }, [currentUser, currentUser.allowedLayers, currentUser.role, activeLayer]);
   const [isIframeLoading, setIsIframeLoading] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState('');
