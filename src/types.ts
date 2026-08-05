@@ -65,3 +65,56 @@ export interface AppNotification {
   groupedIds?: string[];
 }
 
+export type StatusCategory = 'executed_water' | 'executed_sewage' | 'ongoing' | 'remaining' | 'cancelled';
+
+export interface KMLFeatureItem {
+  id: string;
+  name: string;
+  segmentId: string;
+  permitNo: string;
+  colorHex: string; // #01579B, #097138, #ffea00, #a52714, #F48FB1
+  statusCategory: StatusCategory;
+  statusLabel: string; // منفذ - مياه | منفذ - صرف | جاري العمل | أعمال متبقية | خطوط تم إلغائها
+  lengthMeters: number;
+  lengthKm: number;
+  coordinatesCount: number;
+  description?: string;
+  layerName?: string;
+}
+
+export interface ColorStatsSummary {
+  colorHex: string;
+  label: string;
+  category: StatusCategory;
+  totalLengthMeters: number;
+  totalLengthKm: number;
+  segmentCount: number;
+  permitCount: number;
+  percentage: number;
+}
+
+export interface KMLAnalysisResult {
+  projectName?: string;
+  mapUrl?: string;
+  totalLengthMeters: number;
+  totalLengthKm: number;
+  totalFeaturesCount: number;
+  colorBreakdown: Record<StatusCategory, ColorStatsSummary>;
+  segmentIdsByStatus: {
+    executedWater: string[];
+    executedSewage: string[];
+    ongoing: string[];
+    remaining: string[];
+    cancelled: string[];
+  };
+  permitNosByStatus: {
+    executedWater: string[];
+    executedSewage: string[];
+    ongoing: string[];
+    remaining: string[];
+    cancelled: string[];
+  };
+  items: KMLFeatureItem[];
+  parsedAt: string;
+}
+

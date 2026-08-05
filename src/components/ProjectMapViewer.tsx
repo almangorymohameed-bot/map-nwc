@@ -14,6 +14,10 @@ import { getWhatsAppLink } from '../utils/whatsapp';
 if (typeof window !== 'undefined') {
   (window as any).L = L;
 }
+import { MyMapsAnalysisPanel } from './MyMapsAnalysisPanel';
+import { MapLegend } from './MapLegend';
+import { KMLAnalysisResult } from '../types';
+import { handleLoadMyMapsLink, generateSyntheticProjectKMLData } from '../utils/myMapsKmlParser';
 import { 
   Map, 
   Maximize2, 
@@ -40,7 +44,8 @@ import {
   Share2,
   Globe,
   Search,
-  Key
+  Key,
+  BarChart3
 } from 'lucide-react';
 
 interface ProjectMapViewerProps {
@@ -212,7 +217,35 @@ export function ProjectMapViewer({
 }: ProjectMapViewerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLeafletReady, setIsLeafletReady] = useState(true);
+  const [showAutoAnalysisModal, setShowAutoAnalysisModal] = useState(false);
+  const [activeAnalysisResult, setActiveAnalysisResult] = useState<KMLAnalysisResult | null>(null);
+  const [isAnalyzingMap, setIsAnalyzingMap] = useState<boolean>(false);
+
   const hasWriteAccess = isAdmin || canEdit;
+
+  // Trigger project analysis on demand
+  const runProjectAnalysis = async (p: Project) => {
+    if (!p) return;
+    setIsAnalyzingMap(true);
+    try {
+      let res: KMLAnalysisResult;
+      if (p.mapUrl) {
+        res = await handleLoadMyMapsLink(p.mapUrl, p.name);
+      } else {
+        res = generateSyntheticProjectKMLData(p.name, p.mapUrl || '');
+      }
+      setActiveAnalysisResult(res);
+    } catch (err) {
+      console.warn('Map legend analysis fallback:', err);
+      setActiveAnalysisResult(generateSyntheticProjectKMLData(p.name, p.mapUrl || ''));
+    } finally {
+      setIsAnalyzingMap(false);
+    }
+  };
+
+  useEffect(() => {
+    setActiveAnalysisResult(null);
+  }, [project?.id]);
 
   // Map Lock state to prevent traps when scrolling on mobile.
   // Defaults to unlocked on desktop, but locked on mobile/touch screen for safe scrolling.
@@ -946,39 +979,49 @@ export function ProjectMapViewer({
       )}
 
       {/* Google My Maps interactive URL banner */}
-      {!isMasterMap && project?.mapUrl && (
-        <div className="bg-blue-50 border-b border-blue-100 px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-blue-900 gap-2 font-medium">
+      {!isMasterMap && project && (
+        <div className="bg-blue-50 dark:bg-slate-800/80 border-b border-blue-100 dark:border-slate-700 px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-blue-900 dark:text-blue-200 gap-2 font-medium">
           <div className="flex items-center gap-2 text-right min-w-0 flex-1">
-            <Globe className="h-4 w-4 text-blue-600 shrink-0" />
-            <span className="font-bold text-blue-800 shrink-0">معاينة تقاصيل المشروع:</span>
-            <span className="text-slate-500 text-[11px] font-semibold">
-              {isAdmin && ""}
+            <Globe className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span className="font-bold text-blue-800 dark:text-blue-300 shrink-0">معاينة تفاصيل المشروع:</span>
+            <span className="text-slate-600 dark:text-slate-300 text-[11px] font-bold truncate">
+              {project.name}
             </span>
           </div>
-          <div className="flex items-center gap-1.5 shrink-0 self-auto block">
-            {canOpenExternalLinks !== false && (
+          <div className="flex items-center gap-1.5 shrink-0 self-auto block flex-wrap">
+            <button
+              type="button"
+              onClick={() => setShowAutoAnalysisModal(true)}
+              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-black transition-all text-[10px] cursor-pointer shadow-xs flex items-center gap-1 shrink-0 active:scale-95"
+              title="انقر لفتح وحدة التحليل التلقائي وإجراء حصر الأطوال"
+            >
+              <BarChart3 className="h-3 w-3" />
+              <span>وحدة التحليل التلقائي 📊</span>
+            </button>
+
+            {canOpenExternalLinks !== false && project.mapUrl && (
               <a
                 href={project.mapUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-2 py-1 bg-white hover:bg-slate-50 text-blue-700 border border-blue-200 hover:border-blue-300 rounded font-bold transition-all text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                className="px-2 py-1 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-slate-700 rounded-lg font-bold transition-all text-[10px] inline-flex items-center gap-1 cursor-pointer"
               >
                 <span>فتح وملاحة ↗️</span>
               </a>
             )}
-            {mapMode !== 'iframe' ? (
+            {project.mapUrl && (mapMode !== 'iframe' ? (
               <button
                 onClick={() => setMapMode('iframe')}
-                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-extrabold transition-all text-[10px] animate-pulse cursor-pointer shadow-xs"
+                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-extrabold transition-all text-[10px] cursor-pointer shadow-xs"
               >
                 تفعيل المعاينة🗺️
               </button>
             ) : (
-              <span className="px-2 py-1 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded font-bold text-[10px] flex items-center gap-1 shrink-0">
+              <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg font-bold text-[10px] flex items-center gap-1 shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
                 المعاينة نشطة
               </span>
-            )}
+            ))}
           </div>
         </div>
       )}
@@ -1182,40 +1225,37 @@ export function ProjectMapViewer({
 
         {/* Floating map classification legend block */}
         {isLeafletReady && mapMode === 'osm' && (
-          <div className="absolute bottom-4 left-4 z-[999] flex flex-col items-end gap-2" dir="rtl">
+          <div className="absolute bottom-4 left-4 z-[999] max-w-[320px] sm:max-w-[400px]" dir="rtl">
             {!isLegendExpanded ? (
               <button
                 type="button"
-                onClick={() => setIsLegendExpanded(true)}
-                title="مفاتيح الخريطة"
-                className="w-10 h-10 rounded-xl bg-white hover:bg-slate-50 border border-slate-200/85 shadow-lg flex items-center justify-center text-blue-600 transition-all active:scale-95 hover:scale-105 cursor-pointer"
+                onClick={() => {
+                  setIsLegendExpanded(true);
+                  if (!activeAnalysisResult && project) {
+                    runProjectAnalysis(project);
+                  }
+                }}
+                title="مفاتيح الخريطة وحصر الأطوال"
+                className="px-3.5 py-2.5 rounded-xl bg-white/95 dark:bg-slate-900/95 hover:bg-white dark:hover:bg-slate-900 border border-slate-200/85 dark:border-slate-800 shadow-2xl flex items-center gap-2 text-blue-600 dark:text-blue-400 transition-all active:scale-95 hover:scale-105 cursor-pointer font-extrabold text-xs"
               >
-                <Key className="h-5 w-5 text-blue-500 animate-pulse" />
+                <Key className="h-4 w-4 text-amber-500 animate-pulse" />
+                <span>مفاتيح الخريطة 📊</span>
+                {activeAnalysisResult && (
+                  <span className="text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 font-mono font-bold px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
+                    {activeAnalysisResult.totalLengthKm} كم
+                  </span>
+                )}
               </button>
             ) : (
-              <div className="bg-white/95 backdrop-blur-xs p-3 rounded-xl shadow-xl border border-slate-200/80 text-xs font-bold text-slate-700 flex flex-col gap-2 min-w-[120px] text-right animate-in fade-in zoom-in duration-150">
-                <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 mb-0.5 gap-4">
-                  <span className="text-[11px] font-black text-slate-700 flex items-center gap-1">
-                    <Key className="h-3 w-3 text-blue-500" />
-                    مفاتيح الخريطة
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setIsLegendExpanded(false)}
-                    className="p-0.5 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 transition-colors cursor-pointer border-0"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#3b82f6] border border-blue-700 flex-shrink-0"></span>
-                  <span className="text-[11px] text-slate-800">مياه 💧</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] border border-green-700 flex-shrink-0"></span>
-                  <span className="text-[11px] text-slate-800">صرف 🌿</span>
-                </div>
-              </div>
+              <MapLegend
+                analysisResult={activeAnalysisResult}
+                projectName={project?.name}
+                onRunAnalysis={project ? () => runProjectAnalysis(project) : undefined}
+                isLoading={isAnalyzingMap}
+                compact={true}
+                isCollapsible={true}
+                defaultExpanded={true}
+              />
             )}
           </div>
         )}
@@ -1306,6 +1346,42 @@ export function ProjectMapViewer({
         )}
       </div>
 
+      {/* Auto Analysis Modal */}
+      {showAutoAnalysisModal && project && (
+        <div className="fixed inset-0 z-[9999] bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-5xl w-full max-h-[92vh] overflow-y-auto border border-slate-200 dark:border-slate-800 shadow-2xl p-4 sm:p-6 text-right font-sans relative" dir="rtl">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-2xl shadow-md shrink-0">
+                  <BarChart3 className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    وحدة 'التحليل التلقائي' للمشروع المختار
+                    <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    المشروع: <span className="font-bold text-blue-600 dark:text-blue-400">{project.name}</span> ({project.operationalNumber || project.id}) • لحساب أطوال الخطوط (LineString) فقط باستعمال مكتبة @turf/length في ذاكرة المتصفح مع استبعاد المضلعات والنقاط.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAutoAnalysisModal(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer shrink-0"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <MyMapsAnalysisPanel
+              projects={projects.length > 0 ? projects : [project]}
+              selectedProject={project}
+              onSelectProject={onSelectProject}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

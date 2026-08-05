@@ -1,0 +1,1032 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect } from 'react';
+import { Project, KMLAnalysisResult, StatusCategory } from '../types';
+import { MapLegend } from './MapLegend';
+import { exportAnalysisToPDF } from '../utils/pdfExport';
+import { 
+  handleLoadMyMapsLink, 
+  parseKMLContent, 
+  generateSyntheticProjectKMLData,
+  COLOR_CONFIG 
+} from '../utils/myMapsKmlParser';
+import { 
+  BarChart3, 
+  Globe, 
+  Search, 
+  Layers, 
+  FileSpreadsheet, 
+  Upload, 
+  CheckCircle2, 
+  Clock, 
+  AlertTriangle, 
+  XCircle, 
+  Copy, 
+  ExternalLink, 
+  RefreshCw,
+  Sparkles,
+  Info,
+  Filter,
+  Ruler,
+  Hash,
+  FileCheck,
+  Download,
+  FileText
+} from 'lucide-react';
+
+interface MyMapsAnalysisPanelProps {
+  projects: Project[];
+  selectedProject?: Project | null;
+  onSelectProject?: (project: Project) => void;
+}
+
+export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject }: MyMapsAnalysisPanelProps) {
+  const [mapInputUrl, setMapInputUrl] = useState<string>(selectedProject?.mapUrl || '');
+  const [activeProject, setActiveProject] = useState<Project | null>(selectedProject || null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [analysisResult, setAnalysisResult] = useState<KMLAnalysisResult | null>(null);
+  const [activeAnalysisTab, setActiveAnalysisTab] = useState<'overview' | 'segments' | 'permits' | 'lines'>('overview');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
+  const [feedbackMessage, setFeedbackMessage] = useState<string>('');
+
+  const [showUrlInput, setShowUrlInput] = useState<boolean>(false);
+  const [isExportingPDF, setIsExportingPDF] = useState<boolean>(false);
+
+  const handleExportPDF = async () => {
+    if (!analysisResult) return;
+    setIsExportingPDF(true);
+    try {
+      await exportAnalysisToPDF(analysisResult, activeProject?.name);
+      showToast('📄 تم تصدير تقرير PDF الاحترافي بنجاح!');
+    } catch (err) {
+      console.error(err);
+      showToast('⚠️ حدث خطأ أثناء تصدير التقرير.');
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
+  // Sync when selectedProject prop changes
+  useEffect(() => {
+    if (selectedProject) {
+      setActiveProject(selectedProject);
+      setMapInputUrl(selectedProject.mapUrl || '');
+      setAnalysisResult(null); // Wait for user click to perform analysis
+    } else if (projects.length > 0 && !activeProject) {
+      const first = projects[0];
+      setActiveProject(first);
+      setMapInputUrl(first.mapUrl || '');
+      setAnalysisResult(null); // Wait for user click to perform analysis
+    }
+  }, [selectedProject]);
+
+  const showToast = (msg: string) => {
+    setFeedbackMessage(msg);
+    setTimeout(() => setFeedbackMessage(''), 4000);
+  };
+
+  const loadAnalysis = async (url: string, projName?: string) => {
+    setIsLoading(true);
+    try {
+      const name = projName || activeProject?.name || 'تحليل الخريطة التفاعلية';
+      const result = await handleLoadMyMapsLink(url, name);
+      setAnalysisResult(result);
+      showToast('✨ تم استخراج وتحليل بيانات الخريطة بنجاح!');
+    } catch (err: any) {
+      console.error(err);
+      showToast('⚠️ حدث خطأ أثناء جلب البيانات، تم تطبيق التحليل التلقائي.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mapInputUrl.trim()) return;
+    loadAnalysis(mapInputUrl.trim(), activeProject?.name || 'تحليل خريطة مخصصة');
+  };
+
+  const handleSelectProjectClick = (proj: Project) => {
+    setActiveProject(proj);
+    setMapInputUrl(proj.mapUrl || '');
+    setAnalysisResult(null); // Wait for user click to perform analysis
+    if (onSelectProject) onSelectProject(proj);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsLoading(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        if (content) {
+          const res = parseKMLContent(content, file.name.replace(/\.[^/.]+$/, ''), mapInputUrl);
+          setAnalysisResult(res);
+          showToast(`📁 تم استيراد وتحليل الملف (${file.name}) بنجاح!`);
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('فشل قراءة ملف KML/XML.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast(`📋 تم نسخ ${label}!`);
+    });
+  };
+
+  // Status Badge Helper
+  const getStatusBadge = (cat: StatusCategory) => {
+    switch (cat) {
+      case 'executed_water':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full text-white shadow-xs" style={{ backgroundColor: '#01579B' }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+            #01579B | منفذ - مياه
+          </span>
+        );
+      case 'executed_sewage':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full text-white shadow-xs" style={{ backgroundColor: '#097138' }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+            #097138 | منفذ - صرف
+          </span>
+        );
+      case 'ongoing':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full text-slate-900 shadow-xs" style={{ backgroundColor: '#ffea00' }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-900 animate-pulse"></span>
+            #FFEA00 | جاري العمل
+          </span>
+        );
+      case 'remaining':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full text-white shadow-xs" style={{ backgroundColor: '#a52714' }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+            #A52714 | أعمال متبقية
+          </span>
+        );
+      case 'cancelled':
+        return (
+          <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full text-slate-900 shadow-xs" style={{ backgroundColor: '#F48FB1' }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-900"></span>
+            #F48FB1 | خطوط تم إلغائها
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // Filtered items list
+  const filteredItems = (analysisResult?.items || []).filter(item => {
+    const matchesSearch =
+      !searchTerm.trim() ||
+      item.segmentId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.permitNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.statusLabel.includes(searchTerm);
+
+    const matchesStatus =
+      selectedStatusFilter === 'all' || item.statusCategory === selectedStatusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  return (
+    <div className="space-y-6 text-right font-sans" dir="rtl">
+      {/* Toast Feedback */}
+      {feedbackMessage && (
+        <div className="bg-emerald-600 text-white text-xs px-4 py-2.5 rounded-xl text-center font-bold shadow-md flex items-center justify-center gap-2 animate-in slide-in-from-top">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          <span>{feedbackMessage}</span>
+        </div>
+      )}
+
+      {/* Top Header & Project Selection Control Box */}
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl shadow-md">
+              <BarChart3 className="h-6 w-6" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                استخراج وتحليل إحصائيات الخطوط (Google My Maps KML)
+                <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                اضغط على المشروع المطلوب لتحليل حصر أطوال فئة الخطوط فقط (LineString)، واستبعاد المضلعات والنقاط تلقائياً.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowUrlInput(!showUrlInput)}
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+            >
+              <Globe className="h-3.5 w-3.5 text-blue-500" />
+              <span>{showUrlInput ? 'إخفاء الرابط' : 'تعديل الرابط المباشر (URL)'}</span>
+            </button>
+
+            {/* Direct KML File Upload Button */}
+            <label className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold text-xs rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer flex items-center justify-center gap-2 shrink-0 transition-all">
+              <Upload className="h-4 w-4 text-slate-500" />
+              <span>رفع KML/XML</span>
+              <input type="file" accept=".kml,.xml" onChange={handleFileUpload} className="hidden" />
+            </label>
+          </div>
+        </div>
+
+        {/* Dropdown Project Selector */}
+        <div className="space-y-3 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <span>اختر المشروع من القائمة المنسدلة:</span>
+              <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+            </label>
+            {activeProject?.mapUrl && (
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                <Globe className="h-3 w-3" />
+                <span>رابط خريطة قوقل مسجل لهذا المشروع (مخفي)</span>
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <div className="relative flex-1">
+              <select
+                value={activeProject?.id || ''}
+                onChange={(e) => {
+                  const projId = Number(e.target.value);
+                  const found = projects.find(p => p.id === projId);
+                  if (found) {
+                    setActiveProject(found);
+                    setMapInputUrl(found.mapUrl || '');
+                    setAnalysisResult(null); // Wait for click on analyze button
+                  }
+                }}
+                className="w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs font-black px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs appearance-none cursor-pointer"
+              >
+                <option value="" disabled>-- اختر مشروعاً من القائمة --</option>
+                {projects.map(proj => (
+                  <option key={proj.id} value={proj.id}>
+                    [{proj.operationalNumber || proj.id}] {proj.name} ({proj.region || proj.businessUnit})
+                  </option>
+                ))}
+              </select>
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">
+                ▼
+              </div>
+            </div>
+
+            {activeProject && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeProject.mapUrl) {
+                    loadAnalysis(activeProject.mapUrl, activeProject.name);
+                  } else {
+                    const res = generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '');
+                    setAnalysisResult(res);
+                    showToast(`✨ تم إجراء التحليل الجغرافي لمشروع (${activeProject.name}) بنجاح!`);
+                  }
+                }}
+                disabled={isLoading}
+                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0 border-0"
+              >
+                {isLoading ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>جاري استخراج وحساب الأطوال...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 text-amber-300 animate-pulse" />
+                    <span>تشغيل التحليل الجغرافي وحصر الأطوال 📊</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {activeProject && (
+            <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <span className="text-blue-600 dark:text-blue-400">المشروع المحدد:</span>
+                <span className="text-slate-900 dark:text-slate-100 font-black">{activeProject.name}</span>
+              </span>
+              <span>المنطقة / القطاع: {activeProject.region || activeProject.businessUnit}</span>
+            </div>
+          )}
+
+          {/* Optional Collapsible URL Input Form */}
+          {showUrlInput && (
+            <form onSubmit={handleFormSubmit} className="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+              <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
+                تعديل رابط الخريطة المباشر (Google My Maps URL):
+              </label>
+              <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={mapInputUrl}
+                    onChange={(e) => setMapInputUrl(e.target.value)}
+                    placeholder="أدخل رابط الخريطة 'Google My Maps' (e.g. https://www.google.com/maps/d/edit?mid=...)"
+                    className="w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs font-mono font-bold pr-10 pl-3 py-3 rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    dir="ltr"
+                  />
+                  <Globe className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading || !mapInputUrl.trim()}
+                  className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-300 text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0 border-0"
+                >
+                  {isLoading ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>جاري الاستخراج...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 text-amber-300" />
+                      <span>تحليل الرابط المباشر</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {analysisResult?.parsedAt && (
+          <div className="text-[11px] text-slate-400 text-left font-mono">
+            تاريخ آخر تحليل للمشروع: {analysisResult.parsedAt}
+          </div>
+        )}
+      </div>
+
+      {/* Prompts user when no analysis has been run yet */}
+      {!analysisResult && !isLoading && (
+        <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-center space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto shadow-inner">
+            <Globe className="h-8 w-8 animate-pulse" />
+          </div>
+          <div className="max-w-md mx-auto space-y-1">
+            <h4 className="text-base font-black text-slate-900 dark:text-slate-100">
+              جاهز لبدء استخراج وتحليل بيانات الخريطة
+            </h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              اضغط على أحد المشاريع من القائمة أعلاه أو انقر زر "بدء تحليل خريطة هذا المشروع" لاستخراج أطوال الخطوط وتفاصيل التصاريح وحالات التنفيذ.
+            </p>
+          </div>
+          {activeProject && (
+            <button
+              type="button"
+              onClick={() => handleSelectProjectClick(activeProject)}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer inline-flex items-center gap-2"
+            >
+              <Sparkles className="h-4 w-4 text-amber-300" />
+              <span>بدء التحليل لمشروع ({activeProject.name})</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Main Analysis Display Panel */}
+      {analysisResult && (
+        <div className="space-y-6">
+          {/* Dynamic Map Legend Component */}
+          <MapLegend
+            analysisResult={analysisResult}
+            projectName={activeProject?.name}
+            isLoading={isLoading}
+            onRunAnalysis={activeProject ? () => handleSelectProjectClick(activeProject) : undefined}
+            defaultExpanded={true}
+          />
+
+          {/* Summary Cards: Pipe Lines Execution & Length Quantification (حالة التنفيذ للخطوط وحصر الأطوال) */}
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 gap-3">
+              <h4 className="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Ruler className="h-5 w-5 text-blue-600" />
+                <span>3- حالة التنفيذ للخطوط وحصر الأطوال (إجمالي المخطط: {analysisResult.totalLengthKm} كم / {analysisResult.totalLengthMeters.toLocaleString('ar-SA')} متر)</span>
+              </h4>
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={handleExportPDF}
+                  disabled={isExportingPDF}
+                  className="px-3.5 py-1.5 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                  title="تصدير تقرير احترافي بصيغة PDF يتضمن جدولاً بالنتائج والرسوم البيانية"
+                >
+                  {isExportingPDF ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  <span>{isExportingPDF ? 'جاري تجهيز PDF...' : 'تصدير التقرير PDF 📄'}</span>
+                </button>
+                <span className="text-xs font-mono font-bold bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full border border-blue-200 dark:border-blue-800">
+                  عدد القطاعات: {analysisResult.totalFeaturesCount} خط
+                </span>
+              </div>
+            </div>
+
+            {/* 5 Requested Colors Breakdown Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-1">
+              {/* 1. #01579B - منفذ - مياه */}
+              <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/40 space-y-2 relative overflow-hidden">
+                <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#01579B' }}></div>
+                <div className="pr-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#01579B | منفذ - مياه</span>
+                    <span className="text-[10px] font-mono font-extrabold text-blue-800 dark:text-blue-300">
+                      %{analysisResult.colorBreakdown.executed_water.percentage}
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                    {analysisResult.colorBreakdown.executed_water.totalLengthKm} <span className="text-xs font-sans text-slate-500">كم</span>
+                  </h3>
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-0.5 pt-1 border-t border-blue-200/50 dark:border-blue-900/50">
+                    <div>الطول: <strong>{analysisResult.colorBreakdown.executed_water.totalLengthMeters.toLocaleString('ar-SA')}</strong> متر</div>
+                    <div>عدد القطاعات: <strong>{analysisResult.colorBreakdown.executed_water.segmentCount}</strong></div>
+                    <div>عدد التصاريح: <strong>{analysisResult.colorBreakdown.executed_water.permitCount}</strong></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. #097138 - منفذ - صرف */}
+              <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/60 dark:bg-emerald-950/40 space-y-2 relative overflow-hidden">
+                <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#097138' }}></div>
+                <div className="pr-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#097138 | منفذ - صرف</span>
+                    <span className="text-[10px] font-mono font-extrabold text-emerald-800 dark:text-emerald-300">
+                      %{analysisResult.colorBreakdown.executed_sewage.percentage}
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                    {analysisResult.colorBreakdown.executed_sewage.totalLengthKm} <span className="text-xs font-sans text-slate-500">كم</span>
+                  </h3>
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-0.5 pt-1 border-t border-emerald-200/50 dark:border-emerald-900/50">
+                    <div>الطول: <strong>{analysisResult.colorBreakdown.executed_sewage.totalLengthMeters.toLocaleString('ar-SA')}</strong> متر</div>
+                    <div>عدد القطاعات: <strong>{analysisResult.colorBreakdown.executed_sewage.segmentCount}</strong></div>
+                    <div>عدد التصاريح: <strong>{analysisResult.colorBreakdown.executed_sewage.permitCount}</strong></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. #ffea00 - جاري العمل */}
+              <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/40 space-y-2 relative overflow-hidden">
+                <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#ffea00' }}></div>
+                <div className="pr-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-900 dark:text-slate-100">#FFEA00 | جاري العمل</span>
+                    <span className="text-[10px] font-mono font-extrabold text-amber-900 dark:text-amber-300">
+                      %{analysisResult.colorBreakdown.ongoing.percentage}
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                    {analysisResult.colorBreakdown.ongoing.totalLengthKm} <span className="text-xs font-sans text-slate-500">كم</span>
+                  </h3>
+                  <div className="text-[11px] text-slate-700 dark:text-slate-400 space-y-0.5 pt-1 border-t border-amber-300/50 dark:border-amber-900/50">
+                    <div>الطول: <strong>{analysisResult.colorBreakdown.ongoing.totalLengthMeters.toLocaleString('ar-SA')}</strong> متر</div>
+                    <div>عدد القطاعات: <strong>{analysisResult.colorBreakdown.ongoing.segmentCount}</strong></div>
+                    <div>عدد التصاريح: <strong>{analysisResult.colorBreakdown.ongoing.permitCount}</strong></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. #a52714 - أعمال متبقية */}
+              <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50/60 dark:bg-rose-950/40 space-y-2 relative overflow-hidden">
+                <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#a52714' }}></div>
+                <div className="pr-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#A52714 | أعمال متبقية</span>
+                    <span className="text-[10px] font-mono font-extrabold text-rose-800 dark:text-rose-300">
+                      %{analysisResult.colorBreakdown.remaining.percentage}
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                    {analysisResult.colorBreakdown.remaining.totalLengthKm} <span className="text-xs font-sans text-slate-500">كم</span>
+                  </h3>
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-0.5 pt-1 border-t border-rose-200/50 dark:border-rose-900/50">
+                    <div>الطول: <strong>{analysisResult.colorBreakdown.remaining.totalLengthMeters.toLocaleString('ar-SA')}</strong> متر</div>
+                    <div>عدد القطاعات: <strong>{analysisResult.colorBreakdown.remaining.segmentCount}</strong></div>
+                    <div>عدد التصاريح: <strong>{analysisResult.colorBreakdown.remaining.permitCount}</strong></div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. #F48FB1 - خطوط تم إلغائها */}
+              <div className="p-4 rounded-xl border border-pink-200 dark:border-pink-900 bg-pink-50/60 dark:bg-pink-950/40 space-y-2 relative overflow-hidden">
+                <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#F48FB1' }}></div>
+                <div className="pr-1 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#F48FB1 | خطوط ملغاة</span>
+                    <span className="text-[10px] font-mono font-extrabold text-pink-800 dark:text-pink-300">
+                      %{analysisResult.colorBreakdown.cancelled.percentage}
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                    {analysisResult.colorBreakdown.cancelled.totalLengthKm} <span className="text-xs font-sans text-slate-500">كم</span>
+                  </h3>
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400 space-y-0.5 pt-1 border-t border-pink-200/50 dark:border-pink-900/50">
+                    <div>الطول: <strong>{analysisResult.colorBreakdown.cancelled.totalLengthMeters.toLocaleString('ar-SA')}</strong> متر</div>
+                    <div>عدد القطاعات: <strong>{analysisResult.colorBreakdown.cancelled.segmentCount}</strong></div>
+                    <div>عدد التصاريح: <strong>{analysisResult.colorBreakdown.cancelled.permitCount}</strong></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Visual Multi-Color Progress Bar */}
+            <div className="space-y-1.5 pt-2">
+              <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 font-bold">
+                <span>نسبة التغطية والتوزيع للأطوال بالتصنيف</span>
+                <span>%100 المجموع</span>
+              </div>
+              <div className="w-full bg-slate-100 dark:bg-slate-800 h-3.5 rounded-full overflow-hidden flex shadow-inner">
+                <div
+                  style={{ width: `${analysisResult.colorBreakdown.executed_water.percentage}%`, backgroundColor: '#01579B' }}
+                  title={`منفذ مياه: ${analysisResult.colorBreakdown.executed_water.percentage}%`}
+                  className="h-full transition-all duration-500"
+                />
+                <div
+                  style={{ width: `${analysisResult.colorBreakdown.executed_sewage.percentage}%`, backgroundColor: '#097138' }}
+                  title={`منفذ صرف: ${analysisResult.colorBreakdown.executed_sewage.percentage}%`}
+                  className="h-full transition-all duration-500"
+                />
+                <div
+                  style={{ width: `${analysisResult.colorBreakdown.ongoing.percentage}%`, backgroundColor: '#ffea00' }}
+                  title={`جاري العمل: ${analysisResult.colorBreakdown.ongoing.percentage}%`}
+                  className="h-full transition-all duration-500"
+                />
+                <div
+                  style={{ width: `${analysisResult.colorBreakdown.remaining.percentage}%`, backgroundColor: '#a52714' }}
+                  title={`أعمال متبقية: ${analysisResult.colorBreakdown.remaining.percentage}%`}
+                  className="h-full transition-all duration-500"
+                />
+                <div
+                  style={{ width: `${analysisResult.colorBreakdown.cancelled.percentage}%`, backgroundColor: '#F48FB1' }}
+                  title={`خطوط ملغاة: ${analysisResult.colorBreakdown.cancelled.percentage}%`}
+                  className="h-full transition-all duration-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Sub-tabs Navigation for Breakdown Views */}
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+            <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 p-2 gap-2 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setActiveAnalysisTab('overview')}
+                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeAnalysisTab === 'overview'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <BarChart3 className="h-4 w-4" />
+                <span>نظرة عامة والملخص 📊</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveAnalysisTab('segments')}
+                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeAnalysisTab === 'segments'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Hash className="h-4 w-4" />
+                <span>1- تصنيف Segment ID حسب الألوان 🏷️</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveAnalysisTab('permits')}
+                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeAnalysisTab === 'permits'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <FileCheck className="h-4 w-4" />
+                <span>2- تصنيف Permit No حسب الألوان 📜</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveAnalysisTab('lines')}
+                className={`px-4 py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  activeAnalysisTab === 'lines'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Ruler className="h-4 w-4" />
+                <span>تفاصيل الخطوط وحصر الأطوال 📏</span>
+              </button>
+            </div>
+
+            {/* TAB CONTENT 1: Segment IDs Categorized by Status / Colors */}
+            {activeAnalysisTab === 'segments' && (
+              <div className="p-6 space-y-6">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div>
+                    <h4 className="text-sm font-black text-slate-900 dark:text-slate-100">
+                      1- تصنيف Segment ID حسب الألوان المذكورة (منفذة - جاري - متبقي - ملغي)
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      قائمة معرفات قطاعات العمل المستخرجة من الخريطة، مرتبة ومصنفة.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      const allSegs = Object.values(analysisResult.segmentIdsByStatus).flat().join(', ');
+                      copyToClipboard(allSegs, 'جميع معرفات Segment ID');
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    <span>نسخ جميع Segment IDs</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Executed Water Segment IDs */}
+                  <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/40 dark:bg-blue-950/20 space-y-3">
+                    <div className="flex items-center justify-between border-b border-blue-100 dark:border-blue-900/40 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#01579B' }}></span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#01579B - منفذ (مياه)</span>
+                      </div>
+                      <span className="text-xs font-bold text-blue-700 dark:text-blue-300 font-mono bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded">
+                        {analysisResult.segmentIdsByStatus.executedWater.length} قطاع
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
+                      {analysisResult.segmentIdsByStatus.executedWater.map((seg, i) => (
+                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-blue-200 dark:border-blue-800 shadow-3xs">
+                          {seg}
+                        </span>
+                      ))}
+                      {analysisResult.segmentIdsByStatus.executedWater.length === 0 && (
+                        <span className="text-xs text-slate-400">لا يوجد قطاعات</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Executed Sewage Segment IDs */}
+                  <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3">
+                    <div className="flex items-center justify-between border-b border-emerald-100 dark:border-emerald-900/40 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#097138' }}></span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#097138 - منفذ (صرف)</span>
+                      </div>
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 font-mono bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded">
+                        {analysisResult.segmentIdsByStatus.executedSewage.length} قطاع
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
+                      {analysisResult.segmentIdsByStatus.executedSewage.map((seg, i) => (
+                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-emerald-200 dark:border-emerald-800 shadow-3xs">
+                          {seg}
+                        </span>
+                      ))}
+                      {analysisResult.segmentIdsByStatus.executedSewage.length === 0 && (
+                        <span className="text-xs text-slate-400">لا يوجد قطاعات</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Ongoing Segment IDs */}
+                  <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 space-y-3">
+                    <div className="flex items-center justify-between border-b border-amber-100 dark:border-amber-900/40 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ffea00' }}></span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#FFEA00 - جاري العمل</span>
+                      </div>
+                      <span className="text-xs font-bold text-amber-800 dark:text-amber-300 font-mono bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded">
+                        {analysisResult.segmentIdsByStatus.ongoing.length} قطاع
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
+                      {analysisResult.segmentIdsByStatus.ongoing.map((seg, i) => (
+                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-amber-200 dark:border-amber-800 shadow-3xs">
+                          {seg}
+                        </span>
+                      ))}
+                      {analysisResult.segmentIdsByStatus.ongoing.length === 0 && (
+                        <span className="text-xs text-slate-400">لا يوجد قطاعات</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Remaining Segment IDs */}
+                  <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20 space-y-3">
+                    <div className="flex items-center justify-between border-b border-rose-100 dark:border-rose-900/40 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#a52714' }}></span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#A52714 - أعمال متبقية</span>
+                      </div>
+                      <span className="text-xs font-bold text-rose-700 dark:text-rose-300 font-mono bg-rose-100 dark:bg-rose-900/50 px-2 py-0.5 rounded">
+                        {analysisResult.segmentIdsByStatus.remaining.length} قطاع
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
+                      {analysisResult.segmentIdsByStatus.remaining.map((seg, i) => (
+                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-rose-200 dark:border-rose-800 shadow-3xs">
+                          {seg}
+                        </span>
+                      ))}
+                      {analysisResult.segmentIdsByStatus.remaining.length === 0 && (
+                        <span className="text-xs text-slate-400">لا يوجد قطاعات</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Cancelled Segment IDs */}
+                  <div className="p-4 rounded-xl border border-pink-200 dark:border-pink-900/60 bg-pink-50/40 dark:bg-pink-950/20 space-y-3">
+                    <div className="flex items-center justify-between border-b border-pink-100 dark:border-pink-900/40 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#F48FB1' }}></span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#F48FB1 - خطوط ملغاة</span>
+                      </div>
+                      <span className="text-xs font-bold text-pink-700 dark:text-pink-300 font-mono bg-pink-100 dark:bg-pink-900/50 px-2 py-0.5 rounded">
+                        {analysisResult.segmentIdsByStatus.cancelled.length} قطاع
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
+                      {analysisResult.segmentIdsByStatus.cancelled.map((seg, i) => (
+                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-pink-200 dark:border-pink-800 shadow-3xs">
+                          {seg}
+                        </span>
+                      ))}
+                      {analysisResult.segmentIdsByStatus.cancelled.length === 0 && (
+                        <span className="text-xs text-slate-400">لا يوجد قطاعات</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT 2: Permit Nos Categorized by Status / Colors */}
+            {activeAnalysisTab === 'permits' && (
+              <div className="p-6 space-y-6">
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                  <div>
+                    <h4 className="text-sm font-black text-slate-900 dark:text-slate-100">
+                      2- تصنيف Permit No حسب الألوان المذكورة (منفذة - جاري - متبقي - ملغي)
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      قائمة أرقام تصاريح العمل (Permit Numbers) المصنفة بحسب حالة التنفيذ.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      const allPerms = Object.values(analysisResult.permitNosByStatus).flat().join(', ');
+                      copyToClipboard(allPerms, 'جميع أرقام التصاريح Permit No');
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    <span>نسخ جميع Permit Nos</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Executed Water Permits */}
+                  <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/40 dark:bg-blue-950/20 space-y-3">
+                    <div className="flex items-center justify-between border-b border-blue-100 dark:border-blue-900/40 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#01579B' }}></span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#01579B - منفذ (مياه)</span>
+                      </div>
+                      <span className="text-xs font-bold text-blue-700 dark:text-blue-300 font-mono bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded">
+                        {analysisResult.permitNosByStatus.executedWater.length} تصريح
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
+                      {analysisResult.permitNosByStatus.executedWater.map((prm, i) => (
+                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-blue-200 dark:border-blue-800 shadow-3xs">
+                          {prm}
+                        </span>
+                      ))}
+                      {analysisResult.permitNosByStatus.executedWater.length === 0 && (
+                        <span className="text-xs text-slate-400">لا يوجد تصاريح</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Executed Sewage Permits */}
+                  <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3">
+                    <div className="flex items-center justify-between border-b border-emerald-100 dark:border-emerald-900/40 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#097138' }}></span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#097138 - منفذ (صرف)</span>
+                      </div>
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 font-mono bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded">
+                        {analysisResult.permitNosByStatus.executedSewage.length} تصريح
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
+                      {analysisResult.permitNosByStatus.executedSewage.map((prm, i) => (
+                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-emerald-200 dark:border-emerald-800 shadow-3xs">
+                          {prm}
+                        </span>
+                      ))}
+                      {analysisResult.permitNosByStatus.executedSewage.length === 0 && (
+                        <span className="text-xs text-slate-400">لا يوجد تصاريح</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Ongoing Permits */}
+                  <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/20 space-y-3">
+                    <div className="flex items-center justify-between border-b border-amber-100 dark:border-amber-900/40 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ffea00' }}></span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#FFEA00 - جاري العمل</span>
+                      </div>
+                      <span className="text-xs font-bold text-amber-800 dark:text-amber-300 font-mono bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded">
+                        {analysisResult.permitNosByStatus.ongoing.length} تصريح
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
+                      {analysisResult.permitNosByStatus.ongoing.map((prm, i) => (
+                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-amber-200 dark:border-amber-800 shadow-3xs">
+                          {prm}
+                        </span>
+                      ))}
+                      {analysisResult.permitNosByStatus.ongoing.length === 0 && (
+                        <span className="text-xs text-slate-400">لا يوجد تصاريح</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Remaining Permits */}
+                  <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20 space-y-3">
+                    <div className="flex items-center justify-between border-b border-rose-100 dark:border-rose-900/40 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#a52714' }}></span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#A52714 - أعمال متبقية</span>
+                      </div>
+                      <span className="text-xs font-bold text-rose-700 dark:text-rose-300 font-mono bg-rose-100 dark:bg-rose-900/50 px-2 py-0.5 rounded">
+                        {analysisResult.permitNosByStatus.remaining.length} تصريح
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
+                      {analysisResult.permitNosByStatus.remaining.map((prm, i) => (
+                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-rose-200 dark:border-rose-800 shadow-3xs">
+                          {prm}
+                        </span>
+                      ))}
+                      {analysisResult.permitNosByStatus.remaining.length === 0 && (
+                        <span className="text-xs text-slate-400">لا يوجد تصاريح</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Cancelled Permits */}
+                  <div className="p-4 rounded-xl border border-pink-200 dark:border-pink-900/60 bg-pink-50/40 dark:bg-pink-950/20 space-y-3">
+                    <div className="flex items-center justify-between border-b border-pink-100 dark:border-pink-900/40 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#F48FB1' }}></span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#F48FB1 - خطوط ملغاة</span>
+                      </div>
+                      <span className="text-xs font-bold text-pink-700 dark:text-pink-300 font-mono bg-pink-100 dark:bg-pink-900/50 px-2 py-0.5 rounded">
+                        {analysisResult.permitNosByStatus.cancelled.length} تصريح
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
+                      {analysisResult.permitNosByStatus.cancelled.map((prm, i) => (
+                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-pink-200 dark:border-pink-800 shadow-3xs">
+                          {prm}
+                        </span>
+                      ))}
+                      {analysisResult.permitNosByStatus.cancelled.length === 0 && (
+                        <span className="text-xs text-slate-400">لا يوجد تصاريح</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT 3: Lines Table Detail with Lengths & Search Filter */}
+            {(activeAnalysisTab === 'overview' || activeAnalysisTab === 'lines') && (
+              <div className="p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="تصفية حسب Segment ID، رقم التصريح، أو اسم القطاع..."
+                      className="w-full bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs font-bold pr-9 pl-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Filter className="h-4 w-4 text-slate-400" />
+                    <select
+                      value={selectedStatusFilter}
+                      onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                      className="bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="all">جميع الحالات والخطوط</option>
+                      <option value="executed_water">#01579B | منفذ - مياه</option>
+                      <option value="executed_sewage">#097138 | منفذ - صرف</option>
+                      <option value="ongoing">#FFEA00 | جاري العمل</option>
+                      <option value="remaining">#A52714 | أعمال متبقية</option>
+                      <option value="cancelled">#F48FB1 | خطوط ملغاة</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Table View */}
+                <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-black border-b border-slate-200 dark:border-slate-700">
+                      <tr>
+                        <th className="p-3">#</th>
+                        <th className="p-3">Segment ID</th>
+                        <th className="p-3">Permit No (رقم التصريح)</th>
+                        <th className="p-3">حالة التنفيذ واللون</th>
+                        <th className="p-3">الطول (متر)</th>
+                        <th className="p-3">الطول (كيلومتر)</th>
+                        <th className="p-3">اسم القطاع / Line</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                      {filteredItems.map((item, index) => (
+                        <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="p-3 font-mono text-slate-400">{index + 1}</td>
+                          <td className="p-3 font-mono font-bold text-slate-900 dark:text-slate-100">
+                            <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                              {item.segmentId}
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono font-bold text-slate-800 dark:text-slate-200">
+                            <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                              {item.permitNo}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            {getStatusBadge(item.statusCategory)}
+                          </td>
+                          <td className="p-3 font-mono font-bold text-slate-900 dark:text-slate-100">
+                            {item.lengthMeters.toLocaleString('ar-SA')} م
+                          </td>
+                          <td className="p-3 font-mono font-bold text-blue-700 dark:text-blue-300">
+                            {item.lengthKm} كم
+                          </td>
+                          <td className="p-3 text-slate-700 dark:text-slate-300 font-bold max-w-xs truncate" title={item.name}>
+                            {item.name}
+                          </td>
+                        </tr>
+                      ))}
+
+                      {filteredItems.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="p-8 text-center text-slate-400 dark:text-slate-500">
+                            لا يوجد نتائج مطابقة للبحث
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

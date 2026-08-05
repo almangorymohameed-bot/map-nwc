@@ -1503,7 +1503,13 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'stats' && <DashboardStats projects={filteredProjects} />}
+          {activeTab === 'stats' && (
+            <DashboardStats
+              projects={filteredProjects}
+              selectedProject={selectedProject}
+              onSelectProject={(proj) => setSelectedProjectId(proj.id)}
+            />
+          )}
           {activeTab === 'layers' && <ProjectLayersViewer currentUser={currentUser} />}
           {activeTab === 'users' && currentUser.role === 'admin' && <UserManagement users={users} currentUser={currentUser} onSaveUser={handleSaveUserPermissions} onDeleteUser={handleDeleteUser} projects={projects} />}
         </div>
