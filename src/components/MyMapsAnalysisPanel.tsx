@@ -16,6 +16,7 @@ import {
 import { compareKMLAnalyses } from '../utils/diffEngine';
 import { ReportHistoryStore } from '../utils/supabaseSetup';
 import { ProjectDiffModal } from './ProjectDiffModal';
+import { ChangeReportModal } from './ChangeReportModal';
 import { 
   BarChart3, 
   Globe, 
@@ -1138,11 +1139,10 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
       )}
       {/* Project Change Tracking & Historical Comparison Modal */}
       {activeProject && (
-        <ProjectDiffModal
+        <ChangeReportModal
           isOpen={isDiffModalOpen}
           onClose={() => setIsDiffModalOpen(false)}
           diffResult={currentDiffResult}
-          projectId={activeProject.id}
           projectName={activeProject.name}
         />
       )}
