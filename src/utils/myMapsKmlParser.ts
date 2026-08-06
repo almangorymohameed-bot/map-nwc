@@ -175,14 +175,27 @@ export function matchStatusCategory(colorHex: string, textContext: string = ''):
 }
 
 /**
- * Fetch a URL using multiple CORS proxy fallbacks
+ * Fetch a URL using server proxy endpoint first, with fallback proxies
  */
 async function fetchUrlWithProxy(targetUrl: string): Promise<string> {
+  // 1. Try our internal server-side proxy route first (bypasses browser CORS completely)
+  try {
+    const internalProxyUrl = `/api/fetch-kml?url=${encodeURIComponent(targetUrl)}`;
+    const resp = await fetch(internalProxyUrl);
+    if (resp.ok) {
+      const text = await resp.text();
+      if (text && (text.includes('<kml') || text.includes('<Placemark') || text.includes('<Document') || text.includes('<xml'))) {
+        return text;
+      }
+    }
+  } catch (e) {
+    // Internal proxy route not available or failed, try public proxies
+  }
+
+  // 2. Public CORS proxy generators fallback
   const proxyGenerators = [
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-    (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`,
     (u: string) => u
   ];
 
@@ -197,7 +210,7 @@ async function fetchUrlWithProxy(targetUrl: string): Promise<string> {
         }
       }
     } catch (e) {
-      // try next proxy
+      // try next proxy silently
     }
   }
 
