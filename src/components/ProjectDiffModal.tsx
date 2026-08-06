@@ -1,0 +1,554 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState } from 'react';
+import { ProjectDiffResult, HistoricalReport, ProjectChangelogRecord } from '../types';
+import { 
+  X, 
+  Sparkles, 
+  Clock, 
+  Calendar, 
+  Ruler, 
+  FileText, 
+  AlertCircle, 
+  CheckCircle2, 
+  ArrowRightLeft, 
+  HardHat, 
+  FileCode, 
+  Copy, 
+  Check, 
+  Database, 
+  History,
+  TrendingUp,
+  TrendingDown,
+  Layers,
+  Award
+} from 'lucide-react';
+import { SUPABASE_SQL_SCHEMA, SUPABASE_EDGE_FUNCTION_CODE, ReportHistoryStore } from '../utils/supabaseSetup';
+
+interface ProjectDiffModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  diffResult: ProjectDiffResult | null;
+  projectId: number;
+  projectName: string;
+}
+
+export function ProjectDiffModal({
+  isOpen,
+  onClose,
+  diffResult,
+  projectId,
+  projectName
+}: ProjectDiffModalProps) {
+  const [activeTab, setActiveTab] = useState<'summary' | 'yellowLines' | 'permits' | 'lengths' | 'history' | 'sql'>('summary');
+  const [copiedSql, setCopiedSql] = useState<boolean>(false);
+  const [copiedEdge, setCopiedEdge] = useState<boolean>(false);
+
+  if (!isOpen || !diffResult) return null;
+
+  const historyList: HistoricalReport[] = ReportHistoryStore.getHistoricalReports(projectId);
+  const changelogList: ProjectChangelogRecord[] = ReportHistoryStore.getChangelogs(projectId);
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 2500);
+  };
+
+  const handleCopyEdge = () => {
+    navigator.clipboard.writeText(SUPABASE_EDGE_FUNCTION_CODE);
+    setCopiedEdge(true);
+    setTimeout(() => setCopiedEdge(false), 2500);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-4 overflow-y-auto animate-fadeIn">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-5xl overflow-hidden my-auto flex flex-col max-h-[90vh]">
+        
+        {/* Header */}
+        <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 p-6 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-blue-600/30 rounded-2xl border border-blue-400/30">
+              <ArrowRightLeft className="h-6 w-6 text-blue-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-bold tracking-tight text-white">
+                  نافذة مقارنة التغيرات والتقرير التاريخي للمشروع
+                </h2>
+                {diffResult.hasChanges ? (
+                  <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold rounded-full flex items-center gap-1">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    تغيرات جديدة مقتفية
+                  </span>
+                ) : (
+                  <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold rounded-full flex items-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    مطابق للتقرير السابق
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-300 mt-1 flex items-center gap-3">
+                <span>المشروع: <strong className="text-white">{projectName}</strong></span>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Calendar className="h-3.5 w-3.5 text-blue-400" />
+                  تاريخ التحليل الحالي: {diffResult.currentReportDate}
+                </span>
+                <span>•</span>
+                <span className="text-slate-400">المرجع السابق: {diffResult.previousReportDate}</span>
+              </p>
+            </div>
+          </div>
+          
+          <button
+            onClick={onClose}
+            className="p-2.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-all cursor-pointer border border-slate-700"
+            title="إغلاق"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Top Metric KPI Highlights Bar */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800 shrink-0">
+          <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">فرق الأطوال الكلية</p>
+              <p className="text-lg font-black text-slate-900 dark:text-white font-mono mt-0.5 dir-ltr text-right">
+                {diffResult.totalLengthDiffMeters > 0 ? `+${diffResult.totalLengthDiffMeters}` : diffResult.totalLengthDiffMeters} م
+              </p>
+            </div>
+            <div className={`p-2.5 rounded-xl ${diffResult.totalLengthDiffMeters >= 0 ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'}`}>
+              <Ruler className="h-5 w-5" />
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">تحديث مرحلة الحفرية (#ffea00)</p>
+              <p className="text-lg font-black text-amber-600 dark:text-amber-400 font-mono mt-0.5">
+                {diffResult.yellowLineStageChanges.length} قطاع
+              </p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+              <HardHat className="h-5 w-5" />
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">الفسوح والترخيص المضافة</p>
+              <p className="text-lg font-black text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
+                +{diffResult.addedPermits.length} رخصة
+              </p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+              <Award className="h-5 w-5" />
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">إجمالي التقارير التاريخية</p>
+              <p className="text-lg font-black text-indigo-600 dark:text-indigo-400 font-mono mt-0.5">
+                {historyList.length} تقارير
+              </p>
+            </div>
+            <div className="p-2.5 rounded-xl bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+              <History className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs Header Navigation */}
+        <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-950/70 px-4 pt-3 gap-2 overflow-x-auto shrink-0 scrollbar-none">
+          <button
+            onClick={() => setActiveTab('summary')}
+            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 cursor-pointer border-t border-x ${activeTab === 'summary' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 border-slate-200 dark:border-slate-800 shadow-sm' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>ملخص التغيرات</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('yellowLines')}
+            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 cursor-pointer border-t border-x ${activeTab === 'yellowLines' ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 border-slate-200 dark:border-slate-800 shadow-sm' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+          >
+            <HardHat className="h-4 w-4" />
+            <span>مراحل الحفرية (#ffea00)</span>
+            {diffResult.yellowLineStageChanges.length > 0 && (
+              <span className="px-1.5 py-0.5 bg-amber-500 text-slate-950 text-[10px] font-black rounded-full">
+                {diffResult.yellowLineStageChanges.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('permits')}
+            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 cursor-pointer border-t border-x ${activeTab === 'permits' ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 border-slate-200 dark:border-slate-800 shadow-sm' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+          >
+            <Award className="h-4 w-4" />
+            <span>الفسوح والترخيص</span>
+            {diffResult.addedPermits.length > 0 && (
+              <span className="px-1.5 py-0.5 bg-emerald-500 text-white text-[10px] font-black rounded-full">
+                {diffResult.addedPermits.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('lengths')}
+            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 cursor-pointer border-t border-x ${activeTab === 'lengths' ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 border-slate-200 dark:border-slate-800 shadow-sm' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+          >
+            <Ruler className="h-4 w-4" />
+            <span>فروقات الأطوال والشبكات</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 cursor-pointer border-t border-x ${activeTab === 'history' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 border-slate-200 dark:border-slate-800 shadow-sm' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+          >
+            <History className="h-4 w-4" />
+            <span>الأرشيف التاريخي ({historyList.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('sql')}
+            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 cursor-pointer border-t border-x ${activeTab === 'sql' ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 border-slate-200 dark:border-slate-800 shadow-sm' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+          >
+            <Database className="h-4 w-4" />
+            <span>استعلامات Supabase & Cron</span>
+          </button>
+        </div>
+
+        {/* Tab Content Body */}
+        <div className="p-6 overflow-y-auto grow space-y-6 bg-white dark:bg-slate-900">
+          
+          {/* TAB 1: SUMMARY */}
+          {activeTab === 'summary' && (
+            <div className="space-y-5">
+              <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/60 flex items-start gap-3">
+                <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-blue-950 dark:text-blue-200 leading-relaxed">
+                  <p className="font-bold text-sm mb-1">نتيجة فحص الفروقات التلقائية (Diff Check):</p>
+                  يتم مقارنة كل خريطة مستخرجة حديثاً بآخر تقرير محفوظ للمشروع باليوم والتاريخ. يتضمن الفحص أطوال الخطوط، الفسوح والترخيص، ومراحل الحفرية للخطوط الصفراء جاري العمل (#ffea00).
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-blue-600" />
+                  <span>قائمة التغيرات والملخص التنفيذي:</span>
+                </h3>
+
+                <div className="space-y-2">
+                  {diffResult.summaryMessages.map((msg, idx) => (
+                    <div 
+                      key={idx}
+                      className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 flex items-center gap-3 text-xs font-medium text-slate-800 dark:text-slate-200"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
+                      <span>{msg}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: YELLOW LINES STAGE (#ffea00) */}
+          {activeTab === 'yellowLines' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 flex items-start gap-3">
+                <HardHat className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-950 dark:text-amber-200 leading-relaxed">
+                  <p className="font-bold text-sm mb-0.5">تعقب مراحل الحفرية لخطوط جاري العمل باللون الأصفر (#ffea00):</p>
+                  يستخرج النظام بيان <code className="bg-amber-200/60 dark:bg-amber-900/80 px-1 py-0.5 rounded font-mono">Stage</code> من بيانات الخريطة ويرصد تغير حالة القطاع (مثل: وضع الصبات، التمديد، الدفان، أو السفلتة).
+                </div>
+              </div>
+
+              {diffResult.yellowLineStageChanges.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-xs">
+                  <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
+                  <p className="font-bold text-slate-700 dark:text-slate-300 text-sm">لم يتغير وضع أي قطاع حفرية للخطوط الصفراء في هذا التحليل</p>
+                  جميع مراحل الحفرية لقطاعات الخطوط مطابقة للتقرير السابق.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {diffResult.yellowLineStageChanges.map((yc, idx) => (
+                    <div 
+                      key={idx}
+                      className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-900/60 shadow-sm space-y-2 relative overflow-hidden"
+                    >
+                      <div className="absolute top-0 right-0 left-0 h-1 bg-amber-400"></div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-black font-mono text-xs text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50 px-2.5 py-1 rounded-lg">
+                          قطاع: {yc.segmentId || `خط #${idx + 1}`}
+                        </span>
+                        {yc.permitNo && (
+                          <span className="text-[11px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">
+                            تصريح: {yc.permitNo}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs font-bold text-slate-900 dark:text-white">
+                        {yc.featureName}
+                      </p>
+
+                      <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-slate-900/80 border border-amber-200 dark:border-amber-900/40 text-xs space-y-1.5">
+                        <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                          <span>وضع الحفرية السابق:</span>
+                          <span className="line-through text-rose-500 font-bold">{yc.previousStage}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-slate-900 dark:text-slate-100 pt-1 border-t border-amber-200/50 dark:border-slate-800">
+                          <span className="font-bold text-amber-800 dark:text-amber-300">وضع الحفرية الحالي:</span>
+                          <span className="font-black text-amber-600 dark:text-amber-400 bg-amber-200/60 dark:bg-amber-900/70 px-2 py-0.5 rounded">
+                            {yc.newStage}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 text-left font-mono">
+                        طول القطاع: {yc.lengthMeters.toLocaleString()} متر
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: PERMITS */}
+          {activeTab === 'permits' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 flex items-start gap-3">
+                <Award className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-emerald-950 dark:text-emerald-200 leading-relaxed">
+                  <p className="font-bold text-sm mb-0.5">رصد الفسوح ورخص الحفر الجديدة:</p>
+                  يكتشف النظام التراخيص والفسوح الجديدة التي تم إدراجها حديثاً في بيانات الخريطة مقارنة بالتقرير التأسيسي أو التقرير السابق.
+                </div>
+              </div>
+
+              {diffResult.addedPermits.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-xs">
+                  <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
+                  <p className="font-bold text-slate-700 dark:text-slate-300 text-sm">لا توجد فسوح جديدة مضافة في هذا التحليل</p>
+                  أرقام الفسوح والتراخيص مطابقة للسجل السابق.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">
+                      <tr>
+                        <th className="p-3">#</th>
+                        <th className="p-3">رقم الفسح / الرخصة</th>
+                        <th className="p-3">حالة الإضافة</th>
+                        <th className="p-3">رمز القطاع (Segment ID)</th>
+                        <th className="p-3">فئة التنفيذ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {diffResult.addedPermits.map((ap, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <td className="p-3 font-mono text-slate-400">{idx + 1}</td>
+                          <td className="p-3 font-black font-mono text-emerald-600 dark:text-emerald-400">
+                            {ap.permitNo}
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 rounded font-bold">
+                              تم إضافة فسح جديد ✨
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono text-slate-700 dark:text-slate-300">
+                            {ap.segmentId || '-'}
+                          </td>
+                          <td className="p-3 text-slate-600 dark:text-slate-400">
+                            {ap.category || 'عام'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: LENGTHS */}
+          {activeTab === 'lengths' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 flex items-start gap-3">
+                <Ruler className="h-5 w-5 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-indigo-950 dark:text-indigo-200 leading-relaxed">
+                  <p className="font-bold text-sm mb-0.5">تفاصيل فروق الأطوال المحسوبة بـ @turf/length حسب الفئات:</p>
+                  جدول توضيحي للفروقات بين التقرير الحالي والتقرير السابق لكل كود لون وحالة تنفيذ.
+                </div>
+              </div>
+
+              {diffResult.lengthChanges.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-xs">
+                  <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
+                  <p className="font-bold text-slate-700 dark:text-slate-300 text-sm">أطوال الشبكة مطابقة بالكامل للتقرير السابق</p>
+                  لم يطرأ أي فارق بالأطوال في أي من فئات التنفيذ.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+                  <table className="w-full text-right text-xs">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold">
+                      <tr>
+                        <th className="p-3">فئة التنفيذ</th>
+                        <th className="p-3">الطول السابق (كم)</th>
+                        <th className="p-3">الطول الحالي (كم)</th>
+                        <th className="p-3">الفارق (متر)</th>
+                        <th className="p-3">نسبة التغير</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800 font-mono">
+                      {diffResult.lengthChanges.map((lc, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <td className="p-3 font-bold font-sans text-slate-900 dark:text-white">{lc.label}</td>
+                          <td className="p-3 text-slate-600 dark:text-slate-400">{lc.oldKm} كم</td>
+                          <td className="p-3 text-slate-900 dark:text-slate-100 font-bold">{lc.newKm} كم</td>
+                          <td className={`p-3 font-bold ${lc.diffMeters > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                            {lc.diffMeters > 0 ? `+${lc.diffMeters.toLocaleString()}` : lc.diffMeters.toLocaleString()} م
+                          </td>
+                          <td className="p-3 font-bold dir-ltr text-right">
+                            {lc.percentChange > 0 ? `+${lc.percentChange}%` : `${lc.percentChange}%`}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 5: HISTORY */}
+          {activeTab === 'history' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <History className="h-4 w-4 text-blue-600" />
+                  <span>السجل التاريخي للتقارير اليومية المحفوظة للمشروع</span>
+                </h3>
+                <span className="text-xs text-slate-500 font-mono">
+                  {historyList.length} تقارير موثقة
+                </span>
+              </div>
+
+              {historyList.length === 0 ? (
+                <div className="p-8 text-center rounded-2xl bg-slate-50 text-slate-500 text-xs">
+                  لا توجد تقارير أرشفة تاريخية مسجلة بعد لهذا المشروع.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {historyList.map((rep, idx) => (
+                    <div 
+                      key={rep.id || idx}
+                      className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 flex items-center justify-between"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-200 text-[10px] font-black rounded font-mono">
+                            تقرير #{historyList.length - idx}
+                          </span>
+                          <span className="text-xs font-bold text-slate-900 dark:text-white">
+                            تاريخ الإصدار: {rep.parsedAt}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          إجمالي أطوال الخطوط: <strong className="text-slate-900 dark:text-slate-100 font-mono">{rep.analysisResult.totalLengthKm} كم</strong> ({rep.analysisResult.totalLengthMeters.toLocaleString()} متر) • عدد الخطوط: {rep.analysisResult.totalFeaturesCount}
+                        </p>
+                      </div>
+
+                      <div className="text-left">
+                        <span className="text-[11px] text-slate-400 font-mono block">
+                          تاريخ التسجيل: {new Date(rep.createdAt).toLocaleDateString('ar-SA')}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 6: SUPABASE & CRON SQL */}
+          {activeTab === 'sql' && (
+            <div className="space-y-5">
+              <div className="p-4 rounded-2xl bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-900/50 flex items-start gap-3">
+                <Database className="h-5 w-5 text-cyan-600 dark:text-cyan-400 shrink-0 mt-0.5" />
+                <div className="text-xs text-cyan-950 dark:text-cyan-200 leading-relaxed">
+                  <p className="font-bold text-sm mb-0.5">استعلامات Supabase وإعداد المراقبة اليومية التلقائية (Cron Job):</p>
+                  يمكنك نسخ استعلامات DDL هذه ولصقها مباشرة في محرر SQL في Supabase لإنشاء الجداول وسياسات الأمان وتفعيل الفحص اليومي التلقائي.
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <FileCode className="h-4 w-4 text-cyan-600" />
+                    <span>1. استعلام إنشاء الجداول في Supabase (SQL Queries):</span>
+                  </h4>
+                  <button
+                    onClick={handleCopySql}
+                    className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    {copiedSql ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copiedSql ? 'تم نسخ SQL' : 'نسخ استعلامات SQL'}</span>
+                  </button>
+                </div>
+
+                <pre className="p-4 rounded-2xl bg-slate-950 text-cyan-300 font-mono text-[11px] leading-relaxed overflow-x-auto border border-slate-800 dir-ltr text-left">
+                  {SUPABASE_SQL_SCHEMA}
+                </pre>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <FileCode className="h-4 w-4 text-cyan-600" />
+                    <span>2. كود Supabase Edge Function والـ Cron Job اليومي (Daily Task):</span>
+                  </h4>
+                  <button
+                    onClick={handleCopyEdge}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    {copiedEdge ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    <span>{copiedEdge ? 'تم النسخ' : 'نسخ كود Edge Function'}</span>
+                  </button>
+                </div>
+
+                <pre className="p-4 rounded-2xl bg-slate-950 text-indigo-300 font-mono text-[11px] leading-relaxed overflow-x-auto border border-slate-800 dir-ltr text-left">
+                  {SUPABASE_EDGE_FUNCTION_CODE}
+                </pre>
+              </div>
+            </div>
+          )}
+
+        </div>
+
+        {/* Footer actions */}
+        <div className="p-4 bg-slate-100 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            تم حفظ نتيجة هذا التقرير والتغيرات تلقائياً في السجل التاريخي.
+          </p>
+
+          <button
+            onClick={onClose}
+            className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow transition-all cursor-pointer"
+          >
+            إغلاق النافذة
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}

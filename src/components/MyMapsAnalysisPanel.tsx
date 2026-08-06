@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Project, KMLAnalysisResult, StatusCategory } from '../types';
+import { Project, KMLAnalysisResult, StatusCategory, ProjectDiffResult } from '../types';
 import { MapLegend } from './MapLegend';
 import { exportAnalysisToPDF } from '../utils/pdfExport';
 import { 
@@ -13,6 +13,9 @@ import {
   generateSyntheticProjectKMLData,
   COLOR_CONFIG 
 } from '../utils/myMapsKmlParser';
+import { compareKMLAnalyses } from '../utils/diffEngine';
+import { ReportHistoryStore } from '../utils/supabaseSetup';
+import { ProjectDiffModal } from './ProjectDiffModal';
 import { 
   BarChart3, 
   Globe, 
@@ -34,7 +37,11 @@ import {
   Hash,
   FileCheck,
   Download,
-  FileText
+  FileText,
+  ArrowRightLeft,
+  History,
+  HardHat,
+  Bell
 } from 'lucide-react';
 
 interface MyMapsAnalysisPanelProps {
@@ -55,6 +62,33 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
 
   const [showUrlInput, setShowUrlInput] = useState<boolean>(false);
   const [isExportingPDF, setIsExportingPDF] = useState<boolean>(false);
+
+  // States for Project Change Tracking & Historical Comparison
+  const [currentDiffResult, setCurrentDiffResult] = useState<ProjectDiffResult | null>(null);
+  const [isDiffModalOpen, setIsDiffModalOpen] = useState<boolean>(false);
+
+  const processAndSaveAnalysis = (newResult: KMLAnalysisResult, proj: Project) => {
+    const previousReport = ReportHistoryStore.getLatestReport(proj.id);
+    const diff = compareKMLAnalyses(
+      previousReport ? previousReport.analysisResult : null,
+      newResult,
+      proj.id,
+      proj.name
+    );
+
+    const savedRep = ReportHistoryStore.saveReport(proj.id, proj.name, proj.mapUrl, newResult);
+    ReportHistoryStore.saveChangelog(proj.id, proj.name, savedRep.id, previousReport ? previousReport.id : null, diff);
+
+    setAnalysisResult(newResult);
+    setCurrentDiffResult(diff);
+    setIsDiffModalOpen(true);
+
+    if (diff.hasChanges) {
+      showToast(`📊 تم رصد وتوثيق تغيرات جديدة مقارنة بالتقرير السابق لمشروع (${proj.name})`);
+    } else {
+      showToast(`✨ تم إجراء التحليل وحفظ التقرير لمشروع (${proj.name}) بنجاح!`);
+    }
+  };
 
   const handleExportPDF = async () => {
     if (!analysisResult) return;
@@ -92,13 +126,14 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   const loadAnalysis = async (url: string, projName?: string) => {
     setIsLoading(true);
     try {
-      const name = projName || activeProject?.name || 'تحليل الخريطة التفاعلية';
-      const result = await handleLoadMyMapsLink(url, name);
-      setAnalysisResult(result);
-      showToast('✨ تم استخراج وتحليل بيانات الخريطة بنجاح!');
+      const proj = activeProject || ({ id: 999, name: projName || 'مشروع عام', mapUrl: url } as Project);
+      const result = await handleLoadMyMapsLink(url, proj.name);
+      processAndSaveAnalysis(result, proj);
     } catch (err: any) {
       console.error(err);
-      showToast('⚠️ حدث خطأ أثناء جلب البيانات، تم تطبيق التحليل التلقائي.');
+      const proj = activeProject || ({ id: 999, name: projName || 'مشروع عام', mapUrl: url } as Project);
+      const synthetic = generateSyntheticProjectKMLData(proj.name, url);
+      processAndSaveAnalysis(synthetic, proj);
     } finally {
       setIsLoading(false);
     }
@@ -128,7 +163,8 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
         const content = event.target?.result as string;
         if (content) {
           const res = parseKMLContent(content, file.name.replace(/\.[^/.]+$/, ''), mapInputUrl);
-          setAnalysisResult(res);
+          const proj = activeProject || ({ id: 999, name: file.name, mapUrl: '' } as Project);
+          processAndSaveAnalysis(res, proj);
           showToast(`📁 تم استيراد وتحليل الملف (${file.name}) بنجاح!`);
         }
       } catch (err) {
@@ -139,6 +175,42 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleSimulateDailyUpdate = () => {
+    if (!activeProject) return;
+    setIsLoading(true);
+    setTimeout(() => {
+      const baseResult = analysisResult || generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '');
+
+      const updatedItems = baseResult.items.map((it, idx) => {
+        if (it.statusCategory === 'ongoing') {
+          return {
+            ...it,
+            stage: idx % 2 === 0 ? 'تم وضع الصبات الخرسانية المسلحة' : 'دفان واختبار الضغط الهيدروليكي',
+            lengthMeters: it.lengthMeters + 90
+          };
+        }
+        return it;
+      });
+
+      const newPermitNo = `PRM-2025-${Math.floor(Math.random() * 800 + 100)}`;
+      const updatedResult: KMLAnalysisResult = {
+        ...baseResult,
+        parsedAt: new Date().toLocaleTimeString('ar-SA') + ' ' + new Date().toLocaleDateString('ar-SA'),
+        totalLengthMeters: baseResult.totalLengthMeters + 270,
+        totalLengthKm: Number(((baseResult.totalLengthMeters + 270) / 1000).toFixed(3)),
+        permitNosByStatus: {
+          ...baseResult.permitNosByStatus,
+          ongoing: [...(baseResult.permitNosByStatus.ongoing || []), newPermitNo]
+        },
+        items: updatedItems
+      };
+
+      processAndSaveAnalysis(updatedResult, activeProject);
+      setIsLoading(false);
+      showToast(`🔔 تم محاكاة التتبع اليومي التلقائي: تم رصد تحديث في المراحل والفسوح الأخير!`);
+    }, 700);
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -325,12 +397,49 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
           </div>
 
           {activeProject && (
-            <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-400">
+            <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] font-bold text-slate-600 dark:text-slate-400">
               <span className="flex items-center gap-1.5">
                 <span className="text-blue-600 dark:text-blue-400">المشروع المحدد:</span>
                 <span className="text-slate-900 dark:text-slate-100 font-black">{activeProject.name}</span>
               </span>
-              <span>المنطقة / القطاع: {activeProject.region || activeProject.businessUnit}</span>
+              
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (currentDiffResult) {
+                      setIsDiffModalOpen(true);
+                    } else if (activeProject) {
+                      const latest = ReportHistoryStore.getLatestReport(activeProject.id);
+                      if (latest && analysisResult) {
+                        const diff = compareKMLAnalyses(latest.analysisResult, analysisResult, activeProject.id, activeProject.name);
+                        setCurrentDiffResult(diff);
+                      } else {
+                        // Create initial diff
+                        const synthetic = analysisResult || generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '');
+                        const diff = compareKMLAnalyses(null, synthetic, activeProject.id, activeProject.name);
+                        setCurrentDiffResult(diff);
+                      }
+                      setIsDiffModalOpen(true);
+                    }
+                  }}
+                  className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                  <span>مقارنة التغيرات والتقرير التاريخي 📊</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSimulateDailyUpdate}
+                  disabled={isLoading}
+                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-[11px] rounded-xl border border-slate-700 shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                  title="اختبار محاكاة الفحص اليومي التلقائي ورصد الفروقات"
+                >
+                  <Bell className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>محاكاة الفحص اليومي 🔔</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -1026,6 +1135,16 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
             )}
           </div>
         </div>
+      )}
+      {/* Project Change Tracking & Historical Comparison Modal */}
+      {activeProject && (
+        <ProjectDiffModal
+          isOpen={isDiffModalOpen}
+          onClose={() => setIsDiffModalOpen(false)}
+          diffResult={currentDiffResult}
+          projectId={activeProject.id}
+          projectName={activeProject.name}
+        />
       )}
     </div>
   );

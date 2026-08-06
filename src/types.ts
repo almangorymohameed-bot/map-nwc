@@ -80,6 +80,7 @@ export interface KMLFeatureItem {
   coordinatesCount: number;
   description?: string;
   layerName?: string;
+  stage?: string; // مرحلة الحفرية الحالية (خاصة بالخطوط الصفراء جاري العمل)
 }
 
 export interface ColorStatsSummary {
@@ -117,4 +118,80 @@ export interface KMLAnalysisResult {
   items: KMLFeatureItem[];
   parsedAt: string;
 }
+
+// ==========================================
+// Project Change Tracking & Historical Comparison Types
+// ==========================================
+
+export interface HistoricalReport {
+  id: string;
+  projectId: number;
+  projectName: string;
+  mapUrl?: string;
+  parsedAt: string;
+  createdAt: string;
+  analysisResult: KMLAnalysisResult;
+}
+
+export interface YellowLineStageChange {
+  segmentId: string;
+  featureName: string;
+  previousStage: string;
+  newStage: string;
+  permitNo?: string;
+  lengthMeters: number;
+  colorHex: string;
+}
+
+export interface LengthChangeDetail {
+  category: StatusCategory;
+  label: string;
+  oldKm: number;
+  newKm: number;
+  diffKm: number;
+  diffMeters: number;
+  percentChange: number;
+}
+
+export interface PermitChangeDetail {
+  type: 'added' | 'removed';
+  permitNo: string;
+  category?: string;
+  segmentId?: string;
+}
+
+export interface ScopeChangeDetail {
+  type: 'added' | 'removed' | 'modified';
+  field: string;
+  oldValue: string;
+  newValue: string;
+}
+
+export interface ProjectDiffResult {
+  hasChanges: boolean;
+  projectId: number;
+  projectName: string;
+  currentReportDate: string;
+  previousReportDate: string;
+  totalLengthDiffKm: number;
+  totalLengthDiffMeters: number;
+  lengthChanges: LengthChangeDetail[];
+  addedPermits: PermitChangeDetail[];
+  removedPermits: PermitChangeDetail[];
+  scopeChanges: ScopeChangeDetail[];
+  yellowLineStageChanges: YellowLineStageChange[];
+  summaryMessages: string[];
+}
+
+export interface ProjectChangelogRecord {
+  id: string;
+  projectId: number;
+  projectName: string;
+  reportId: string;
+  previousReportId: string | null;
+  diff: ProjectDiffResult;
+  createdAt: string;
+  isViewed?: boolean;
+}
+
 

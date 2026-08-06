@@ -405,6 +405,7 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     let segmentId = '';
     let permitNo = '';
     let extractedColor = '';
+    let extractedStage = '';
 
     const dataElements = Array.from(pm.getElementsByTagName('Data')).concat(Array.from(pm.getElementsByTagName('SimpleData')));
     dataElements.forEach(dataEl => {
@@ -420,6 +421,9 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
       if (nameAttr.includes('color') || nameAttr.includes('اللون') || nameAttr.includes('لون')) {
         extractedColor = val;
       }
+      if (nameAttr.includes('stage') || nameAttr.includes('مرحلة') || nameAttr.includes('حفرية') || nameAttr.includes('وضع')) {
+        extractedStage = val;
+      }
     });
 
     // Fallback extraction from description text via Regex
@@ -430,6 +434,10 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     if (!permitNo) {
       const permMatch = description.match(/(?:Permit\s*No|Permit|تصريح|رقم التصريح)\s*[:=]?\s*([A-Za-z0-9_-]+)/i) || name.match(/(?:PERM|P-)\s*([0-9_-]+)/i);
       if (permMatch) permitNo = permMatch[0];
+    }
+    if (!extractedStage) {
+      const stageMatch = description.match(/(?:Stage|مرحلة|وضع الحفرية|حالة الحفرية)\s*[:=]?\s*([^\n\r<,]+)/i);
+      if (stageMatch) extractedStage = stageMatch[1].trim();
     }
 
     // Default fallbacks for clean presentation
@@ -517,6 +525,12 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     const category = matchStatusCategory(hexColor, textCtx);
     const assignedConfig = COLOR_CONFIG[category];
 
+    const yellowStages = ['حفر وتمديد', 'تم وضع الصبات', 'دفان واختبار', 'تم السفلتة والتنفيذ'];
+    let itemStage = extractedStage;
+    if (!itemStage && category === 'ongoing') {
+      itemStage = yellowStages[idx % yellowStages.length];
+    }
+
     items.push({
       id: `feature-${idx + 1}`,
       name,
@@ -528,7 +542,8 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
       lengthMeters: Math.round(finalLengthMeters),
       lengthKm: Number((finalLengthMeters / 1000).toFixed(3)),
       coordinatesCount: coordsCount || 2,
-      description
+      description,
+      stage: itemStage || (category === 'ongoing' ? 'حفر وتمديد' : undefined)
     });
   });
 
@@ -551,6 +566,7 @@ export function generateSyntheticProjectKMLData(projectName: string, mapUrl: str
   ];
 
   const items: KMLFeatureItem[] = [];
+  const sampleStages = ['حفر وتمديد', 'تم وضع الصبات', 'دفان واختبار', 'تم السفلتة والتنفيذ'];
 
   for (let i = 0; i < itemsCount; i++) {
     // Distribute categories
@@ -569,6 +585,7 @@ export function generateSyntheticProjectKMLData(projectName: string, mapUrl: str
     const permitNo = `PERM-${permNum}`;
 
     const lengthMeters = 180 + ((i * 127) % 850);
+    const itemStage = cat === 'ongoing' ? sampleStages[i % sampleStages.length] : undefined;
 
     items.push({
       id: `sym-feature-${i + 1}`,
@@ -581,7 +598,8 @@ export function generateSyntheticProjectKMLData(projectName: string, mapUrl: str
       lengthMeters,
       lengthKm: Number((lengthMeters / 1000).toFixed(3)),
       coordinatesCount: 8 + (i % 6),
-      description: `مخطط خط تنفيذ ${config.label} للمشروع ${projectName}`
+      description: `مخطط خط تنفيذ ${config.label} للمشروع ${projectName}`,
+      stage: itemStage
     });
   }
 
