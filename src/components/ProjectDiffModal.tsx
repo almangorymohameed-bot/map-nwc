@@ -26,7 +26,14 @@ import {
   Layers,
   Award
 } from 'lucide-react';
-import { SUPABASE_SQL_SCHEMA, SUPABASE_EDGE_FUNCTION_CODE, ReportHistoryStore } from '../utils/supabaseSetup';
+import { 
+  SUPABASE_SQL_SCHEMA, 
+  SUPABASE_EDGE_FUNCTION_CODE, 
+  ReportHistoryStore,
+  getSupabaseConfig,
+  saveSupabaseConfig,
+  getSupabaseClient
+} from '../utils/supabaseSetup';
 
 interface ProjectDiffModalProps {
   isOpen: boolean;
@@ -46,6 +53,48 @@ export function ProjectDiffModal({
   const [activeTab, setActiveTab] = useState<'summary' | 'yellowLines' | 'permits' | 'lengths' | 'history' | 'sql'>('summary');
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [copiedEdge, setCopiedEdge] = useState<boolean>(false);
+
+  // Supabase Configuration States
+  const currentConfig = getSupabaseConfig();
+  const [sbUrl, setSbUrl] = useState<string>(currentConfig.url);
+  const [sbKey, setSbKey] = useState<string>(currentConfig.anonKey);
+  const [connectionStatus, setConnectionStatus] = useState<{ status: 'idle' | 'testing' | 'success' | 'error'; message?: string }>({ status: 'idle' });
+
+  const handleSaveAndTestSupabase = async () => {
+    if (!sbUrl || !sbKey) {
+      setConnectionStatus({ status: 'error', message: 'يرجى إدخال رابط المشورع (URL) والمفتاح المؤهل (Anon Key)' });
+      return;
+    }
+
+    saveSupabaseConfig(sbUrl, sbKey);
+    setConnectionStatus({ status: 'testing', message: 'جاري فحص الاتصال بقاعدة بيانات Supabase...' });
+
+    try {
+      const client = getSupabaseClient();
+      if (!client) {
+        setConnectionStatus({ status: 'error', message: 'تعذر إنشاء عميل Supabase. يرجى التحقق من صياغة الرابط.' });
+        return;
+      }
+
+      // Test query to project_reports table
+      const { data, error } = await client.from('project_reports').select('id').limit(1);
+
+      if (error) {
+        if (error.code === '42P01') {
+          setConnectionStatus({ 
+            status: 'error', 
+            message: 'تم الاتصال بـ Supabase بنجاح ولكن جدول (project_reports) غير موجود! يرجى تشغيل استعلام SQL الموجود أدناه في محرر SQL في Supabase.' 
+          });
+        } else {
+          setConnectionStatus({ status: 'error', message: `خطأ في الاتصال: ${error.message}` });
+        }
+      } else {
+        setConnectionStatus({ status: 'success', message: '✨ تم الاتصال بنجاح بقاعدة بيانات Supabase! الجدول جاهز لتسجيل التقارير والتغيرات.' });
+      }
+    } catch (err: any) {
+      setConnectionStatus({ status: 'error', message: `تعذر الاتصال: ${err?.message || 'خطأ في الشبكة'}` });
+    }
+  };
 
   if (!isOpen || !diffResult) return null;
 
@@ -482,6 +531,64 @@ export function ProjectDiffModal({
           {/* TAB 6: SUPABASE & CRON SQL */}
           {activeTab === 'sql' && (
             <div className="space-y-5">
+              {/* Credentials Configuration Form */}
+              <div className="p-5 rounded-2xl bg-slate-900 text-white border border-slate-800 space-y-4 shadow-md">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <Database className="h-5 w-5 text-cyan-400" />
+                    <h3 className="font-bold text-sm text-white">إعدادات الاتصال بقاعدة بيانات Supabase</h3>
+                  </div>
+                  <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${sbUrl && sbKey ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}`}>
+                    {sbUrl && sbKey ? 'تم إدخال البيانات' : 'يرجى إدخال البيانات'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-slate-300">رابط المشروع (SUPABASE_URL):</label>
+                    <input 
+                      type="text" 
+                      value={sbUrl}
+                      onChange={(e) => setSbUrl(e.target.value)}
+                      placeholder="https://xyzcompany.supabase.co"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-cyan-300 font-mono focus:outline-none focus:border-cyan-500 dir-ltr text-left"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="font-semibold text-slate-300">المفتاح المؤهل (SUPABASE_ANON_KEY):</label>
+                    <input 
+                      type="password" 
+                      value={sbKey}
+                      onChange={(e) => setSbKey(e.target.value)}
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR..."
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-cyan-300 font-mono focus:outline-none focus:border-cyan-500 dir-ltr text-left"
+                    />
+                  </div>
+                </div>
+
+                {connectionStatus.message && (
+                  <div className={`p-3 rounded-xl text-xs font-medium ${
+                    connectionStatus.status === 'success' ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800' :
+                    connectionStatus.status === 'error' ? 'bg-rose-950/80 text-rose-300 border border-rose-800' :
+                    'bg-blue-950/80 text-blue-300 border border-blue-800'
+                  }`}>
+                    {connectionStatus.message}
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    onClick={handleSaveAndTestSupabase}
+                    disabled={connectionStatus.status === 'testing'}
+                    className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md flex items-center gap-2"
+                  >
+                    <Database className="h-4 w-4" />
+                    <span>{connectionStatus.status === 'testing' ? 'جاري الفحص...' : 'حفظ واختبار الاتصال بـ Supabase'}</span>
+                  </button>
+                </div>
+              </div>
+
               <div className="p-4 rounded-2xl bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-900/50 flex items-start gap-3">
                 <Database className="h-5 w-5 text-cyan-600 dark:text-cyan-400 shrink-0 mt-0.5" />
                 <div className="text-xs text-cyan-950 dark:text-cyan-200 leading-relaxed">

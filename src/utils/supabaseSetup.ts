@@ -3,7 +3,36 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { HistoricalReport, ProjectChangelogRecord, KMLAnalysisResult, ProjectDiffResult } from '../types';
+
+export function getSupabaseConfig() {
+  const url = import.meta.env.VITE_SUPABASE_URL || localStorage.getItem('VITE_SUPABASE_URL') || '';
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || localStorage.getItem('VITE_SUPABASE_ANON_KEY') || '';
+  return { url, anonKey };
+}
+
+export function saveSupabaseConfig(url: string, anonKey: string) {
+  if (url) localStorage.setItem('VITE_SUPABASE_URL', url.trim());
+  if (anonKey) localStorage.setItem('VITE_SUPABASE_ANON_KEY', anonKey.trim());
+  supabaseInstance = null; // reset cached instance
+}
+
+let supabaseInstance: SupabaseClient | null = null;
+
+export function getSupabaseClient(): SupabaseClient | null {
+  const { url, anonKey } = getSupabaseConfig();
+  if (!url || !anonKey) return null;
+  if (!supabaseInstance) {
+    try {
+      supabaseInstance = createClient(url, anonKey);
+    } catch (e) {
+      console.error('Failed to initialize Supabase client:', e);
+      return null;
+    }
+  }
+  return supabaseInstance;
+}
 
 /**
  * SQL Schema Script for Supabase Database setup
@@ -196,6 +225,30 @@ export const ReportHistoryStore = {
       console.error('Error saving historical report:', err);
     }
 
+    // Direct Async Sync to Supabase table: project_reports
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase.from('project_reports').insert([{
+        project_id: projectId,
+        project_name: projectName,
+        map_url: mapUrl || '',
+        total_length_meters: analysisResult.totalLengthMeters,
+        total_length_km: analysisResult.totalLengthKm,
+        total_features_count: analysisResult.totalFeaturesCount,
+        color_breakdown: analysisResult.colorBreakdown,
+        items: analysisResult.items,
+        parsed_at: analysisResult.parsedAt || new Date().toLocaleString('ar-SA')
+      }]).then(({ error }) => {
+        if (error) {
+          console.error('❌ Supabase Report Insert Error:', error.message);
+        } else {
+          console.log('✅ Successfully inserted report row to Supabase project_reports');
+        }
+      }).catch(err => console.error('Supabase async exception:', err));
+    } else {
+      console.warn('⚠️ Supabase config not provided. Saved report in local storage.');
+    }
+
     return newReport;
   },
 
@@ -218,6 +271,23 @@ export const ReportHistoryStore = {
       localStorage.setItem(STORAGE_KEY_CHANGELOGS, JSON.stringify(all));
     } catch (err) {
       console.error('Error saving changelog record:', err);
+    }
+
+    // Direct Async Sync to Supabase table: project_changelogs
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase.from('project_changelogs').insert([{
+        project_id: projectId,
+        project_name: projectName,
+        diff: diff,
+        is_viewed: false
+      }]).then(({ error }) => {
+        if (error) {
+          console.error('❌ Supabase Changelog Insert Error:', error.message);
+        } else {
+          console.log('✅ Successfully inserted changelog row to Supabase project_changelogs');
+        }
+      }).catch(err => console.error('Supabase async exception:', err));
     }
 
     return newRecord;
