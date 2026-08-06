@@ -96,6 +96,7 @@ export interface ColorStatsSummary {
 
 export interface KMLAnalysisResult {
   projectName?: string;
+  projectScope?: string;
   mapUrl?: string;
   totalLengthMeters: number;
   totalLengthKm: number;

@@ -16,6 +16,26 @@ export const COLOR_CONFIG: Record<StatusCategory, { hex: string; label: string }
   cancelled: { hex: '#F48FB1', label: 'خطوط تم إلغائها' }
 };
 
+/**
+ * Helper to check if a project is a sewage project based on name or scope
+ */
+export function isSewageProject(projectName?: string, projectScope?: string): boolean {
+  const name = (projectName || '').toLowerCase();
+  const scope = (projectScope || '').toLowerCase();
+  return scope.includes('صرف') || name.includes('صرف');
+}
+
+/**
+ * Get context-aware category label:
+ * If project is sewage, 'executed_water' category (#01579B) should NOT say "منفذ - مياه", but "منفذ - صرف".
+ */
+export function getStatusCategoryLabel(category: StatusCategory, projectName?: string, projectScope?: string): string {
+  if (category === 'executed_water' && isSewageProject(projectName, projectScope)) {
+    return 'منفذ - صرف';
+  }
+  return COLOR_CONFIG[category]?.label || category;
+}
+
 // Calculate Haversine distance in meters between two lat/lng coordinates
 export function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000; // Earth radius in meters
@@ -334,7 +354,7 @@ export async function fetchMyMapsKML(link: string): Promise<string> {
 /**
  * Parse KML XML string into analytical dataset
  */
-export function parseKMLContent(xmlString: string, projectName: string = 'مشروع الخارطة التفاعلية', mapUrl: string = ''): KMLAnalysisResult {
+export function parseKMLContent(xmlString: string, projectName: string = 'مشروع الخارطة التفاعلية', mapUrl: string = '', projectScope?: string): KMLAnalysisResult {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
   const placemarks = Array.from(xmlDoc.getElementsByTagName('Placemark'));
@@ -537,6 +557,7 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     const textCtx = `${name} ${description} ${segmentId} ${permitNo}`;
     const category = matchStatusCategory(hexColor, textCtx);
     const assignedConfig = COLOR_CONFIG[category];
+    const statusLabel = getStatusCategoryLabel(category, projectName, projectScope);
 
     const yellowStages = ['حفر وتمديد', 'تم وضع الصبات', 'دفان واختبار', 'تم السفلتة والتنفيذ'];
     let itemStage = extractedStage;
@@ -551,7 +572,7 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
       permitNo,
       colorHex: assignedConfig.hex,
       statusCategory: category,
-      statusLabel: assignedConfig.label,
+      statusLabel,
       lengthMeters: Math.round(finalLengthMeters),
       lengthKm: Number((finalLengthMeters / 1000).toFixed(3)),
       coordinatesCount: coordsCount || 2,
@@ -560,13 +581,17 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     });
   });
 
-  return generateFinalAnalysisResult(items, projectName, mapUrl);
+  return generateFinalAnalysisResult(items, projectName, mapUrl, projectScope);
 }
 
 /**
  * Generate fallback analytical dataset if XML parsing or network fetching requires full synthetic extraction
  */
-export function generateSyntheticProjectKMLData(projectName: string, mapUrl: string): KMLAnalysisResult {
+export function generateSyntheticProjectKMLData(
+  projectName: string, 
+  mapUrl: string,
+  projectScope?: string
+): KMLAnalysisResult {
   const seed = (projectName.length * 17) % 50;
   const itemsCount = 18 + (seed % 12); // 18 to 30 line segments
 
@@ -580,6 +605,7 @@ export function generateSyntheticProjectKMLData(projectName: string, mapUrl: str
 
   const items: KMLFeatureItem[] = [];
   const sampleStages = ['حفر وتمديد', 'تم وضع الصبات', 'دفان واختبار', 'تم السفلتة والتنفيذ'];
+  const isSewage = isSewageProject(projectName, projectScope);
 
   for (let i = 0; i < itemsCount; i++) {
     // Distribute categories
@@ -591,6 +617,7 @@ export function generateSyntheticProjectKMLData(projectName: string, mapUrl: str
     else cat = 'cancelled';
 
     const config = COLOR_CONFIG[cat];
+    const statusLabel = getStatusCategoryLabel(cat, projectName, projectScope);
     const segNum = 1010 + i * 3;
     const permNum = 2025001 + (i * 11) % 400;
 
@@ -600,40 +627,49 @@ export function generateSyntheticProjectKMLData(projectName: string, mapUrl: str
     const lengthMeters = 180 + ((i * 127) % 850);
     const itemStage = cat === 'ongoing' ? sampleStages[i % sampleStages.length] : undefined;
 
+    const lineTypeLabel = cat === 'executed_water' 
+      ? (isSewage ? 'صرف' : 'مياه') 
+      : cat === 'executed_sewage' ? 'صرف' : 'تنفيذي';
+
     items.push({
       id: `sym-feature-${i + 1}`,
-      name: `قطاع خط ${cat === 'executed_water' ? 'مياه' : cat === 'executed_sewage' ? 'صرف' : 'تنفيذي'} رقم ${i + 1}`,
+      name: `قطاع خط ${lineTypeLabel} رقم ${i + 1}`,
       segmentId,
       permitNo,
       colorHex: config.hex,
       statusCategory: cat,
-      statusLabel: config.label,
+      statusLabel,
       lengthMeters,
       lengthKm: Number((lengthMeters / 1000).toFixed(3)),
       coordinatesCount: 8 + (i % 6),
-      description: `مخطط خط تنفيذ ${config.label} للمشروع ${projectName}`,
+      description: `مخطط خط تنفيذ ${statusLabel} للمشروع ${projectName}`,
       stage: itemStage
     });
   }
 
-  return generateFinalAnalysisResult(items, projectName, mapUrl);
+  return generateFinalAnalysisResult(items, projectName, mapUrl, projectScope);
 }
 
 /**
  * Helper to consolidate items into final KMLAnalysisResult
  */
-function generateFinalAnalysisResult(items: KMLFeatureItem[], projectName: string, mapUrl: string): KMLAnalysisResult {
+function generateFinalAnalysisResult(
+  items: KMLFeatureItem[], 
+  projectName: string, 
+  mapUrl: string,
+  projectScope?: string
+): KMLAnalysisResult {
   let totalMeters = 0;
   items.forEach(it => totalMeters += it.lengthMeters);
 
   const categories: StatusCategory[] = ['executed_water', 'executed_sewage', 'ongoing', 'remaining', 'cancelled'];
 
   const colorBreakdown: Record<StatusCategory, ColorStatsSummary> = {
-    executed_water: { colorHex: COLOR_CONFIG.executed_water.hex, label: COLOR_CONFIG.executed_water.label, category: 'executed_water', totalLengthMeters: 0, totalLengthKm: 0, segmentCount: 0, permitCount: 0, percentage: 0 },
-    executed_sewage: { colorHex: COLOR_CONFIG.executed_sewage.hex, label: COLOR_CONFIG.executed_sewage.label, category: 'executed_sewage', totalLengthMeters: 0, totalLengthKm: 0, segmentCount: 0, permitCount: 0, percentage: 0 },
-    ongoing: { colorHex: COLOR_CONFIG.ongoing.hex, label: COLOR_CONFIG.ongoing.label, category: 'ongoing', totalLengthMeters: 0, totalLengthKm: 0, segmentCount: 0, permitCount: 0, percentage: 0 },
-    remaining: { colorHex: COLOR_CONFIG.remaining.hex, label: COLOR_CONFIG.remaining.label, category: 'remaining', totalLengthMeters: 0, totalLengthKm: 0, segmentCount: 0, permitCount: 0, percentage: 0 },
-    cancelled: { colorHex: COLOR_CONFIG.cancelled.hex, label: COLOR_CONFIG.cancelled.label, category: 'cancelled', totalLengthMeters: 0, totalLengthKm: 0, segmentCount: 0, permitCount: 0, percentage: 0 }
+    executed_water: { colorHex: COLOR_CONFIG.executed_water.hex, label: getStatusCategoryLabel('executed_water', projectName, projectScope), category: 'executed_water', totalLengthMeters: 0, totalLengthKm: 0, segmentCount: 0, permitCount: 0, percentage: 0 },
+    executed_sewage: { colorHex: COLOR_CONFIG.executed_sewage.hex, label: getStatusCategoryLabel('executed_sewage', projectName, projectScope), category: 'executed_sewage', totalLengthMeters: 0, totalLengthKm: 0, segmentCount: 0, permitCount: 0, percentage: 0 },
+    ongoing: { colorHex: COLOR_CONFIG.ongoing.hex, label: getStatusCategoryLabel('ongoing', projectName, projectScope), category: 'ongoing', totalLengthMeters: 0, totalLengthKm: 0, segmentCount: 0, permitCount: 0, percentage: 0 },
+    remaining: { colorHex: COLOR_CONFIG.remaining.hex, label: getStatusCategoryLabel('remaining', projectName, projectScope), category: 'remaining', totalLengthMeters: 0, totalLengthKm: 0, segmentCount: 0, permitCount: 0, percentage: 0 },
+    cancelled: { colorHex: COLOR_CONFIG.cancelled.hex, label: getStatusCategoryLabel('cancelled', projectName, projectScope), category: 'cancelled', totalLengthMeters: 0, totalLengthKm: 0, segmentCount: 0, permitCount: 0, percentage: 0 }
   };
 
   const segmentSetMap: Record<StatusCategory, Set<string>> = {
@@ -669,6 +705,7 @@ function generateFinalAnalysisResult(items: KMLFeatureItem[], projectName: strin
 
   return {
     projectName,
+    projectScope,
     mapUrl,
     totalLengthMeters: totalMeters,
     totalLengthKm: Number((totalMeters / 1000).toFixed(3)),
@@ -697,13 +734,17 @@ function generateFinalAnalysisResult(items: KMLFeatureItem[], projectName: strin
  * Main function required: handleLoadMyMapsLink
  * Imports data from Google My Maps link and converts directly to analysis data
  */
-export async function handleLoadMyMapsLink(link: string, projectName?: string): Promise<KMLAnalysisResult> {
+export async function handleLoadMyMapsLink(
+  link: string, 
+  projectName?: string, 
+  projectScope?: string
+): Promise<KMLAnalysisResult> {
   const name = projectName || 'تحليل الخريطة التفاعلية';
   try {
     const kmlXml = await fetchMyMapsKML(link);
-    return parseKMLContent(kmlXml, name, link);
+    return parseKMLContent(kmlXml, name, link, projectScope);
   } catch (err) {
     console.warn('handleLoadMyMapsLink fetch error, using synthetic analysis dataset:', err);
-    return generateSyntheticProjectKMLData(name, link);
+    return generateSyntheticProjectKMLData(name, link, projectScope);
   }
 }

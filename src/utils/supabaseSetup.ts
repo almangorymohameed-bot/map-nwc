@@ -7,8 +7,9 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { HistoricalReport, ProjectChangelogRecord, KMLAnalysisResult, ProjectDiffResult } from '../types';
 
 export function getSupabaseConfig() {
-  const url = import.meta.env.VITE_SUPABASE_URL || localStorage.getItem('VITE_SUPABASE_URL') || '';
-  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || localStorage.getItem('VITE_SUPABASE_ANON_KEY') || '';
+  const metaEnv = (import.meta as any).env || {};
+  const url = metaEnv.VITE_SUPABASE_URL || localStorage.getItem('VITE_SUPABASE_URL') || '';
+  const anonKey = metaEnv.VITE_SUPABASE_ANON_KEY || localStorage.getItem('VITE_SUPABASE_ANON_KEY') || '';
   return { url, anonKey };
 }
 
@@ -182,31 +183,105 @@ SELECT cron.schedule(
 */
 `;
 
-// Local storage key for fallback persistence
-const STORAGE_KEY_REPORTS = 'nwc_project_historical_reports_v1';
-const STORAGE_KEY_CHANGELOGS = 'nwc_project_changelogs_v1';
+// In-memory fallback arrays (strictly no localStorage)
+const memoryReports: HistoricalReport[] = [];
+const memoryChangelogs: ProjectChangelogRecord[] = [];
+
+function mapRowToHistoricalReport(row: any): HistoricalReport {
+  return {
+    id: String(row.id),
+    projectId: Number(row.project_id),
+    projectName: row.project_name || '',
+    mapUrl: row.map_url || '',
+    parsedAt: row.parsed_at || (row.created_at ? new Date(row.created_at).toLocaleString('ar-SA') : new Date().toLocaleString('ar-SA')),
+    createdAt: row.created_at || new Date().toISOString(),
+    analysisResult: {
+      projectName: row.project_name || '',
+      projectScope: row.color_breakdown?.projectScope,
+      mapUrl: row.map_url || '',
+      totalLengthMeters: Number(row.total_length_meters || 0),
+      totalLengthKm: Number(row.total_length_km || 0),
+      totalFeaturesCount: Number(row.total_features_count || 0),
+      colorBreakdown: row.color_breakdown || {},
+      items: row.items || [],
+      parsedAt: row.parsed_at || (row.created_at ? new Date(row.created_at).toLocaleString('ar-SA') : new Date().toLocaleString('ar-SA'))
+    }
+  };
+}
+
+function mapRowToChangelogRecord(row: any): ProjectChangelogRecord {
+  return {
+    id: String(row.id),
+    projectId: Number(row.project_id),
+    projectName: row.project_name || '',
+    reportId: row.report_id ? String(row.report_id) : '',
+    previousReportId: row.previous_report_id ? String(row.previous_report_id) : null,
+    diff: row.diff,
+    createdAt: row.created_at || new Date().toISOString(),
+    isViewed: Boolean(row.is_viewed)
+  };
+}
 
 export const ReportHistoryStore = {
-  getHistoricalReports(projectId: number): HistoricalReport[] {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY_REPORTS);
-      if (!raw) return [];
-      const all: HistoricalReport[] = JSON.parse(raw);
-      return all
-        .filter((r) => r.projectId === projectId)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    } catch {
-      return [];
+  async getHistoricalReports(projectId: number): Promise<HistoricalReport[]> {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { data, error } = await (supabase.from('project_reports') as any)
+          .select('*')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          return data.map(mapRowToHistoricalReport);
+        }
+        if (error) {
+          console.error('❌ Supabase getHistoricalReports Error:', error.message);
+        }
+      } catch (err) {
+        console.error('Supabase getHistoricalReports exception:', err);
+      }
     }
+
+    return memoryReports
+      .filter((r) => r.projectId === projectId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
-  getLatestReport(projectId: number): HistoricalReport | null {
-    const list = this.getHistoricalReports(projectId);
+  async getLatestReport(projectId: number): Promise<HistoricalReport | null> {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { data, error } = await (supabase.from('project_reports') as any)
+          .select('*')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (!error && data && data.length > 0) {
+          return mapRowToHistoricalReport(data[0]);
+        }
+        if (error) {
+          console.error('❌ Supabase getLatestReport Error:', error.message);
+        }
+      } catch (err) {
+        console.error('Supabase getLatestReport exception:', err);
+      }
+    }
+
+    const list = memoryReports
+      .filter((r) => r.projectId === projectId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return list.length > 0 ? list[0] : null;
   },
 
-  saveReport(projectId: number, projectName: string, mapUrl: string | undefined, analysisResult: KMLAnalysisResult): HistoricalReport {
-    const newReport: HistoricalReport = {
+  async saveReport(
+    projectId: number, 
+    projectName: string, 
+    mapUrl: string | undefined, 
+    analysisResult: KMLAnalysisResult
+  ): Promise<HistoricalReport> {
+    const localReport: HistoricalReport = {
       id: `rep-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       projectId,
       projectName,
@@ -216,44 +291,51 @@ export const ReportHistoryStore = {
       analysisResult
     };
 
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY_REPORTS);
-      const all: HistoricalReport[] = raw ? JSON.parse(raw) : [];
-      all.push(newReport);
-      localStorage.setItem(STORAGE_KEY_REPORTS, JSON.stringify(all));
-    } catch (err) {
-      console.error('Error saving historical report:', err);
-    }
+    memoryReports.unshift(localReport);
 
-    // Direct Async Sync to Supabase table: project_reports
     const supabase = getSupabaseClient();
     if (supabase) {
-      supabase.from('project_reports').insert([{
-        project_id: projectId,
-        project_name: projectName,
-        map_url: mapUrl || '',
-        total_length_meters: analysisResult.totalLengthMeters,
-        total_length_km: analysisResult.totalLengthKm,
-        total_features_count: analysisResult.totalFeaturesCount,
-        color_breakdown: analysisResult.colorBreakdown,
-        items: analysisResult.items,
-        parsed_at: analysisResult.parsedAt || new Date().toLocaleString('ar-SA')
-      }]).then(({ error }) => {
+      try {
+        const { data, error } = await (supabase.from('project_reports') as any)
+          .insert([{
+            project_id: projectId,
+            project_name: projectName,
+            map_url: mapUrl || '',
+            total_length_meters: analysisResult.totalLengthMeters,
+            total_length_km: analysisResult.totalLengthKm,
+            total_features_count: analysisResult.totalFeaturesCount,
+            color_breakdown: analysisResult.colorBreakdown,
+            items: analysisResult.items,
+            parsed_at: analysisResult.parsedAt || new Date().toLocaleString('ar-SA')
+          }])
+          .select();
+
         if (error) {
           console.error('❌ Supabase Report Insert Error:', error.message);
-        } else {
+        } else if (data && data.length > 0) {
           console.log('✅ Successfully inserted report row to Supabase project_reports');
+          const dbReport = mapRowToHistoricalReport(data[0]);
+          localReport.id = dbReport.id;
+          return dbReport;
         }
-      }).catch(err => console.error('Supabase async exception:', err));
+      } catch (err: any) {
+        console.error('Supabase async exception:', err);
+      }
     } else {
-      console.warn('⚠️ Supabase config not provided. Saved report in local storage.');
+      console.warn('⚠️ Supabase config not provided. Saved report in temporary session memory.');
     }
 
-    return newReport;
+    return localReport;
   },
 
-  saveChangelog(projectId: number, projectName: string, reportId: string, previousReportId: string | null, diff: ProjectDiffResult): ProjectChangelogRecord {
-    const newRecord: ProjectChangelogRecord = {
+  async saveChangelog(
+    projectId: number, 
+    projectName: string, 
+    reportId: string, 
+    previousReportId: string | null, 
+    diff: ProjectDiffResult
+  ): Promise<ProjectChangelogRecord> {
+    const localRecord: ProjectChangelogRecord = {
       id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       projectId,
       projectName,
@@ -264,46 +346,68 @@ export const ReportHistoryStore = {
       isViewed: false
     };
 
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY_CHANGELOGS);
-      const all: ProjectChangelogRecord[] = raw ? JSON.parse(raw) : [];
-      all.unshift(newRecord); // newest first
-      localStorage.setItem(STORAGE_KEY_CHANGELOGS, JSON.stringify(all));
-    } catch (err) {
-      console.error('Error saving changelog record:', err);
-    }
+    memoryChangelogs.unshift(localRecord);
 
-    // Direct Async Sync to Supabase table: project_changelogs
     const supabase = getSupabaseClient();
     if (supabase) {
-      supabase.from('project_changelogs').insert([{
-        project_id: projectId,
-        project_name: projectName,
-        diff: diff,
-        is_viewed: false
-      }]).then(({ error }) => {
+      try {
+        const insertPayload: any = {
+          project_id: projectId,
+          project_name: projectName,
+          diff: diff,
+          is_viewed: false
+        };
+
+        if (reportId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reportId)) {
+          insertPayload.report_id = reportId;
+        }
+        if (previousReportId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(previousReportId)) {
+          insertPayload.previous_report_id = previousReportId;
+        }
+
+        const { data, error } = await (supabase.from('project_changelogs') as any)
+          .insert([insertPayload])
+          .select();
+
         if (error) {
           console.error('❌ Supabase Changelog Insert Error:', error.message);
-        } else {
+        } else if (data && data.length > 0) {
           console.log('✅ Successfully inserted changelog row to Supabase project_changelogs');
+          const dbRecord = mapRowToChangelogRecord(data[0]);
+          localRecord.id = dbRecord.id;
+          return dbRecord;
         }
-      }).catch(err => console.error('Supabase async exception:', err));
+      } catch (err: any) {
+        console.error('Supabase async exception:', err);
+      }
     }
 
-    return newRecord;
+    return localRecord;
   },
 
-  getChangelogs(projectId?: number): ProjectChangelogRecord[] {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY_CHANGELOGS);
-      if (!raw) return [];
-      const all: ProjectChangelogRecord[] = JSON.parse(raw);
-      if (projectId) {
-        return all.filter(c => c.projectId === projectId);
+  async getChangelogs(projectId?: number): Promise<ProjectChangelogRecord[]> {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        let query = (supabase.from('project_changelogs') as any).select('*').order('created_at', { ascending: false });
+        if (projectId) {
+          query = query.eq('project_id', projectId);
+        }
+        const { data, error } = await query;
+        if (!error && data) {
+          return data.map(mapRowToChangelogRecord);
+        }
+        if (error) {
+          console.error('❌ Supabase getChangelogs Error:', error.message);
+        }
+      } catch (err) {
+        console.error('Supabase getChangelogs exception:', err);
       }
-      return all;
-    } catch {
-      return [];
     }
+
+    if (projectId) {
+      return memoryChangelogs.filter((c) => c.projectId === projectId);
+    }
+    return memoryChangelogs;
   }
 };

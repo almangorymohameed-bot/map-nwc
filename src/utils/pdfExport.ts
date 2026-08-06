@@ -5,7 +5,7 @@
 
 import { jsPDF } from 'jspdf';
 import { KMLAnalysisResult, StatusCategory } from '../types';
-import { COLOR_CONFIG } from './myMapsKmlParser';
+import { COLOR_CONFIG, getStatusCategoryLabel } from './myMapsKmlParser';
 
 /**
  * Helper to draw page header on Canvas
@@ -184,10 +184,12 @@ export async function exportAnalysisToPDF(result: KMLAnalysisResult, projectName
       ctx1.fillStyle = cfg.hex;
       ctx1.fillRect(cX + 215, cY, 9, 115);
 
+      const catLabel = getStatusCategoryLabel(cat, titleName, result.projectScope);
+
       ctx1.fillStyle = '#0f172a';
       ctx1.font = 'bold 13px system-ui, sans-serif';
       ctx1.textAlign = 'right';
-      ctx1.fillText(cfg.label, cX + 202, cY + 28);
+      ctx1.fillText(catLabel, cX + 202, cY + 28);
 
       ctx1.fillStyle = cfg.hex;
       ctx1.font = 'bold 12px font-mono, sans-serif';
@@ -244,7 +246,7 @@ export async function exportAnalysisToPDF(result: KMLAnalysisResult, projectName
 
       ctx1.fillStyle = '#0f172a';
       ctx1.font = 'bold 13px system-ui, sans-serif';
-      ctx1.fillText(cfg.label, width - 80, trY + 24);
+      ctx1.fillText(getStatusCategoryLabel(cat, titleName, result.projectScope), width - 80, trY + 24);
 
       ctx1.font = '13px font-mono, sans-serif';
       ctx1.fillStyle = '#475569';

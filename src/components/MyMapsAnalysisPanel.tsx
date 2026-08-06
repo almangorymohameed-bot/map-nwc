@@ -11,7 +11,8 @@ import {
   handleLoadMyMapsLink, 
   parseKMLContent, 
   generateSyntheticProjectKMLData,
-  COLOR_CONFIG 
+  COLOR_CONFIG,
+  getStatusCategoryLabel
 } from '../utils/myMapsKmlParser';
 import { compareKMLAnalyses } from '../utils/diffEngine';
 import { ReportHistoryStore } from '../utils/supabaseSetup';
@@ -68,17 +69,18 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   const [currentDiffResult, setCurrentDiffResult] = useState<ProjectDiffResult | null>(null);
   const [isDiffModalOpen, setIsDiffModalOpen] = useState<boolean>(false);
 
-  const processAndSaveAnalysis = (newResult: KMLAnalysisResult, proj: Project) => {
-    const previousReport = ReportHistoryStore.getLatestReport(proj.id);
+  const processAndSaveAnalysis = async (newResult: KMLAnalysisResult, proj: Project) => {
+    const previousReport = await ReportHistoryStore.getLatestReport(proj.id);
     const diff = compareKMLAnalyses(
       previousReport ? previousReport.analysisResult : null,
       newResult,
       proj.id,
-      proj.name
+      proj.name,
+      proj.scope
     );
 
-    const savedRep = ReportHistoryStore.saveReport(proj.id, proj.name, proj.mapUrl, newResult);
-    ReportHistoryStore.saveChangelog(proj.id, proj.name, savedRep.id, previousReport ? previousReport.id : null, diff);
+    const savedRep = await ReportHistoryStore.saveReport(proj.id, proj.name, proj.mapUrl, newResult);
+    await ReportHistoryStore.saveChangelog(proj.id, proj.name, savedRep.id, previousReport ? previousReport.id : null, diff);
 
     setAnalysisResult(newResult);
     setCurrentDiffResult(diff);
@@ -87,7 +89,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
     if (diff.hasChanges) {
       showToast(`📊 تم رصد وتوثيق تغيرات جديدة مقارنة بالتقرير السابق لمشروع (${proj.name})`);
     } else {
-      showToast(`✨ تم إجراء التحليل وحفظ التقرير لمشروع (${proj.name}) بنجاح!`);
+      showToast(`✨ تم إجراء التحليل وحفظ التقرير لمشروع (${proj.name}) بقاعدة البيانات بنجاح!`);
     }
   };
 
@@ -128,13 +130,13 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
     setIsLoading(true);
     try {
       const proj = activeProject || ({ id: 999, name: projName || 'مشروع عام', mapUrl: url } as Project);
-      const result = await handleLoadMyMapsLink(url, proj.name);
-      processAndSaveAnalysis(result, proj);
+      const result = await handleLoadMyMapsLink(url, proj.name, proj.scope);
+      await processAndSaveAnalysis(result, proj);
     } catch (err: any) {
       console.error(err);
       const proj = activeProject || ({ id: 999, name: projName || 'مشروع عام', mapUrl: url } as Project);
-      const synthetic = generateSyntheticProjectKMLData(proj.name, url);
-      processAndSaveAnalysis(synthetic, proj);
+      const synthetic = generateSyntheticProjectKMLData(proj.name, url, proj.scope);
+      await processAndSaveAnalysis(synthetic, proj);
     } finally {
       setIsLoading(false);
     }
@@ -159,13 +161,13 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
 
     setIsLoading(true);
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const content = event.target?.result as string;
         if (content) {
-          const res = parseKMLContent(content, file.name.replace(/\.[^/.]+$/, ''), mapInputUrl);
+          const res = parseKMLContent(content, file.name.replace(/\.[^/.]+$/, ''), mapInputUrl, activeProject?.scope);
           const proj = activeProject || ({ id: 999, name: file.name, mapUrl: '' } as Project);
-          processAndSaveAnalysis(res, proj);
+          await processAndSaveAnalysis(res, proj);
           showToast(`📁 تم استيراد وتحليل الملف (${file.name}) بنجاح!`);
         }
       } catch (err) {
@@ -181,8 +183,8 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   const handleSimulateDailyUpdate = () => {
     if (!activeProject) return;
     setIsLoading(true);
-    setTimeout(() => {
-      const baseResult = analysisResult || generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '');
+    setTimeout(async () => {
+      const baseResult = analysisResult || generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '', activeProject.scope);
 
       const updatedItems = baseResult.items.map((it, idx) => {
         if (it.statusCategory === 'ongoing') {
@@ -208,7 +210,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
         items: updatedItems
       };
 
-      processAndSaveAnalysis(updatedResult, activeProject);
+      await processAndSaveAnalysis(updatedResult, activeProject);
       setIsLoading(false);
       showToast(`🔔 تم محاكاة التتبع اليومي التلقائي: تم رصد تحديث في المراحل والفسوح الأخير!`);
     }, 700);
@@ -222,40 +224,41 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
 
   // Status Badge Helper
   const getStatusBadge = (cat: StatusCategory) => {
+    const label = getStatusCategoryLabel(cat, activeProject?.name, activeProject?.scope);
     switch (cat) {
       case 'executed_water':
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full text-white shadow-xs" style={{ backgroundColor: '#01579B' }}>
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-            #01579B | منفذ - مياه
+            #01579B | {label}
           </span>
         );
       case 'executed_sewage':
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full text-white shadow-xs" style={{ backgroundColor: '#097138' }}>
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-            #097138 | منفذ - صرف
+            #097138 | {label}
           </span>
         );
       case 'ongoing':
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full text-slate-900 shadow-xs" style={{ backgroundColor: '#ffea00' }}>
             <span className="w-1.5 h-1.5 rounded-full bg-slate-900 animate-pulse"></span>
-            #FFEA00 | جاري العمل
+            #FFEA00 | {label}
           </span>
         );
       case 'remaining':
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full text-white shadow-xs" style={{ backgroundColor: '#a52714' }}>
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
-            #A52714 | أعمال متبقية
+            #A52714 | {label}
           </span>
         );
       case 'cancelled':
         return (
           <span className="inline-flex items-center gap-1 text-[11px] font-black px-2.5 py-1 rounded-full text-slate-900 shadow-xs" style={{ backgroundColor: '#F48FB1' }}>
             <span className="w-1.5 h-1.5 rounded-full bg-slate-900"></span>
-            #F48FB1 | خطوط تم إلغائها
+            #F48FB1 | {label}
           </span>
         );
       default:
@@ -407,18 +410,20 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     if (currentDiffResult) {
                       setIsDiffModalOpen(true);
                     } else if (activeProject) {
-                      const latest = ReportHistoryStore.getLatestReport(activeProject.id);
+                      setIsLoading(true);
+                      const latest = await ReportHistoryStore.getLatestReport(activeProject.id);
+                      setIsLoading(false);
                       if (latest && analysisResult) {
-                        const diff = compareKMLAnalyses(latest.analysisResult, analysisResult, activeProject.id, activeProject.name);
+                        const diff = compareKMLAnalyses(latest.analysisResult, analysisResult, activeProject.id, activeProject.name, activeProject.scope);
                         setCurrentDiffResult(diff);
                       } else {
                         // Create initial diff
-                        const synthetic = analysisResult || generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '');
-                        const diff = compareKMLAnalyses(null, synthetic, activeProject.id, activeProject.name);
+                        const synthetic = analysisResult || generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '', activeProject.scope);
+                        const diff = compareKMLAnalyses(null, synthetic, activeProject.id, activeProject.name, activeProject.scope);
                         setCurrentDiffResult(diff);
                       }
                       setIsDiffModalOpen(true);
@@ -561,12 +566,12 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
 
             {/* 5 Requested Colors Breakdown Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-1">
-              {/* 1. #01579B - منفذ - مياه */}
+              {/* 1. #01579B - منفذ - مياه / منفذ - صرف */}
               <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/40 space-y-2 relative overflow-hidden">
                 <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#01579B' }}></div>
                 <div className="pr-1 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#01579B | منفذ - مياه</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#01579B | {getStatusCategoryLabel('executed_water', activeProject?.name, analysisResult.projectScope)}</span>
                     <span className="text-[10px] font-mono font-extrabold text-blue-800 dark:text-blue-300">
                       %{analysisResult.colorBreakdown.executed_water.percentage}
                     </span>
@@ -587,7 +592,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#097138' }}></div>
                 <div className="pr-1 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#097138 | منفذ - صرف</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#097138 | {getStatusCategoryLabel('executed_sewage', activeProject?.name, analysisResult.projectScope)}</span>
                     <span className="text-[10px] font-mono font-extrabold text-emerald-800 dark:text-emerald-300">
                       %{analysisResult.colorBreakdown.executed_sewage.percentage}
                     </span>
@@ -608,7 +613,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#ffea00' }}></div>
                 <div className="pr-1 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-900 dark:text-slate-100">#FFEA00 | جاري العمل</span>
+                    <span className="text-xs font-black text-slate-900 dark:text-slate-100">#FFEA00 | {getStatusCategoryLabel('ongoing', activeProject?.name, analysisResult.projectScope)}</span>
                     <span className="text-[10px] font-mono font-extrabold text-amber-900 dark:text-amber-300">
                       %{analysisResult.colorBreakdown.ongoing.percentage}
                     </span>
@@ -629,7 +634,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#a52714' }}></div>
                 <div className="pr-1 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#A52714 | أعمال متبقية</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#A52714 | {getStatusCategoryLabel('remaining', activeProject?.name, analysisResult.projectScope)}</span>
                     <span className="text-[10px] font-mono font-extrabold text-rose-800 dark:text-rose-300">
                       %{analysisResult.colorBreakdown.remaining.percentage}
                     </span>
@@ -650,7 +655,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#F48FB1' }}></div>
                 <div className="pr-1 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#F48FB1 | خطوط ملغاة</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#F48FB1 | {getStatusCategoryLabel('cancelled', activeProject?.name, analysisResult.projectScope)}</span>
                     <span className="text-[10px] font-mono font-extrabold text-pink-800 dark:text-pink-300">
                       %{analysisResult.colorBreakdown.cancelled.percentage}
                     </span>
@@ -676,27 +681,27 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
               <div className="w-full bg-slate-100 dark:bg-slate-800 h-3.5 rounded-full overflow-hidden flex shadow-inner">
                 <div
                   style={{ width: `${analysisResult.colorBreakdown.executed_water.percentage}%`, backgroundColor: '#01579B' }}
-                  title={`منفذ مياه: ${analysisResult.colorBreakdown.executed_water.percentage}%`}
+                  title={`${getStatusCategoryLabel('executed_water', activeProject?.name, analysisResult.projectScope)}: ${analysisResult.colorBreakdown.executed_water.percentage}%`}
                   className="h-full transition-all duration-500"
                 />
                 <div
                   style={{ width: `${analysisResult.colorBreakdown.executed_sewage.percentage}%`, backgroundColor: '#097138' }}
-                  title={`منفذ صرف: ${analysisResult.colorBreakdown.executed_sewage.percentage}%`}
+                  title={`${getStatusCategoryLabel('executed_sewage', activeProject?.name, analysisResult.projectScope)}: ${analysisResult.colorBreakdown.executed_sewage.percentage}%`}
                   className="h-full transition-all duration-500"
                 />
                 <div
                   style={{ width: `${analysisResult.colorBreakdown.ongoing.percentage}%`, backgroundColor: '#ffea00' }}
-                  title={`جاري العمل: ${analysisResult.colorBreakdown.ongoing.percentage}%`}
+                  title={`${getStatusCategoryLabel('ongoing', activeProject?.name, analysisResult.projectScope)}: ${analysisResult.colorBreakdown.ongoing.percentage}%`}
                   className="h-full transition-all duration-500"
                 />
                 <div
                   style={{ width: `${analysisResult.colorBreakdown.remaining.percentage}%`, backgroundColor: '#a52714' }}
-                  title={`أعمال متبقية: ${analysisResult.colorBreakdown.remaining.percentage}%`}
+                  title={`${getStatusCategoryLabel('remaining', activeProject?.name, analysisResult.projectScope)}: ${analysisResult.colorBreakdown.remaining.percentage}%`}
                   className="h-full transition-all duration-500"
                 />
                 <div
                   style={{ width: `${analysisResult.colorBreakdown.cancelled.percentage}%`, backgroundColor: '#F48FB1' }}
-                  title={`خطوط ملغاة: ${analysisResult.colorBreakdown.cancelled.percentage}%`}
+                  title={`${getStatusCategoryLabel('cancelled', activeProject?.name, analysisResult.projectScope)}: ${analysisResult.colorBreakdown.cancelled.percentage}%`}
                   className="h-full transition-all duration-500"
                 />
               </div>
@@ -1070,11 +1075,11 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                       className="bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="all">جميع الحالات والخطوط</option>
-                      <option value="executed_water">#01579B | منفذ - مياه</option>
-                      <option value="executed_sewage">#097138 | منفذ - صرف</option>
-                      <option value="ongoing">#FFEA00 | جاري العمل</option>
-                      <option value="remaining">#A52714 | أعمال متبقية</option>
-                      <option value="cancelled">#F48FB1 | خطوط ملغاة</option>
+                      <option value="executed_water">#01579B | {getStatusCategoryLabel('executed_water', activeProject?.name, analysisResult.projectScope)}</option>
+                      <option value="executed_sewage">#097138 | {getStatusCategoryLabel('executed_sewage', activeProject?.name, analysisResult.projectScope)}</option>
+                      <option value="ongoing">#FFEA00 | {getStatusCategoryLabel('ongoing', activeProject?.name, analysisResult.projectScope)}</option>
+                      <option value="remaining">#A52714 | {getStatusCategoryLabel('remaining', activeProject?.name, analysisResult.projectScope)}</option>
+                      <option value="cancelled">#F48FB1 | {getStatusCategoryLabel('cancelled', activeProject?.name, analysisResult.projectScope)}</option>
                     </select>
                   </div>
                 </div>

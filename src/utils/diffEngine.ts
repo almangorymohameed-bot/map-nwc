@@ -12,7 +12,7 @@ import {
   ScopeChangeDetail,
   StatusCategory
 } from '../types';
-import { COLOR_CONFIG } from './myMapsKmlParser';
+import { COLOR_CONFIG, getStatusCategoryLabel } from './myMapsKmlParser';
 
 /**
  * Performs a comprehensive diff check between previous KML analysis and newly extracted KML analysis
@@ -21,7 +21,8 @@ export function compareKMLAnalyses(
   oldResult: KMLAnalysisResult | null,
   newResult: KMLAnalysisResult,
   projectId: number,
-  projectName: string
+  projectName: string,
+  projectScope?: string
 ): ProjectDiffResult {
   const currentReportDate = newResult.parsedAt || new Date().toLocaleString('ar-SA');
   const previousReportDate = oldResult?.parsedAt || 'لا يوجد تقرير سابق';
@@ -68,7 +69,7 @@ export function compareKMLAnalyses(
     if (diffMeters !== 0) {
       lengthChanges.push({
         category: cat,
-        label: COLOR_CONFIG[cat]?.label || cat,
+        label: getStatusCategoryLabel(cat, projectName, projectScope || newResult.projectScope || oldResult?.projectScope),
         oldKm: oldCatStats.totalLengthKm,
         newKm: newCatStats.totalLengthKm,
         diffKm,

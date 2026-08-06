@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { KMLAnalysisResult, StatusCategory } from '../types';
-import { COLOR_CONFIG } from '../utils/myMapsKmlParser';
+import { COLOR_CONFIG, getStatusCategoryLabel } from '../utils/myMapsKmlParser';
 import { exportAnalysisToPDF } from '../utils/pdfExport';
 import { Key, Sparkles, ChevronDown, ChevronUp, Layers, Ruler, RefreshCw, Download } from 'lucide-react';
 
@@ -188,7 +188,7 @@ export const MapLegend: React.FC<MapLegendProps> = ({
                           style={{ backgroundColor: cfg.hex }}
                         ></span>
                         <span className="text-xs font-black text-slate-800 dark:text-slate-200">
-                          {cfg.label}
+                          {getStatusCategoryLabel(cat, projectName, analysisResult?.projectScope)}
                         </span>
                       </div>
                       {stats && (
