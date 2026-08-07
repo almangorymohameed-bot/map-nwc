@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Project, KMLAnalysisResult, StatusCategory, ProjectDiffResult } from '../types';
+import { Project, KMLAnalysisResult, StatusCategory, ProjectDiffResult, HistoricalReport } from '../types';
 import { MapLegend } from './MapLegend';
 import { exportAnalysisToPDF } from '../utils/pdfExport';
 import { 
@@ -17,6 +17,11 @@ import {
 import { compareKMLAnalyses } from '../utils/diffEngine';
 import { ReportHistoryStore } from '../utils/supabaseSetup';
 import { ProjectDiffModal } from './ProjectDiffModal';
+import { 
+  runSequentialDailyAutoAnalysis, 
+  subscribeAutoAnalysisProgress, 
+  AutoAnalysisProgress 
+} from '../utils/dailyAutoAnalysisService';
 import { ChangeReportModal } from './ChangeReportModal';
 import { 
   BarChart3, 
@@ -50,9 +55,10 @@ interface MyMapsAnalysisPanelProps {
   projects: Project[];
   selectedProject?: Project | null;
   onSelectProject?: (project: Project) => void;
+  isAdmin?: boolean;
 }
 
-export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject }: MyMapsAnalysisPanelProps) {
+export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject, isAdmin }: MyMapsAnalysisPanelProps) {
   const [mapInputUrl, setMapInputUrl] = useState<string>(selectedProject?.mapUrl || '');
   const [activeProject, setActiveProject] = useState<Project | null>(selectedProject || null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -69,8 +75,35 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   const [currentDiffResult, setCurrentDiffResult] = useState<ProjectDiffResult | null>(null);
   const [isDiffModalOpen, setIsDiffModalOpen] = useState<boolean>(false);
 
+  // Daily Sequential Auto-Analysis Progress State
+  const [autoProgress, setAutoProgress] = useState<AutoAnalysisProgress>({
+    isRunning: false,
+    totalProjects: 0,
+    completedProjects: 0,
+    changesFoundCount: 0
+  });
+
+  useEffect(() => {
+    const unsubscribe = subscribeAutoAnalysisProgress(setAutoProgress);
+    return () => unsubscribe();
+  }, []);
+
+  const handleRunBatchDailyAutoAnalysis = async () => {
+    if (!projects || projects.length === 0) {
+      showToast('⚠️ لا توجد مشاريع مجهزة للتحليل.');
+      return;
+    }
+    showToast('🚀 جاري بدء الفحص والتحليل التلقائي التتابعي لجميع المشاريع وتوثيق التقارير بقاعدة البيانات...');
+    const result = await runSequentialDailyAutoAnalysis(projects, { forceRun: true });
+    if (result.changesFound > 0) {
+      showToast(`✨ اكتمل التحليل التتابعي: تم رصد وتوثيق تغيرات في ${result.changesFound} مشروع بقاعدة البيانات!`);
+    } else {
+      showToast(`✨ اكتمل التحليل التتابعي لـ ${result.processed} مشروع وتم حفظ جميع التقارير اليومية بنجاح!`);
+    }
+  };
+
   const processAndSaveAnalysis = async (newResult: KMLAnalysisResult, proj: Project) => {
-    const previousReport = await ReportHistoryStore.getLatestReport(proj.id);
+    const previousReport = await ReportHistoryStore.getLatestReport(proj.id, proj.name);
     const diff = compareKMLAnalyses(
       previousReport ? previousReport.analysisResult : null,
       newResult,
@@ -328,6 +361,38 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
           </div>
         </div>
 
+        {/* Animated Sequential Auto-Analysis Progress Bar */}
+        {autoProgress.isRunning && (
+          <div className="mb-4 p-4 bg-gradient-to-r from-blue-900/40 via-indigo-900/40 to-slate-900/40 border border-blue-500/40 rounded-2xl shadow-lg backdrop-blur-md text-white">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 text-cyan-400 animate-spin" />
+                <span className="text-xs font-black text-cyan-300">جاري الفحص والتحليل التلقائي التتابعي للمشاريع بقاعدة البيانات...</span>
+              </div>
+              <span className="text-[11px] font-extrabold bg-blue-500/30 text-blue-200 px-2.5 py-0.5 rounded-full border border-blue-400/30">
+                {autoProgress.completedProjects} من {autoProgress.totalProjects} مشروع
+              </span>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden border border-slate-700 mb-2">
+              <div 
+                className="bg-gradient-to-r from-cyan-400 to-blue-500 h-full transition-all duration-300 rounded-full"
+                style={{ width: `${Math.round((autoProgress.completedProjects / (autoProgress.totalProjects || 1)) * 100)}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10.5px] text-slate-300 font-bold">
+              <span className="truncate max-w-[280px]">
+                📌 جاري التحليل الآن: <span className="text-amber-300 font-extrabold">{autoProgress.currentProjectName || 'تحضير البيانات...'}</span>
+              </span>
+              {autoProgress.changesFoundCount > 0 && (
+                <span className="text-emerald-400 font-extrabold flex items-center gap-1">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                  تم رصد {autoProgress.changesFoundCount} تغيرات
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Dropdown Project Selector */}
         <div className="space-y-3 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
           <div className="flex items-center justify-between gap-2">
@@ -411,18 +476,35 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 <button
                   type="button"
                   onClick={async () => {
-                    if (currentDiffResult) {
-                      setIsDiffModalOpen(true);
-                    } else if (activeProject) {
+                    if (activeProject) {
                       setIsLoading(true);
-                      const latest = await ReportHistoryStore.getLatestReport(activeProject.id);
+                      const reports = await ReportHistoryStore.getHistoricalReports(activeProject.id, activeProject.name);
                       setIsLoading(false);
-                      if (latest && analysisResult) {
-                        const diff = compareKMLAnalyses(latest.analysisResult, analysisResult, activeProject.id, activeProject.name, activeProject.scope);
+
+                      const currentAnalysis = analysisResult || (reports.length > 0 ? reports[0].analysisResult : null);
+                      let previousReport: HistoricalReport | null = null;
+
+                      if (reports.length > 1) {
+                        if (analysisResult && reports[0].analysisResult.totalLengthKm === analysisResult.totalLengthKm) {
+                          previousReport = reports[1];
+                        } else {
+                          previousReport = reports[0];
+                        }
+                      } else if (reports.length === 1 && !analysisResult) {
+                        previousReport = null;
+                      }
+
+                      if (currentAnalysis) {
+                        const diff = compareKMLAnalyses(
+                          previousReport ? previousReport.analysisResult : null,
+                          currentAnalysis,
+                          activeProject.id,
+                          activeProject.name,
+                          activeProject.scope
+                        );
                         setCurrentDiffResult(diff);
                       } else {
-                        // Create initial diff
-                        const synthetic = analysisResult || generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '', activeProject.scope);
+                        const synthetic = generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '', activeProject.scope);
                         const diff = compareKMLAnalyses(null, synthetic, activeProject.id, activeProject.name, activeProject.scope);
                         setCurrentDiffResult(diff);
                       }
@@ -435,16 +517,18 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                   <span>مقارنة التغيرات والتقرير التاريخي 📊</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleSimulateDailyUpdate}
-                  disabled={isLoading}
-                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-[11px] rounded-xl border border-slate-700 shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                  title="اختبار محاكاة الفحص اليومي التلقائي ورصد الفروقات"
-                >
-                  <Bell className="h-3.5 w-3.5 text-cyan-400" />
-                  <span>محاكاة الفحص اليومي 🔔</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleRunBatchDailyAutoAnalysis}
+                    disabled={autoProgress.isRunning}
+                    className="px-3.5 py-1.5 bg-gradient-to-r from-blue-700 to-indigo-800 hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50 text-white font-black text-[11px] rounded-xl border border-blue-500/40 shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                    title="تشغيل التحليل الجغرافي والتقرير اليومي لجميع المشاريع بالتتالي وتوثيق النتائج بقاعدة البيانات (خاص بمدير النظام)"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 text-cyan-300 ${autoProgress.isRunning ? 'animate-spin' : ''}`} />
+                    <span>{autoProgress.isRunning ? 'جاري التحليل التتابعي...' : 'تشغيل التقرير اليومي الشامل (مدير النظام) 🔄'}</span>
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1144,11 +1228,13 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
       )}
       {/* Project Change Tracking & Historical Comparison Modal */}
       {activeProject && (
-        <ChangeReportModal
+        <ProjectDiffModal
           isOpen={isDiffModalOpen}
           onClose={() => setIsDiffModalOpen(false)}
           diffResult={currentDiffResult}
+          projectId={activeProject.id}
           projectName={activeProject.name}
+          isAdmin={isAdmin}
         />
       )}
     </div>

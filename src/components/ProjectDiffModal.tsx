@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ProjectDiffResult, HistoricalReport, ProjectChangelogRecord } from '../types';
 import { 
   X, 
@@ -41,6 +41,7 @@ interface ProjectDiffModalProps {
   diffResult: ProjectDiffResult | null;
   projectId: number;
   projectName: string;
+  isAdmin?: boolean;
 }
 
 export function ProjectDiffModal({
@@ -48,7 +49,8 @@ export function ProjectDiffModal({
   onClose,
   diffResult,
   projectId,
-  projectName
+  projectName,
+  isAdmin = false
 }: ProjectDiffModalProps) {
   const [activeTab, setActiveTab] = useState<'summary' | 'yellowLines' | 'permits' | 'lengths' | 'history' | 'sql'>('summary');
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
@@ -59,6 +61,38 @@ export function ProjectDiffModal({
   const [sbUrl, setSbUrl] = useState<string>(currentConfig.url);
   const [sbKey, setSbKey] = useState<string>(currentConfig.anonKey);
   const [connectionStatus, setConnectionStatus] = useState<{ status: 'idle' | 'testing' | 'success' | 'error'; message?: string }>({ status: 'idle' });
+
+  const [historyList, setHistoryList] = useState<HistoricalReport[]>([]);
+  const [changelogList, setChangelogList] = useState<ProjectChangelogRecord[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isOpen && projectId) {
+      let isMounted = true;
+      setIsLoadingHistory(true);
+      Promise.all([
+        ReportHistoryStore.getHistoricalReports(projectId, projectName),
+        ReportHistoryStore.getChangelogs(projectId, projectName)
+      ]).then(([reports, logs]) => {
+        if (isMounted) {
+          setHistoryList(reports);
+          setChangelogList(logs);
+          setIsLoadingHistory(false);
+        }
+      }).catch((err) => {
+        console.error('Error fetching history:', err);
+        if (isMounted) setIsLoadingHistory(false);
+      });
+
+      return () => { isMounted = false; };
+    }
+  }, [isOpen, projectId, projectName]);
+
+  useEffect(() => {
+    if (!isAdmin && activeTab === 'sql') {
+      setActiveTab('summary');
+    }
+  }, [isAdmin, activeTab]);
 
   const handleSaveAndTestSupabase = async () => {
     if (!sbUrl || !sbKey) {
@@ -97,9 +131,6 @@ export function ProjectDiffModal({
   };
 
   if (!isOpen || !diffResult) return null;
-
-  const historyList: HistoricalReport[] = ReportHistoryStore.getHistoricalReports(projectId);
-  const changelogList: ProjectChangelogRecord[] = ReportHistoryStore.getChangelogs(projectId);
 
   const handleCopySql = () => {
     navigator.clipboard.writeText(SUPABASE_SQL_SCHEMA);
@@ -265,13 +296,15 @@ export function ProjectDiffModal({
             <span>الأرشيف التاريخي ({historyList.length})</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab('sql')}
-            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 cursor-pointer border-t border-x ${activeTab === 'sql' ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 border-slate-200 dark:border-slate-800 shadow-sm' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
-          >
-            <Database className="h-4 w-4" />
-            <span>استعلامات Supabase & Cron</span>
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setActiveTab('sql')}
+              className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 cursor-pointer border-t border-x ${activeTab === 'sql' ? 'bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-400 border-slate-200 dark:border-slate-800 shadow-sm' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+            >
+              <Database className="h-4 w-4" />
+              <span>استعلامات Supabase & Cron</span>
+            </button>
+          )}
         </div>
 
         {/* Tab Content Body */}
@@ -491,7 +524,12 @@ export function ProjectDiffModal({
                 </span>
               </div>
 
-              {historyList.length === 0 ? (
+              {isLoadingHistory ? (
+                <div className="p-8 text-center rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 text-slate-500 text-xs flex flex-col items-center gap-2">
+                  <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <span>جاري جلب التقارير التاريخية من قاعدة بيانات Supabase...</span>
+                </div>
+              ) : historyList.length === 0 ? (
                 <div className="p-8 text-center rounded-2xl bg-slate-50 text-slate-500 text-xs">
                   لا توجد تقارير أرشفة تاريخية مسجلة بعد لهذا المشروع.
                 </div>

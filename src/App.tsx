@@ -3,13 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Project, User, AppNotification } from './types';
 import { getParsedProjects } from './data/initialProjects';
 import { INITIAL_USERS } from './data/initialUsers';
 
-// استيراد عميل سوبابيس للربط والمزامنة الحية
+// استيراد عميل سوبابيس والتحليل التلقائي اليومي
 import { supabase } from './supabase';
+import { 
+  runSequentialDailyAutoAnalysis, 
+  getScheduleAutoAnalysisConfig, 
+  getSaudiCurrentHourAndDate 
+} from './utils/dailyAutoAnalysisService';
 
 // Components
 import { DashboardStats } from './components/DashboardStats';
@@ -19,6 +24,11 @@ import { ProjectModal } from './components/ProjectModal';
 import { ProjectList } from './components/ProjectList';
 import { NWCLogo } from './components/NWCLogo';
 import { ProjectLayersViewer } from './components/ProjectLayersViewer';
+import { 
+  NotificationSettingsPage, 
+  DEFAULT_NOTIF_SETTINGS, 
+  NotificationSettings 
+} from './components/NotificationSettingsPage';
 
 // Icons
 import { 
@@ -29,6 +39,7 @@ import {
   ChevronDown, 
   ShieldAlert, 
   Settings, 
+  Sliders,
   LifeBuoy, 
   ShieldCheck, 
   Lock,
@@ -178,47 +189,83 @@ export const getProjectDifferencesMessage = (oldP: Project, newP: Project): stri
   return `وتم تعديل: ${changes.join(' و ')}`;
 };
 
-export const isNotificationAllowed = (notif: AppNotification, user: User): boolean => {
-  if (user.role === 'admin') return true;
-  
-  if (user.allowedProjectIds && user.allowedProjectIds.length > 0) {
-    return user.allowedProjectIds.includes(Number(notif.projectId));
+export const getUserNotifSettings = (userId: string): NotificationSettings => {
+  try {
+    const saved = localStorage.getItem(`water_maps_notif_settings_${userId}`);
+    return saved ? { ...DEFAULT_NOTIF_SETTINGS, ...JSON.parse(saved) } : DEFAULT_NOTIF_SETTINGS;
+  } catch (e) {
+    return DEFAULT_NOTIF_SETTINGS;
+  }
+};
+
+export const isNotificationAllowed = (
+  notif: AppNotification, 
+  user: User, 
+  userNotifSettings?: NotificationSettings, 
+  favoriteProjectIds?: number[]
+): boolean => {
+  const settings = userNotifSettings || getUserNotifSettings(user.id);
+
+  // 1. تصفية أنواع الأحداث المسموحة (نوع الإشعار)
+  if (notif.type === 'add' && !settings.allowNewProjects) return false;
+  if ((notif.type === 'change_detected' || (notif.message && notif.message.includes('تحديث جديد'))) && !settings.allowMapChanges) return false;
+  if (notif.type === 'edit' && !settings.allowProjectEdits) return false;
+
+  // 2. تصفية المشاريع المفضلة فقط
+  if (settings.onlyFavoriteProjects && favoriteProjectIds) {
+    if (!favoriteProjectIds.includes(Number(notif.projectId))) return false;
   }
 
-  const uRegions = (user.allowedRegions || []).map(r => r.trim());
-  const isAllRegions = uRegions.includes('الكل');
-  
-  let isRegionAllowed = isAllRegions;
-  if (!isRegionAllowed && notif.region) {
-    const pr = notif.region.trim();
-    if (uRegions.includes(pr)) {
-      isRegionAllowed = true;
-    } else {
-      const northGovs = ['المجمعة', 'رماح', 'الزلفي', 'ثادق', 'حريملاء', 'الغاط', 'ثادق وحريملاء'];
-      const southGovs = ['السليل', 'وادي الدواسر', 'الأفلاج', 'حوطة بني تميم', 'الحريق', 'السيح', 'الخرج', 'تمرة', 'خيران', 'السيح والخرج'];
-      const westGovs = ['المزاحمية', 'شقراء', 'عفيف', 'القويعية', 'البجاديه', 'البجادية', 'ضرما', 'ضرماء', 'الدوادمي', 'شقراء ومرات', 'عفيف والدوادمي', 'المزاحمية و ضرماء'];
-      
-      if (uRegions.includes('المحافظات الشمالية') && (northGovs.includes(pr) || pr.includes('المجمعة') || pr.includes('رماح') || pr.includes('الزلفي') || pr.includes('حريملاء') || pr.includes('الغاط') || pr.includes('ثادق'))) {
+  // 3. تصفية المشاريع المسموحة المحددة للمستخدم
+  if (user.allowedProjectIds && user.allowedProjectIds.length > 0) {
+    if (!user.allowedProjectIds.includes(Number(notif.projectId))) return false;
+  }
+
+  // إذا كان مدير النظام وقام بإيقاف تصفية المنطقة والقطاع
+  if (user.role === 'admin' && !settings.filterByRegion && !settings.filterByScope) return true;
+
+  // 4. تصفية حسب المنطقة الجغرافية
+  let isRegionAllowed = true;
+  if (settings.filterByRegion && user.role !== 'admin') {
+    const uRegions = (user.allowedRegions || []).map(r => r.trim());
+    const isAllRegions = uRegions.includes('الكل');
+    
+    isRegionAllowed = isAllRegions;
+    if (!isRegionAllowed && notif.region) {
+      const pr = notif.region.trim();
+      if (uRegions.includes(pr)) {
         isRegionAllowed = true;
-      }
-      if (uRegions.includes('المحافظات الجنوبية') && (southGovs.includes(pr) || pr.includes('السليل') || pr.includes('الدواسر') || pr.includes('الأفلاج') || pr.includes('تميم') || pr.includes('الخرج') || pr.includes('الحريق') || pr.includes('السيح'))) {
-        isRegionAllowed = true;
-      }
-      if (uRegions.includes('المحافظات الغربية') && (westGovs.includes(pr) || pr.includes('عفيف') || pr.includes('الدوادمي') || pr.includes('المزاحمية') || pr.includes('شقراء') || pr.includes('القويعية') || pr.includes('البجادية') || pr.includes('البجاديه') || pr.includes('ضرما') || pr.includes('ضرماء'))) {
-        isRegionAllowed = true;
+      } else {
+        const northGovs = ['المجمعة', 'رماح', 'الزلفي', 'ثادق', 'حريملاء', 'الغاط', 'ثادق وحريملاء'];
+        const southGovs = ['السليل', 'وادي الدواسر', 'الأفلاج', 'حوطة بني تميم', 'الحريق', 'السيح', 'الخرج', 'تمرة', 'خيران', 'السيح والخرج'];
+        const westGovs = ['المزاحمية', 'شقراء', 'عفيف', 'القويعية', 'البجاديه', 'البجادية', 'ضرما', 'ضرماء', 'الدوادمي', 'شقراء ومرات', 'عفيف والدوادمي', 'المزاحمية و ضرماء'];
+        
+        if (uRegions.includes('المحافظات الشمالية') && (northGovs.includes(pr) || pr.includes('المجمعة') || pr.includes('رماح') || pr.includes('الزلفي') || pr.includes('حريملاء') || pr.includes('الغاط') || pr.includes('ثادق'))) {
+          isRegionAllowed = true;
+        }
+        if (uRegions.includes('المحافظات الجنوبية') && (southGovs.includes(pr) || pr.includes('السليل') || pr.includes('الدواسر') || pr.includes('الأفلاج') || pr.includes('تميم') || pr.includes('الخرج') || pr.includes('الحريق') || pr.includes('السيح'))) {
+          isRegionAllowed = true;
+        }
+        if (uRegions.includes('المحافظات الغربية') && (westGovs.includes(pr) || pr.includes('عفيف') || pr.includes('الدوادمي') || pr.includes('المزاحمية') || pr.includes('شقراء') || pr.includes('القويعية') || pr.includes('البجادية') || pr.includes('البجاديه') || pr.includes('ضرما') || pr.includes('ضرماء'))) {
+          isRegionAllowed = true;
+        }
       }
     }
   }
 
-  const isAllScopes = user.allowedScopes.includes('الكل');
-  let isScopeAllowed = isAllScopes;
-  if (!isScopeAllowed && notif.scope) {
-    const ns = notif.scope.trim();
-    isScopeAllowed = user.allowedScopes.some(scopeType => {
-      const uScope = scopeType.trim();
-      if (!uScope) return false;
-      return ns === uScope || (ns.includes('صرف') && uScope.includes('صرف')) || (ns.includes('مياه') && uScope.includes('مياه'));
-    });
+  // 5. تصفية حسب قطاع المشروع (مياه / صرف)
+  let isScopeAllowed = true;
+  if (settings.filterByScope && user.role !== 'admin') {
+    const isAllScopes = user.allowedScopes.includes('الكل');
+    isScopeAllowed = isAllScopes;
+    if (!isScopeAllowed && notif.scope) {
+      const ns = notif.scope.trim();
+      isScopeAllowed = user.allowedScopes.some(scopeType => {
+        const uScope = scopeType.trim();
+        if (!uScope) return false;
+        return ns === uScope || (ns.includes('صرف') && uScope.includes('صرف')) || (ns.includes('مياه') && uScope.includes('مياه'));
+      });
+    }
   }
 
   return isRegionAllowed && isScopeAllowed;
@@ -308,7 +355,7 @@ export default function App() {
   const [showNotificationsDropdown, setShowNotificationsDropdown] = useState(false);
 
   // 3. UI Control State
-  const [activeTab, setActiveTab] = useState<'maps' | 'stats' | 'layers' | 'users'>('maps');
+  const [activeTab, setActiveTab] = useState<'maps' | 'stats' | 'layers' | 'users' | 'settings'>('maps');
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [mobileViewMode, setMobileViewMode] = useState<'map' | 'list'>('map');
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
@@ -353,6 +400,10 @@ export default function App() {
 
   // 📢 دالة إرسال التنبيهات إلى ستارة النظام الخارجية بالجوال والكمبيوتر
   const sendNativeNotification = (title: string, body: string) => {
+    if (currentUser && currentUser.id) {
+      const userSettings = getUserNotifSettings(currentUser.id);
+      if (!userSettings.allowNativePush) return;
+    }
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(title, {
         body: body,
@@ -541,7 +592,21 @@ export default function App() {
     }
   }, [isLogged]);
 
-  // 🔄 المزامنة الحية لِـسحب الإشعارات من سوبابيس وتمرير الأحداث الدقيقة لِـستارة الجوال
+  // تتبع الإشعارات التي أرسلت لها تنبيهات خارجية لمنع التكرار المتتالي المنبثق
+  const notifiedNativeIdsRef = useRef<Set<string>>(
+    (() => {
+      try {
+        const saved = localStorage.getItem('water_maps_already_notified_ids');
+        return saved ? new Set(JSON.parse(saved)) : new Set<string>();
+      } catch (e) {
+        return new Set<string>();
+      }
+    })()
+  );
+
+  const hasAutoRunStartedRef = useRef(false);
+
+  // 🔄 المزامنة الحية لِـسحب الإشعارات من سوبابيس وتمرير الأحداث الدقيقة لِـستارة الجوال بدون تكرار
   useEffect(() => {
     const fetchUserNotifications = async () => {
       if (!currentUser || !currentUser.id || !isLogged) return;
@@ -572,6 +637,9 @@ export default function App() {
             clearedIds = savedCleared ? JSON.parse(savedCleared) : [];
           } catch (e) {}
 
+          const userNotifSettings = getUserNotifSettings(currentUser.id);
+          const favProjectIds = projects.filter(p => p.isFavorite || favoriteIds.includes(p.id)).map(p => p.id);
+
           const mappedNotifs = data
             .map((n: any) => ({
               id: String(n.id),
@@ -584,16 +652,21 @@ export default function App() {
               region: n.region || '',
               scope: n.scope || ''
             }))
-            .filter((notif: any) => isNotificationAllowed(notif, currentUser) && !clearedIds.includes(String(notif.id)));
+            .filter((notif: any) => isNotificationAllowed(notif, currentUser, userNotifSettings, favProjectIds) && !clearedIds.includes(String(notif.id)));
 
-          // عند لقط إشعار جديد غير مقروء ومسموح به قادم من السيرفر، يتم دفعه لِـستارة الجوال فوراً
-          if (notifications.length > 0 && mappedNotifs.length > 0) {
-            const newNotifs = mappedNotifs.filter(mn => !notifications.some(n => n.id === mn.id));
-            newNotifs.forEach(newNotif => {
-              if (!newNotif.read) {
-                sendNativeNotification('تنبيه مشاريع NWC 🔔', newNotif.message);
-              }
+          // إطلاق التنبيه الخارجي مرة واحدة فقط لكل إشعار غير مقروء لمنع الانبثاق المتكرر
+          const unnotifiedItems = mappedNotifs.filter((mn: any) => !mn.read && !notifiedNativeIdsRef.current.has(mn.id));
+          if (unnotifiedItems.length > 0) {
+            unnotifiedItems.forEach((newNotif: any) => {
+              notifiedNativeIdsRef.current.add(newNotif.id);
+              sendNativeNotification('تنبيه مشاريع NWC 🔔', newNotif.message);
             });
+            try {
+              localStorage.setItem(
+                'water_maps_already_notified_ids',
+                JSON.stringify(Array.from(notifiedNativeIdsRef.current))
+              );
+            } catch (e) {}
           }
 
           setNotifications(mappedNotifs);
@@ -604,9 +677,37 @@ export default function App() {
     };
 
     fetchUserNotifications();
-    const interval = setInterval(fetchUserNotifications, 8000);
+    const interval = setInterval(fetchUserNotifications, 10000);
     return () => clearInterval(interval);
-  }, [currentUser.id, isLogged, notifications.length]);
+  }, [currentUser.id, isLogged]);
+
+  // 🤖 تشغيل التحليل التلقائي اليومي المجدول - حصرياً لمدير النظام Admin وفقط بالساعة المحددة بتوقيت السعودية
+  useEffect(() => {
+    if (isLogged && currentUser && currentUser.role === 'admin' && projects && projects.length > 0 && !hasAutoRunStartedRef.current) {
+      const scheduleConfig = getScheduleAutoAnalysisConfig();
+      if (!scheduleConfig.autoScheduledEnabled) return;
+
+      const { hour, dateStr } = getSaudiCurrentHourAndDate();
+      const lastRunDate = localStorage.getItem('water_maps_last_daily_auto_run_date');
+
+      // يفحص فقط إذا لم يتم التشغيل اليوم، وفي أو بعد الساعة المحددة بتوقيت السعودية (مثلاً الساعة 3:00 ص)
+      if (lastRunDate !== dateStr && hour >= scheduleConfig.scheduledHourKSA) {
+        hasAutoRunStartedRef.current = true;
+        runSequentialDailyAutoAnalysis(projects, {
+          onNotificationCreated: (newNotif) => {
+            setNotifications(prev => {
+              if (prev.some(n => String(n.id) === String(newNotif.id))) return prev;
+              return [newNotif, ...prev];
+            });
+          }
+        }).then((res) => {
+          if (res.changesFound > 0) {
+            showNotification(`📢 تم الفحص المجدول التلقائي (توقيت السعودية): يوجد تحديث جديد بـ ${res.changesFound} مشروع وتم توثيقها بقائمة الإشعارات وقاعدة البيانات.`);
+          }
+        });
+      }
+    }
+  }, [isLogged, currentUser, projects.length]);
 
   useEffect(() => {
     localStorage.setItem('water_maps_active_user_id', currentUser.id);
@@ -1365,7 +1466,16 @@ export default function App() {
                   <div className="absolute left-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 overflow-hidden text-right">
                     <div className="p-3.5 bg-slate-50 dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
                       <div className="flex items-center gap-2"><Bell className="h-4 w-4 text-blue-600 dark:text-blue-400" /><span className="text-xs font-extrabold text-slate-800 dark:text-slate-200">إشعارات المشاريع والشبكات</span></div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 items-center">
+                        <button
+                          type="button"
+                          onClick={() => { setShowNotificationsDropdown(false); setActiveTab('settings'); }}
+                          className="text-[10px] text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-300 font-bold cursor-pointer flex items-center gap-1 bg-slate-200/60 dark:bg-slate-700/60 px-2 py-0.5 rounded-lg border border-slate-300/50 dark:border-slate-600/50 transition-all"
+                          title="تحديد أنواع التنبيهات المسموح بها"
+                        >
+                          <Sliders className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                          <span>تحديد التفضيلات</span>
+                        </button>
                         {unreadNotificationsCount > 0 && (<button type="button" onClick={handleMarkAllAsRead} className="text-[10px] text-blue-600 dark:text-blue-400 font-bold cursor-pointer">تحديد الكل كمقروء</button>)}
                         {notifications.length > 0 && (<button type="button" onClick={handleClearNotifications} className="text-[10px] text-slate-400 hover:text-rose-600 font-bold cursor-pointer">مسح الكل</button>)}
                       </div>
@@ -1380,7 +1490,14 @@ export default function App() {
                             <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${notif.type === 'add' ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400' : 'bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400'}`}>{notif.type === 'add' ? <Plus className="h-3.5 w-3.5" /> : <Layers className="h-3.5 w-3.5" />}</div>
                             <div className="flex-1 min-w-0 space-y-1">
                               <div className="flex items-center justify-between gap-1">
-                                <p className="text-xs text-slate-800 dark:text-slate-200 font-extrabold truncate">{notif.projectName ? `مشروع: ${notif.projectName}` : 'تحديث مشروع'}</p>
+                                <p className="text-xs text-slate-800 dark:text-slate-200 font-extrabold truncate flex items-center gap-1.5">
+                                  <span>{notif.projectName ? `مشروع: ${notif.projectName}` : 'تحديث مشروع'}</span>
+                                  {(notif.type === 'change_detected' || notif.message?.includes('تحديث جديد')) && (
+                                    <span className="bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 font-black text-[9px] px-1.5 py-0.2 rounded border border-amber-300 dark:border-amber-700 shrink-0">
+                                      ✨ يوجد تحديث جديد
+                                    </span>
+                                  )}
+                                </p>
                                 {notif.groupedCount && notif.groupedCount > 1 ? (
                                   <span className="bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-extrabold text-[9.5px] px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 shrink-0 flex items-center gap-0.5">
                                     <span>×{notif.groupedCount} تحديثات</span>
@@ -1443,7 +1560,8 @@ export default function App() {
               ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('maps')) ? [{ id: 'maps', label: 'الخرائط التفاعلية', icon: MapIcon }] : []),
               ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('stats')) ? [{ id: 'stats', label: ' الإحصائيات ', icon: Layers }] : []),
               ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('layers')) ? [{ id: 'layers', label: 'طبقات المشاريع', icon: Compass }] : []),
-              ...(currentUser.role === 'admin' ? [{ id: 'users', label: 'إدارة وتوزيع صلاحيات الحسابات', icon: Users }] : [])
+              ...(currentUser.role === 'admin' ? [{ id: 'users', label: 'إدارة وتوزيع صلاحيات الحسابات', icon: Users }] : []),
+              { id: 'settings', label: 'إعدادات الإشعارات', icon: Sliders }
             ].map(tab => {
               const Icon = tab.icon;
               return (
@@ -1508,10 +1626,19 @@ export default function App() {
               projects={filteredProjects}
               selectedProject={selectedProject}
               onSelectProject={(proj) => setSelectedProjectId(proj.id)}
+              isAdmin={currentUser.role === 'admin'}
             />
           )}
           {activeTab === 'layers' && <ProjectLayersViewer currentUser={currentUser} />}
           {activeTab === 'users' && currentUser.role === 'admin' && <UserManagement users={users} currentUser={currentUser} onSaveUser={handleSaveUserPermissions} onDeleteUser={handleDeleteUser} projects={projects} />}
+          {activeTab === 'settings' && (
+            <NotificationSettingsPage 
+              currentUser={currentUser}
+              projects={projects}
+              onShowNotification={showNotification}
+              onSendTestNativeNotification={sendNativeNotification}
+            />
+          )}
         </div>
       </main>
 

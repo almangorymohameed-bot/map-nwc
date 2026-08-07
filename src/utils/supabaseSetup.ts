@@ -86,11 +86,19 @@ CREATE INDEX IF NOT EXISTS idx_project_changelogs_proj_id ON public.project_chan
 ALTER TABLE public.project_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_changelogs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow read access for all authenticated users" 
+DROP POLICY IF EXISTS "Allow read access for all authenticated users" ON public.project_reports;
+DROP POLICY IF EXISTS "Allow insert access for all authenticated users" ON public.project_reports;
+DROP POLICY IF EXISTS "Allow read access for all users" ON public.project_reports;
+DROP POLICY IF EXISTS "Allow insert access for all users" ON public.project_reports;
+
+CREATE POLICY "Allow read access for all users" 
 ON public.project_reports FOR SELECT USING (true);
 
-CREATE POLICY "Allow insert access for all authenticated users" 
+CREATE POLICY "Allow insert access for all users" 
 ON public.project_reports FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow read access for changelogs" ON public.project_changelogs;
+DROP POLICY IF EXISTS "Allow insert access for changelogs" ON public.project_changelogs;
 
 CREATE POLICY "Allow read access for changelogs" 
 ON public.project_changelogs FOR SELECT USING (true);
@@ -188,6 +196,52 @@ const memoryReports: HistoricalReport[] = [];
 const memoryChangelogs: ProjectChangelogRecord[] = [];
 
 function mapRowToHistoricalReport(row: any): HistoricalReport {
+  const colorBreakdown = row.color_breakdown || {};
+  const items = Array.isArray(row.items) ? row.items : [];
+
+  const permitNosByStatus = colorBreakdown.permitNosByStatus || {
+    executedWater: [],
+    executedSewage: [],
+    ongoing: [],
+    remaining: [],
+    cancelled: []
+  };
+
+  const segmentIdsByStatus = colorBreakdown.segmentIdsByStatus || {
+    executedWater: [],
+    executedSewage: [],
+    ongoing: [],
+    remaining: [],
+    cancelled: []
+  };
+
+  // Reconstruct permitNosByStatus and segmentIdsByStatus from items if missing in colorBreakdown
+  if (items.length > 0 && Object.values(permitNosByStatus).every((arr: any) => !arr || arr.length === 0)) {
+    items.forEach((item: any) => {
+      const cat = item.statusCategory;
+      const catKeyMap: Record<string, 'executedWater' | 'executedSewage' | 'ongoing' | 'remaining' | 'cancelled'> = {
+        'executed_water': 'executedWater',
+        'executed_sewage': 'executedSewage',
+        'ongoing': 'ongoing',
+        'remaining': 'remaining',
+        'cancelled': 'cancelled'
+      };
+      const key = catKeyMap[cat];
+      if (key) {
+        if (item.permitNo && item.permitNo !== '-') {
+          if (!permitNosByStatus[key].includes(item.permitNo)) {
+            permitNosByStatus[key].push(item.permitNo);
+          }
+        }
+        if (item.segmentId && item.segmentId !== '-') {
+          if (!segmentIdsByStatus[key].includes(item.segmentId)) {
+            segmentIdsByStatus[key].push(item.segmentId);
+          }
+        }
+      }
+    });
+  }
+
   return {
     id: String(row.id),
     projectId: Number(row.project_id),
@@ -197,13 +251,15 @@ function mapRowToHistoricalReport(row: any): HistoricalReport {
     createdAt: row.created_at || new Date().toISOString(),
     analysisResult: {
       projectName: row.project_name || '',
-      projectScope: row.color_breakdown?.projectScope,
+      projectScope: colorBreakdown?.projectScope,
       mapUrl: row.map_url || '',
       totalLengthMeters: Number(row.total_length_meters || 0),
       totalLengthKm: Number(row.total_length_km || 0),
       totalFeaturesCount: Number(row.total_features_count || 0),
-      colorBreakdown: row.color_breakdown || {},
-      items: row.items || [],
+      colorBreakdown: colorBreakdown,
+      permitNosByStatus: permitNosByStatus,
+      segmentIdsByStatus: segmentIdsByStatus,
+      items: items,
       parsedAt: row.parsed_at || (row.created_at ? new Date(row.created_at).toLocaleString('ar-SA') : new Date().toLocaleString('ar-SA'))
     }
   };
@@ -223,20 +279,76 @@ function mapRowToChangelogRecord(row: any): ProjectChangelogRecord {
 }
 
 export const ReportHistoryStore = {
-  async getHistoricalReports(projectId: number): Promise<HistoricalReport[]> {
+  async getHistoricalReports(projectId: number, projectName?: string): Promise<HistoricalReport[]> {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        const { data, error } = await (supabase.from('project_reports') as any)
-          .select('*')
-          .eq('project_id', projectId)
-          .order('created_at', { ascending: false });
+        const numId = Number(projectId);
+        let data: any[] | null = null;
 
-        if (!error && data) {
-          return data.map(mapRowToHistoricalReport);
+        // Tier 1: Query by numeric project_id
+        if (!isNaN(numId)) {
+          const res1 = await (supabase.from('project_reports') as any)
+            .select('*')
+            .eq('project_id', numId)
+            .order('created_at', { ascending: false });
+          if (!res1.error && res1.data && res1.data.length > 0) {
+            data = res1.data;
+          }
         }
-        if (error) {
-          console.error('❌ Supabase getHistoricalReports Error:', error.message);
+
+        // Tier 2: Query by string project_id
+        if ((!data || data.length === 0) && projectId) {
+          const res2 = await (supabase.from('project_reports') as any)
+            .select('*')
+            .eq('project_id', String(projectId))
+            .order('created_at', { ascending: false });
+          if (!res2.error && res2.data && res2.data.length > 0) {
+            data = res2.data;
+          }
+        }
+
+        // Tier 3: Query by exact project_name
+        if ((!data || data.length === 0) && projectName) {
+          const cleanName = projectName.trim();
+          const res3 = await (supabase.from('project_reports') as any)
+            .select('*')
+            .eq('project_name', cleanName)
+            .order('created_at', { ascending: false });
+          if (!res3.error && res3.data && res3.data.length > 0) {
+            data = res3.data;
+          }
+        }
+
+        // Tier 4: Query by ilike project_name
+        if ((!data || data.length === 0) && projectName) {
+          const cleanName = projectName.trim();
+          const res4 = await (supabase.from('project_reports') as any)
+            .select('*')
+            .ilike('project_name', `%${cleanName}%`)
+            .order('created_at', { ascending: false });
+          if (!res4.error && res4.data && res4.data.length > 0) {
+            data = res4.data;
+          }
+        }
+
+        // Tier 5: Query by key word in project_name
+        if ((!data || data.length === 0) && projectName) {
+          const words = projectName.trim().split(/\s+/).filter(w => w.length > 3);
+          const lastWord = words[words.length - 1];
+          if (lastWord) {
+            const res5 = await (supabase.from('project_reports') as any)
+              .select('*')
+              .ilike('project_name', `%${lastWord}%`)
+              .order('created_at', { ascending: false });
+            if (!res5.error && res5.data && res5.data.length > 0) {
+              data = res5.data;
+            }
+          }
+        }
+
+        if (data && data.length > 0) {
+          return data.map(mapRowToHistoricalReport);
         }
       } catch (err) {
         console.error('Supabase getHistoricalReports exception:', err);
@@ -244,25 +356,85 @@ export const ReportHistoryStore = {
     }
 
     return memoryReports
-      .filter((r) => r.projectId === projectId)
+      .filter((r) => r.projectId === projectId || (projectName && r.projectName.includes(projectName.trim())))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
-  async getLatestReport(projectId: number): Promise<HistoricalReport | null> {
+  async getLatestReport(projectId: number, projectName?: string): Promise<HistoricalReport | null> {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
-        const { data, error } = await (supabase.from('project_reports') as any)
-          .select('*')
-          .eq('project_id', projectId)
-          .order('created_at', { ascending: false })
-          .limit(1);
+        const numId = Number(projectId);
+        let data: any[] | null = null;
 
-        if (!error && data && data.length > 0) {
-          return mapRowToHistoricalReport(data[0]);
+        // Tier 1: Query by numeric project_id
+        if (!isNaN(numId)) {
+          const res1 = await (supabase.from('project_reports') as any)
+            .select('*')
+            .eq('project_id', numId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (!res1.error && res1.data && res1.data.length > 0) {
+            data = res1.data;
+          }
         }
-        if (error) {
-          console.error('❌ Supabase getLatestReport Error:', error.message);
+
+        // Tier 2: Query by string project_id
+        if ((!data || data.length === 0) && projectId) {
+          const res2 = await (supabase.from('project_reports') as any)
+            .select('*')
+            .eq('project_id', String(projectId))
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (!res2.error && res2.data && res2.data.length > 0) {
+            data = res2.data;
+          }
+        }
+
+        // Tier 3: Query by exact project_name
+        if ((!data || data.length === 0) && projectName) {
+          const cleanName = projectName.trim();
+          const res3 = await (supabase.from('project_reports') as any)
+            .select('*')
+            .eq('project_name', cleanName)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (!res3.error && res3.data && res3.data.length > 0) {
+            data = res3.data;
+          }
+        }
+
+        // Tier 4: Query by ilike project_name
+        if ((!data || data.length === 0) && projectName) {
+          const cleanName = projectName.trim();
+          const res4 = await (supabase.from('project_reports') as any)
+            .select('*')
+            .ilike('project_name', `%${cleanName}%`)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (!res4.error && res4.data && res4.data.length > 0) {
+            data = res4.data;
+          }
+        }
+
+        // Tier 5: Query by key word in project_name
+        if ((!data || data.length === 0) && projectName) {
+          const words = projectName.trim().split(/\s+/).filter(w => w.length > 3);
+          const lastWord = words[words.length - 1];
+          if (lastWord) {
+            const res5 = await (supabase.from('project_reports') as any)
+              .select('*')
+              .ilike('project_name', `%${lastWord}%`)
+              .order('created_at', { ascending: false })
+              .limit(1);
+            if (!res5.error && res5.data && res5.data.length > 0) {
+              data = res5.data;
+            }
+          }
+        }
+
+        if (data && data.length > 0) {
+          return mapRowToHistoricalReport(data[0]);
         }
       } catch (err) {
         console.error('Supabase getLatestReport exception:', err);
@@ -270,7 +442,7 @@ export const ReportHistoryStore = {
     }
 
     const list = memoryReports
-      .filter((r) => r.projectId === projectId)
+      .filter((r) => r.projectId === projectId || (projectName && r.projectName.includes(projectName.trim())))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return list.length > 0 ? list[0] : null;
   },
@@ -293,6 +465,13 @@ export const ReportHistoryStore = {
 
     memoryReports.unshift(localReport);
 
+    const colorBreakdownPayload = {
+      ...(analysisResult.colorBreakdown || {}),
+      projectScope: analysisResult.projectScope,
+      permitNosByStatus: analysisResult.permitNosByStatus,
+      segmentIdsByStatus: analysisResult.segmentIdsByStatus
+    };
+
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -304,8 +483,8 @@ export const ReportHistoryStore = {
             total_length_meters: analysisResult.totalLengthMeters,
             total_length_km: analysisResult.totalLengthKm,
             total_features_count: analysisResult.totalFeaturesCount,
-            color_breakdown: analysisResult.colorBreakdown,
-            items: analysisResult.items,
+            color_breakdown: colorBreakdownPayload,
+            items: analysisResult.items || [],
             parsed_at: analysisResult.parsedAt || new Date().toLocaleString('ar-SA')
           }])
           .select();
@@ -385,7 +564,7 @@ export const ReportHistoryStore = {
     return localRecord;
   },
 
-  async getChangelogs(projectId?: number): Promise<ProjectChangelogRecord[]> {
+  async getChangelogs(projectId?: number, projectName?: string): Promise<ProjectChangelogRecord[]> {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -393,7 +572,17 @@ export const ReportHistoryStore = {
         if (projectId) {
           query = query.eq('project_id', projectId);
         }
-        const { data, error } = await query;
+        let { data, error } = await query;
+        if ((!data || data.length === 0) && projectName) {
+          const fallback = await (supabase.from('project_changelogs') as any)
+            .select('*')
+            .eq('project_name', projectName)
+            .order('created_at', { ascending: false });
+          if (!fallback.error && fallback.data) {
+            data = fallback.data;
+            error = null;
+          }
+        }
         if (!error && data) {
           return data.map(mapRowToChangelogRecord);
         }
@@ -406,7 +595,7 @@ export const ReportHistoryStore = {
     }
 
     if (projectId) {
-      return memoryChangelogs.filter((c) => c.projectId === projectId);
+      return memoryChangelogs.filter((c) => c.projectId === projectId || (projectName && c.projectName === projectName));
     }
     return memoryChangelogs;
   }

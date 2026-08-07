@@ -55,7 +55,7 @@ export interface AppNotification {
   id: string;
   projectId: number;
   projectName: string;
-  type: 'add' | 'edit';
+  type: 'add' | 'edit' | 'change_detected';
   message: string;
   timestamp: string;
   read: boolean;

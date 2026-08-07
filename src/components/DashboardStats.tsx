@@ -12,9 +12,10 @@ interface DashboardStatsProps {
   projects: Project[];
   selectedProject?: Project | null;
   onSelectProject?: (project: Project) => void;
+  isAdmin?: boolean;
 }
 
-export function DashboardStats({ projects, selectedProject, onSelectProject }: DashboardStatsProps) {
+export function DashboardStats({ projects, selectedProject, onSelectProject, isAdmin }: DashboardStatsProps) {
   const [activeSubTab, setActiveSubTab] = useState<'general' | 'mymaps'>('general');
 
   // Calculations based on the input projects
@@ -113,6 +114,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject }: D
           projects={projects}
           selectedProject={selectedProject}
           onSelectProject={onSelectProject}
+          isAdmin={isAdmin}
         />
       ) : (
         <>
