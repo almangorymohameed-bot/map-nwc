@@ -518,16 +518,23 @@ export function ProjectMapViewer({
     
     resizeObserver.observe(mapContainerRef.current);
     
-    // Staggered interval to ensure rendering resolves with zero unrendered white sections
-    const invalidateInterval = setInterval(() => {
+    // Initial staggered timers to ensure rendering resolves cleanly without flooding tile servers
+    const t1 = setTimeout(() => {
       if (mapInstanceRef.current && mapMode === 'osm') {
         mapInstanceRef.current.invalidateSize({ animate: false });
       }
-    }, 450);
+    }, 250);
+
+    const t2 = setTimeout(() => {
+      if (mapInstanceRef.current && mapMode === 'osm') {
+        mapInstanceRef.current.invalidateSize({ animate: false });
+      }
+    }, 750);
 
     return () => {
       resizeObserver.disconnect();
-      clearInterval(invalidateInterval);
+      clearTimeout(t1);
+      clearTimeout(t2);
     };
   }, [isLeafletReady, mapMode]);
 

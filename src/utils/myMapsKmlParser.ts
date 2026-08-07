@@ -477,9 +477,7 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     if (!segmentId) {
       segmentId = `SEG-${1000 + idx + 1}`;
     }
-    if (!permitNo) {
-      permitNo = `PRM-2025-${(idx * 7) % 89 + 10}`;
-    }
+    // Note: if permitNo is absent, leave as empty string so system detects missing permit number
 
     // Determine hex color with maximum fallback coverage
     let hexColor = extractedColor ? normalizeColorToHex(extractedColor) : '';
@@ -622,7 +620,8 @@ export function generateSyntheticProjectKMLData(
     const permNum = 2025001 + (i * 11) % 400;
 
     const segmentId = `SEG-${segNum}`;
-    const permitNo = `PERM-${permNum}`;
+    // Intentionally leave permitNo empty for some ongoing elements to test missing permit notice
+    const permitNo = (cat === 'ongoing' && i % 3 === 0) ? '' : `PERM-${permNum}`;
 
     const lengthMeters = 180 + ((i * 127) % 850);
     const itemStage = cat === 'ongoing' ? sampleStages[i % sampleStages.length] : undefined;

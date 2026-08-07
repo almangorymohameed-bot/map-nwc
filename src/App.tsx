@@ -8,13 +8,8 @@ import { Project, User, AppNotification } from './types';
 import { getParsedProjects } from './data/initialProjects';
 import { INITIAL_USERS } from './data/initialUsers';
 
-// استيراد عميل سوبابيس والتحليل التلقائي اليومي
+// استيراد عميل سوبابيس
 import { supabase } from './supabase';
-import { 
-  runSequentialDailyAutoAnalysis, 
-  getScheduleAutoAnalysisConfig, 
-  getSaudiCurrentHourAndDate 
-} from './utils/dailyAutoAnalysisService';
 
 // Components
 import { DashboardStats } from './components/DashboardStats';
@@ -604,12 +599,12 @@ export default function App() {
     })()
   );
 
-  const hasAutoRunStartedRef = useRef(false);
-
   // 🔄 المزامنة الحية لِـسحب الإشعارات من سوبابيس وتمرير الأحداث الدقيقة لِـستارة الجوال بدون تكرار
   useEffect(() => {
     const fetchUserNotifications = async () => {
       if (!currentUser || !currentUser.id || !isLogged) return;
+      const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
+      if (!supabaseUrl) return; // تجنب الاستدعاء إذا لم يتم ربط سوبابيس لتقليل استهلاك الشبكة
       
       try {
         // سحب آخر 100 إشعار مشاريع من السيرفر بشكل عام لجميع المستخدمين
@@ -677,37 +672,9 @@ export default function App() {
     };
 
     fetchUserNotifications();
-    const interval = setInterval(fetchUserNotifications, 10000);
+    const interval = setInterval(fetchUserNotifications, 30000);
     return () => clearInterval(interval);
   }, [currentUser.id, isLogged]);
-
-  // 🤖 تشغيل التحليل التلقائي اليومي المجدول - حصرياً لمدير النظام Admin وفقط بالساعة المحددة بتوقيت السعودية
-  useEffect(() => {
-    if (isLogged && currentUser && currentUser.role === 'admin' && projects && projects.length > 0 && !hasAutoRunStartedRef.current) {
-      const scheduleConfig = getScheduleAutoAnalysisConfig();
-      if (!scheduleConfig.autoScheduledEnabled) return;
-
-      const { hour, dateStr } = getSaudiCurrentHourAndDate();
-      const lastRunDate = localStorage.getItem('water_maps_last_daily_auto_run_date');
-
-      // يفحص فقط إذا لم يتم التشغيل اليوم، وفي أو بعد الساعة المحددة بتوقيت السعودية (مثلاً الساعة 3:00 ص)
-      if (lastRunDate !== dateStr && hour >= scheduleConfig.scheduledHourKSA) {
-        hasAutoRunStartedRef.current = true;
-        runSequentialDailyAutoAnalysis(projects, {
-          onNotificationCreated: (newNotif) => {
-            setNotifications(prev => {
-              if (prev.some(n => String(n.id) === String(newNotif.id))) return prev;
-              return [newNotif, ...prev];
-            });
-          }
-        }).then((res) => {
-          if (res.changesFound > 0) {
-            showNotification(`📢 تم الفحص المجدول التلقائي (توقيت السعودية): يوجد تحديث جديد بـ ${res.changesFound} مشروع وتم توثيقها بقائمة الإشعارات وقاعدة البيانات.`);
-          }
-        });
-      }
-    }
-  }, [isLogged, currentUser, projects.length]);
 
   useEffect(() => {
     localStorage.setItem('water_maps_active_user_id', currentUser.id);

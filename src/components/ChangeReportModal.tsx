@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { ProjectDiffResult } from '../types';
+import { groupYellowLineChangesByPermit } from '../utils/diffEngine';
 import { 
   X, 
   ArrowLeftRight, 
@@ -204,55 +205,101 @@ ${diffResult.summaryMessages.map(m => `• ${m}`).join('\n')}
                   لا توجد تغيرات في مراحل الحفرية للخطوط الصفراء جاري العمل في هذا التقرير.
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {diffResult.yellowLineStageChanges.map((change, idx) => (
+                <div className="space-y-4">
+                  {groupYellowLineChangesByPermit(diffResult.yellowLineStageChanges).map((group, groupIdx) => (
                     <div 
-                      key={idx}
-                      className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-900/50 shadow-xs space-y-3 relative overflow-hidden"
+                      key={groupIdx}
+                      className={`p-4 rounded-3xl border-2 shadow-xs space-y-3 relative overflow-hidden ${
+                        group.hasPermit 
+                          ? 'bg-amber-50/50 dark:bg-slate-800/90 border-amber-300 dark:border-amber-800' 
+                          : 'bg-rose-50/90 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800'
+                      }`}
                     >
-                      <div className="absolute top-0 right-0 bottom-0 w-1.5 bg-amber-400"></div>
-
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700/60 pb-2.5">
+                      {/* Permit Box Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 dark:border-slate-700/80 pb-2.5">
                         <div className="flex items-center gap-2">
-                          <span className="px-2.5 py-1 bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-mono text-xs font-black rounded-lg">
-                            قطاع: {change.segmentId || `خط #${idx + 1}`}
-                          </span>
-                          <span className="text-xs font-bold text-slate-900 dark:text-white">
-                            {change.featureName}
-                          </span>
+                          {group.hasPermit ? (
+                            <FileText className="h-4.5 w-4.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                          ) : (
+                            <AlertTriangle className="h-4.5 w-4.5 text-rose-600 dark:text-rose-400 shrink-0 animate-bounce" />
+                          )}
+
+                          {group.hasPermit ? (
+                            <span className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                              <span>مربع الفسح رقم:</span>
+                              <span className="font-mono bg-amber-200/80 dark:bg-amber-900/80 text-amber-950 dark:text-amber-200 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-700">
+                                {group.permitNo}
+                              </span>
+                            </span>
+                          ) : (
+                            <div>
+                              <span className="text-xs font-black text-rose-700 dark:text-rose-300 block">
+                                ⚠️ الأعمال جارية ولا يوجد رقم فسح للقطاع أو العنصر
+                              </span>
+                            </div>
+                          )}
                         </div>
-                        {change.permitNo && (
-                          <span className="text-xs font-mono bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-md">
-                            رقم التصريح: {change.permitNo}
-                          </span>
-                        )}
+
+                        <span className={`text-[10.5px] font-extrabold px-2.5 py-0.5 rounded-full border self-start sm:self-center shrink-0 ${
+                          group.hasPermit 
+                            ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border-amber-300 dark:border-amber-800' 
+                            : 'bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200 border-rose-300 dark:border-rose-800'
+                        }`}>
+                          {group.changes.length} {group.changes.length === 1 ? 'عنصر' : 'عناصر'}
+                        </span>
                       </div>
 
-                      {/* Structured Old vs New Comparison List */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {/* Old Stage */}
-                        <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-                          <span className="text-[11px] font-bold text-rose-500 dark:text-rose-400 block">
-                            🔴 الوضع/المرحلة السابقة (القديم):
-                          </span>
-                          <p className="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono line-through">
-                            {change.previousStage}
-                          </p>
-                        </div>
+                      {/* Detail list of items/elements inside this permit box */}
+                      <div className="space-y-3 pt-1">
+                        {group.changes.map((change, idx) => (
+                          <div 
+                            key={idx}
+                            className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 shadow-xs space-y-2.5 relative"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-300 font-mono text-[11px] font-black rounded-md">
+                                  قطاع: {change.segmentId || `خط #${idx + 1}`}
+                                </span>
+                                <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                  {change.featureName}
+                                </span>
+                              </div>
+                              {!group.hasPermit && (
+                                <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-950 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-800">
+                                  بدون رقم فسح
+                                </span>
+                              )}
+                            </div>
 
-                        {/* New Stage */}
-                        <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-900/60 space-y-1">
-                          <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 block">
-                            🟢 الوضع/المرحلة الحالية (الجديد):
-                          </span>
-                          <p className="text-xs font-black text-amber-900 dark:text-amber-200 font-mono">
-                            {change.newStage}
-                          </p>
-                        </div>
-                      </div>
+                            {/* Structured Old vs New Stage Comparison */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                              {/* Old Stage */}
+                              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 space-y-0.5">
+                                <span className="text-[10.5px] font-bold text-rose-500 dark:text-rose-400 block">
+                                  🔴 بیان Stage السابق (القديم):
+                                </span>
+                                <p className="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono line-through">
+                                  {change.previousStage}
+                                </p>
+                              </div>
 
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 text-left font-mono pt-1">
-                        طول القطاع: {change.lengthMeters.toLocaleString()} متر
+                              {/* New Stage */}
+                              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-900/60 space-y-0.5">
+                                <span className="text-[10.5px] font-bold text-amber-800 dark:text-amber-300 block">
+                                  🟢 بیان Stage الحالي (الجديد):
+                                </span>
+                                <p className="text-xs font-black text-amber-900 dark:text-amber-200 font-mono">
+                                  {change.newStage}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-mono text-left pt-0.5">
+                              طول العنصر: {change.lengthMeters.toLocaleString()} متر
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}

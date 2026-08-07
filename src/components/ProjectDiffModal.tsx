@@ -24,8 +24,10 @@ import {
   TrendingUp,
   TrendingDown,
   Layers,
-  Award
+  Award,
+  AlertTriangle
 } from 'lucide-react';
+import { groupYellowLineChangesByPermit } from '../utils/diffEngine';
 import { 
   SUPABASE_SQL_SCHEMA, 
   SUPABASE_EDGE_FUNCTION_CODE, 
@@ -360,43 +362,99 @@ export function ProjectDiffModal({
                   جميع مراحل الحفرية لقطاعات الخطوط مطابقة للتقرير السابق.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {diffResult.yellowLineStageChanges.map((yc, idx) => (
+                <div className="space-y-4">
+                  {groupYellowLineChangesByPermit(diffResult.yellowLineStageChanges).map((group, groupIdx) => (
                     <div 
-                      key={idx}
-                      className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-900/60 shadow-sm space-y-2 relative overflow-hidden"
+                      key={groupIdx}
+                      className={`p-4 rounded-3xl border-2 shadow-sm space-y-3 relative overflow-hidden transition-all ${
+                        group.hasPermit 
+                          ? 'bg-amber-50/40 dark:bg-slate-800/90 border-amber-300 dark:border-amber-700/80' 
+                          : 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800/80'
+                      }`}
                     >
-                      <div className="absolute top-0 right-0 left-0 h-1 bg-amber-400"></div>
-                      <div className="flex items-center justify-between">
-                        <span className="font-black font-mono text-xs text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/50 px-2.5 py-1 rounded-lg">
-                          قطاع: {yc.segmentId || `خط #${idx + 1}`}
+                      {/* Permit Box Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 dark:border-slate-700/80 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          {group.hasPermit ? (
+                            <div className="p-2 bg-amber-500/20 text-amber-700 dark:text-amber-300 rounded-xl border border-amber-400/40">
+                              <FileText className="h-5 w-5" />
+                            </div>
+                          ) : (
+                            <div className="p-2 bg-rose-500/20 text-rose-600 dark:text-rose-400 rounded-xl border border-rose-400/40 animate-pulse">
+                              <AlertTriangle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                            </div>
+                          )}
+
+                          <div>
+                            {group.hasPermit ? (
+                              <h4 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                                <span>مربع الفسح / الرخصة:</span>
+                                <span className="font-mono bg-amber-200/80 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200 px-2.5 py-0.5 rounded-lg border border-amber-300 dark:border-amber-700">
+                                  {group.permitNo}
+                                </span>
+                              </h4>
+                            ) : (
+                              <div>
+                                <h4 className="text-sm font-black text-rose-700 dark:text-rose-300 flex items-center gap-1.5">
+                                  <span>⚠️ الأعمال جارية ولا يوجد رقم فسح للقطاع أو العنصر</span>
+                                </h4>
+                                <p className="text-[11px] font-medium text-rose-600 dark:text-rose-300 mt-0.5">
+                                  القطاعات التالية يجرى تنفيذها حالياً بدون تسجيل رقم تصريح/فسح رسمي في بيانات الخريطة.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <span className={`text-[11px] font-extrabold px-3 py-1 rounded-full border self-start sm:self-center shrink-0 ${
+                          group.hasPermit 
+                            ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border-amber-300 dark:border-amber-800' 
+                            : 'bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200 border-rose-300 dark:border-rose-800'
+                        }`}>
+                          {group.changes.length} {group.changes.length === 1 ? 'عنصر/قطاع متأثر' : 'عناصر/قطاعات متأثرة'}
                         </span>
-                        {yc.permitNo && (
-                          <span className="text-[11px] font-mono text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">
-                            تصريح: {yc.permitNo}
-                          </span>
-                        )}
                       </div>
 
-                      <p className="text-xs font-bold text-slate-900 dark:text-white">
-                        {yc.featureName}
-                      </p>
+                      {/* Detail list of items/elements inside this permit box */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                        {group.changes.map((yc, idx) => (
+                          <div 
+                            key={idx}
+                            className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xs space-y-2 relative"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-black font-mono text-[11px] text-amber-800 dark:text-amber-300 bg-amber-100/80 dark:bg-amber-950/80 px-2 py-0.5 rounded-md border border-amber-200/60 dark:border-amber-800/60">
+                                قطاع: {yc.segmentId || `عنصر #${idx + 1}`}
+                              </span>
+                              {!group.hasPermit && (
+                                <span className="text-[10px] font-black text-rose-600 dark:text-rose-400 bg-rose-100/80 dark:bg-rose-950/80 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-800">
+                                  بدون رقم فسح
+                                </span>
+                              )}
+                            </div>
 
-                      <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-slate-900/80 border border-amber-200 dark:border-amber-900/40 text-xs space-y-1.5">
-                        <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
-                          <span>وضع الحفرية السابق:</span>
-                          <span className="line-through text-rose-500 font-bold">{yc.previousStage}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-slate-900 dark:text-slate-100 pt-1 border-t border-amber-200/50 dark:border-slate-800">
-                          <span className="font-bold text-amber-800 dark:text-amber-300">وضع الحفرية الحالي:</span>
-                          <span className="font-black text-amber-600 dark:text-amber-400 bg-amber-200/60 dark:bg-amber-900/70 px-2 py-0.5 rounded">
-                            {yc.newStage}
-                          </span>
-                        </div>
-                      </div>
+                            <p className="text-xs font-bold text-slate-900 dark:text-white leading-snug">
+                              {yc.featureName}
+                            </p>
 
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 text-left font-mono">
-                        طول القطاع: {yc.lengthMeters.toLocaleString()} متر
+                            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-[11.5px] space-y-1">
+                              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                                <span>بيان Stage السابق:</span>
+                                <span className="line-through text-rose-500 font-bold">{yc.previousStage}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-slate-900 dark:text-slate-100 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
+                                <span className="font-bold text-amber-800 dark:text-amber-300">بيان Stage الحالي:</span>
+                                <span className="font-black text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded border border-amber-300/60 dark:border-amber-800">
+                                  {yc.newStage}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-mono text-left">
+                              طول العنصر: {yc.lengthMeters.toLocaleString()} متر
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}

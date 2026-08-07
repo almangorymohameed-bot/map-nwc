@@ -14,6 +14,48 @@ import {
 } from '../types';
 import { COLOR_CONFIG, getStatusCategoryLabel } from './myMapsKmlParser';
 
+export interface GroupedYellowLineChanges {
+  permitNo: string; // empty string if no permit
+  hasPermit: boolean;
+  changes: YellowLineStageChange[];
+}
+
+/**
+ * Groups yellow line stage changes by Permit Number (رقم الفسح).
+ * Elements associated with the same permit number are detailed inside that Permit Box.
+ * Elements without a permit number are grouped separately with a "No Permit" warning.
+ */
+export function groupYellowLineChangesByPermit(changes: YellowLineStageChange[]): GroupedYellowLineChanges[] {
+  const groupsMap = new Map<string, YellowLineStageChange[]>();
+
+  changes.forEach((c) => {
+    const rawPermit = (c.permitNo || '').trim();
+    const permitKey = (rawPermit && rawPermit !== '-') ? rawPermit : 'NO_PERMIT';
+    if (!groupsMap.has(permitKey)) {
+      groupsMap.set(permitKey, []);
+    }
+    groupsMap.get(permitKey)!.push(c);
+  });
+
+  const result: GroupedYellowLineChanges[] = [];
+  groupsMap.forEach((items, permitKey) => {
+    result.push({
+      permitNo: permitKey === 'NO_PERMIT' ? '' : permitKey,
+      hasPermit: permitKey !== 'NO_PERMIT',
+      changes: items
+    });
+  });
+
+  // Sort: Valid permit numbers first, NO_PERMIT group last
+  result.sort((a, b) => {
+    if (a.hasPermit && !b.hasPermit) return -1;
+    if (!a.hasPermit && b.hasPermit) return 1;
+    return a.permitNo.localeCompare(b.permitNo);
+  });
+
+  return result;
+}
+
 /**
  * Performs a comprehensive diff check between previous KML analysis and newly extracted KML analysis
  */
@@ -196,7 +238,10 @@ export function compareKMLAnalyses(
 
   if (yellowLineStageChanges.length > 0) {
     yellowLineStageChanges.forEach(yc => {
-      summaryMessages.push(`🏗️ تغير وضع قطاع الحفرية (${yc.segmentId}) للخطوط الصفراء إلى: [${yc.newStage}] (المرحلة السابقة: ${yc.previousStage})`);
+      const permitTag = (yc.permitNo && yc.permitNo.trim() && yc.permitNo !== '-') 
+        ? `[فسح: ${yc.permitNo}]` 
+        : `[⚠️ الأعمال جارية - لا يوجد رقم فسح]`;
+      summaryMessages.push(`🏗️ تغير بيان Stage لعنصر/قطاع الحفرية (${yc.segmentId} - ${yc.featureName}) ${permitTag} إلى: [${yc.newStage}] (المرحلة السابقة: ${yc.previousStage})`);
     });
   }
 
