@@ -650,12 +650,12 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
 
             {/* 5 Requested Colors Breakdown Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-1">
-              {/* 1. #01579B - منفذ - مياه / منفذ - صرف */}
+              {/* 1. منفذ - مياه / منفذ - صرف */}
               <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/40 space-y-2 relative overflow-hidden">
                 <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#01579B' }}></div>
                 <div className="pr-1 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#01579B | {getStatusCategoryLabel('executed_water', activeProject?.name, analysisResult.projectScope)}</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('executed_water', activeProject?.name, analysisResult.projectScope)}</span>
                     <span className="text-[10px] font-mono font-extrabold text-blue-800 dark:text-blue-300">
                       %{analysisResult.colorBreakdown.executed_water.percentage}
                     </span>
@@ -671,12 +671,12 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 </div>
               </div>
 
-              {/* 2. #097138 - منفذ - صرف */}
+              {/* 2. منفذ - صرف */}
               <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/60 dark:bg-emerald-950/40 space-y-2 relative overflow-hidden">
                 <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#097138' }}></div>
                 <div className="pr-1 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#097138 | {getStatusCategoryLabel('executed_sewage', activeProject?.name, analysisResult.projectScope)}</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('executed_sewage', activeProject?.name, analysisResult.projectScope)}</span>
                     <span className="text-[10px] font-mono font-extrabold text-emerald-800 dark:text-emerald-300">
                       %{analysisResult.colorBreakdown.executed_sewage.percentage}
                     </span>
@@ -692,12 +692,12 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 </div>
               </div>
 
-              {/* 3. #ffea00 - جاري العمل */}
+              {/* 3. جاري العمل */}
               <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/40 space-y-2 relative overflow-hidden">
                 <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#ffea00' }}></div>
                 <div className="pr-1 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-900 dark:text-slate-100">#FFEA00 | {getStatusCategoryLabel('ongoing', activeProject?.name, analysisResult.projectScope)}</span>
+                    <span className="text-xs font-black text-slate-900 dark:text-slate-100">{getStatusCategoryLabel('ongoing', activeProject?.name, analysisResult.projectScope)}</span>
                     <span className="text-[10px] font-mono font-extrabold text-amber-900 dark:text-amber-300">
                       %{analysisResult.colorBreakdown.ongoing.percentage}
                     </span>
@@ -713,12 +713,12 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 </div>
               </div>
 
-              {/* 4. #a52714 - أعمال متبقية */}
+              {/* 4. أعمال متبقية */}
               <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-900 bg-rose-50/60 dark:bg-rose-950/40 space-y-2 relative overflow-hidden">
                 <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#a52714' }}></div>
                 <div className="pr-1 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#A52714 | {getStatusCategoryLabel('remaining', activeProject?.name, analysisResult.projectScope)}</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('remaining', activeProject?.name, analysisResult.projectScope)}</span>
                     <span className="text-[10px] font-mono font-extrabold text-rose-800 dark:text-rose-300">
                       %{analysisResult.colorBreakdown.remaining.percentage}
                     </span>
@@ -734,12 +734,12 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 </div>
               </div>
 
-              {/* 5. #F48FB1 - خطوط تم إلغائها */}
+              {/* 5. خطوط تم إلغائها */}
               <div className="p-4 rounded-xl border border-pink-200 dark:border-pink-900 bg-pink-50/60 dark:bg-pink-950/40 space-y-2 relative overflow-hidden">
                 <div className="w-2 h-full absolute right-0 top-0" style={{ backgroundColor: '#F48FB1' }}></div>
                 <div className="pr-1 space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">#F48FB1 | {getStatusCategoryLabel('cancelled', activeProject?.name, analysisResult.projectScope)}</span>
+                    <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('cancelled', activeProject?.name, analysisResult.projectScope)}</span>
                     <span className="text-[10px] font-mono font-extrabold text-pink-800 dark:text-pink-300">
                       %{analysisResult.colorBreakdown.cancelled.percentage}
                     </span>
@@ -879,7 +879,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     <div className="flex items-center justify-between border-b border-blue-100 dark:border-blue-900/40 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#01579B' }}></span>
-                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#01579B - منفذ (مياه)</span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('executed_water', activeProject?.name, analysisResult.projectScope)}</span>
                       </div>
                       <span className="text-xs font-bold text-blue-700 dark:text-blue-300 font-mono bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded">
                         {analysisResult.segmentIdsByStatus.executedWater.length} قطاع
@@ -902,7 +902,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     <div className="flex items-center justify-between border-b border-emerald-100 dark:border-emerald-900/40 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#097138' }}></span>
-                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#097138 - منفذ (صرف)</span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('executed_sewage', activeProject?.name, analysisResult.projectScope)}</span>
                       </div>
                       <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 font-mono bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded">
                         {analysisResult.segmentIdsByStatus.executedSewage.length} قطاع
@@ -925,7 +925,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     <div className="flex items-center justify-between border-b border-amber-100 dark:border-amber-900/40 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ffea00' }}></span>
-                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#FFEA00 - جاري العمل</span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('ongoing', activeProject?.name, analysisResult.projectScope)}</span>
                       </div>
                       <span className="text-xs font-bold text-amber-800 dark:text-amber-300 font-mono bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded">
                         {analysisResult.segmentIdsByStatus.ongoing.length} قطاع
@@ -948,7 +948,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     <div className="flex items-center justify-between border-b border-rose-100 dark:border-rose-900/40 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#a52714' }}></span>
-                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#A52714 - أعمال متبقية</span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('remaining', activeProject?.name, analysisResult.projectScope)}</span>
                       </div>
                       <span className="text-xs font-bold text-rose-700 dark:text-rose-300 font-mono bg-rose-100 dark:bg-rose-900/50 px-2 py-0.5 rounded">
                         {analysisResult.segmentIdsByStatus.remaining.length} قطاع
@@ -971,7 +971,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     <div className="flex items-center justify-between border-b border-pink-100 dark:border-pink-900/40 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#F48FB1' }}></span>
-                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#F48FB1 - خطوط ملغاة</span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('cancelled', activeProject?.name, analysisResult.projectScope)}</span>
                       </div>
                       <span className="text-xs font-bold text-pink-700 dark:text-pink-300 font-mono bg-pink-100 dark:bg-pink-900/50 px-2 py-0.5 rounded">
                         {analysisResult.segmentIdsByStatus.cancelled.length} قطاع
@@ -998,7 +998,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
                   <div>
                     <h4 className="text-sm font-black text-slate-900 dark:text-slate-100">
-                      2- تصنيف Permit No حسب الألوان المذكورة (منفذة - جاري - متبقي - ملغي)
+                      2- تصنيف Permit No حسب الحالة والبيان (منفذة - جاري - متبقي - ملغي)
                     </h4>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       قائمة أرقام تصاريح العمل (Permit Numbers) المصنفة بحسب حالة التنفيذ.
@@ -1023,7 +1023,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     <div className="flex items-center justify-between border-b border-blue-100 dark:border-blue-900/40 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#01579B' }}></span>
-                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#01579B - منفذ (مياه)</span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('executed_water', activeProject?.name, analysisResult.projectScope)}</span>
                       </div>
                       <span className="text-xs font-bold text-blue-700 dark:text-blue-300 font-mono bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded">
                         {analysisResult.permitNosByStatus.executedWater.length} تصريح
@@ -1046,7 +1046,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     <div className="flex items-center justify-between border-b border-emerald-100 dark:border-emerald-900/40 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#097138' }}></span>
-                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#097138 - منفذ (صرف)</span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('executed_sewage', activeProject?.name, analysisResult.projectScope)}</span>
                       </div>
                       <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 font-mono bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded">
                         {analysisResult.permitNosByStatus.executedSewage.length} تصريح
@@ -1069,7 +1069,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     <div className="flex items-center justify-between border-b border-amber-100 dark:border-amber-900/40 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ffea00' }}></span>
-                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#FFEA00 - جاري العمل</span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('ongoing', activeProject?.name, analysisResult.projectScope)}</span>
                       </div>
                       <span className="text-xs font-bold text-amber-800 dark:text-amber-300 font-mono bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded">
                         {analysisResult.permitNosByStatus.ongoing.length} تصريح
@@ -1092,7 +1092,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     <div className="flex items-center justify-between border-b border-rose-100 dark:border-rose-900/40 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#a52714' }}></span>
-                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#A52714 - أعمال متبقية</span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('remaining', activeProject?.name, analysisResult.projectScope)}</span>
                       </div>
                       <span className="text-xs font-bold text-rose-700 dark:text-rose-300 font-mono bg-rose-100 dark:bg-rose-900/50 px-2 py-0.5 rounded">
                         {analysisResult.permitNosByStatus.remaining.length} تصريح
@@ -1115,7 +1115,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     <div className="flex items-center justify-between border-b border-pink-100 dark:border-pink-900/40 pb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#F48FB1' }}></span>
-                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">#F48FB1 - خطوط ملغاة</span>
+                        <span className="text-xs font-black text-slate-800 dark:text-slate-200">{getStatusCategoryLabel('cancelled', activeProject?.name, analysisResult.projectScope)}</span>
                       </div>
                       <span className="text-xs font-bold text-pink-700 dark:text-pink-300 font-mono bg-pink-100 dark:bg-pink-900/50 px-2 py-0.5 rounded">
                         {analysisResult.permitNosByStatus.cancelled.length} تصريح
@@ -1159,11 +1159,11 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                       className="bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="all">جميع الحالات والخطوط</option>
-                      <option value="executed_water">#01579B | {getStatusCategoryLabel('executed_water', activeProject?.name, analysisResult.projectScope)}</option>
-                      <option value="executed_sewage">#097138 | {getStatusCategoryLabel('executed_sewage', activeProject?.name, analysisResult.projectScope)}</option>
-                      <option value="ongoing">#FFEA00 | {getStatusCategoryLabel('ongoing', activeProject?.name, analysisResult.projectScope)}</option>
-                      <option value="remaining">#A52714 | {getStatusCategoryLabel('remaining', activeProject?.name, analysisResult.projectScope)}</option>
-                      <option value="cancelled">#F48FB1 | {getStatusCategoryLabel('cancelled', activeProject?.name, analysisResult.projectScope)}</option>
+                      <option value="executed_water">{getStatusCategoryLabel('executed_water', activeProject?.name, analysisResult.projectScope)}</option>
+                      <option value="executed_sewage">{getStatusCategoryLabel('executed_sewage', activeProject?.name, analysisResult.projectScope)}</option>
+                      <option value="ongoing">{getStatusCategoryLabel('ongoing', activeProject?.name, analysisResult.projectScope)}</option>
+                      <option value="remaining">{getStatusCategoryLabel('remaining', activeProject?.name, analysisResult.projectScope)}</option>
+                      <option value="cancelled">{getStatusCategoryLabel('cancelled', activeProject?.name, analysisResult.projectScope)}</option>
                     </select>
                   </div>
                 </div>

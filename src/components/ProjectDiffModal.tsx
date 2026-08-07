@@ -211,7 +211,7 @@ export function ProjectDiffModal({
 
           <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">تحديث مرحلة الحفرية (#ffea00)</p>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">تحديث مرحلة الحفرية (جاري العمل)</p>
               <p className="text-lg font-black text-amber-600 dark:text-amber-400 font-mono mt-0.5">
                 {diffResult.yellowLineStageChanges.length} قطاع
               </p>
@@ -261,7 +261,7 @@ export function ProjectDiffModal({
             className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 cursor-pointer border-t border-x ${activeTab === 'yellowLines' ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 border-slate-200 dark:border-slate-800 shadow-sm' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
           >
             <HardHat className="h-4 w-4" />
-            <span>مراحل الحفرية (#ffea00)</span>
+            <span>مراحل الحفرية (جاري العمل)</span>
             {diffResult.yellowLineStageChanges.length > 0 && (
               <span className="px-1.5 py-0.5 bg-amber-500 text-slate-950 text-[10px] font-black rounded-full">
                 {diffResult.yellowLineStageChanges.length}
@@ -319,7 +319,7 @@ export function ProjectDiffModal({
                 <Sparkles className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                 <div className="text-xs text-blue-950 dark:text-blue-200 leading-relaxed">
                   <p className="font-bold text-sm mb-1">نتيجة فحص الفروقات التلقائية (Diff Check):</p>
-                  يتم مقارنة كل خريطة مستخرجة حديثاً بآخر تقرير محفوظ للمشروع باليوم والتاريخ. يتضمن الفحص أطوال الخطوط، الفسوح والترخيص، ومراحل الحفرية للخطوط الصفراء جاري العمل (#ffea00).
+                  يتم مقارنة كل خريطة مستخرجة حديثاً بآخر تقرير محفوظ للمشروع باليوم والتاريخ. يتضمن الفحص أطوال الخطوط، الفسوح والترخيص، ومراحل الحفرية لقطاعات العمل الجاري.
                 </div>
               </div>
 
@@ -344,13 +344,13 @@ export function ProjectDiffModal({
             </div>
           )}
 
-          {/* TAB 2: YELLOW LINES STAGE (#ffea00) */}
+          {/* TAB 2: YELLOW LINES STAGE */}
           {activeTab === 'yellowLines' && (
             <div className="space-y-4">
               <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 flex items-start gap-3">
                 <HardHat className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div className="text-xs text-amber-950 dark:text-amber-200 leading-relaxed">
-                  <p className="font-bold text-sm mb-0.5">تعقب مراحل الحفرية لخطوط جاري العمل باللون الأصفر (#ffea00):</p>
+                  <p className="font-bold text-sm mb-0.5">تعقب مراحل الحفرية لقطاعات جاري العمل:</p>
                   يستخرج النظام بيان <code className="bg-amber-200/60 dark:bg-amber-900/80 px-1 py-0.5 rounded font-mono">Stage</code> من بيانات الخريطة ويرصد تغير حالة القطاع (مثل: وضع الصبات، التمديد، الدفان، أو السفلتة).
                 </div>
               </div>

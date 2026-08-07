@@ -283,7 +283,7 @@ export async function exportAnalysisToPDF(result: KMLAnalysisResult, projectName
     ctx1.fillText('#', width - 55, th2Y + 25);
     ctx1.fillText('Segment ID', width - 140, th2Y + 25);
     ctx1.fillText('Permit No (التصريح)', width - 340, th2Y + 25);
-    ctx1.fillText('الحالة واللون', width - 580, th2Y + 25);
+    ctx1.fillText('الحالة والبيان', width - 580, th2Y + 25);
     ctx1.fillText('الطول (متر)', width - 800, th2Y + 25);
     ctx1.fillText('اسم القطاع / Line Name', width - 980, th2Y + 25);
 
@@ -369,7 +369,7 @@ export async function exportAnalysisToPDF(result: KMLAnalysisResult, projectName
       ctxP.fillText('#', width - 55, thBoxY + 26);
       ctxP.fillText('Segment ID', width - 140, thBoxY + 26);
       ctxP.fillText('Permit No (رقم التصريح)', width - 340, thBoxY + 26);
-      ctxP.fillText('الحالة واللون المعتمد', width - 580, thBoxY + 26);
+      ctxP.fillText('الحالة والبيان المعتمد', width - 580, thBoxY + 26);
       ctxP.fillText('الطول (متر / كم)', width - 800, thBoxY + 26);
       ctxP.fillText('اسم القطاع / Line Name', width - 980, thBoxY + 26);
 

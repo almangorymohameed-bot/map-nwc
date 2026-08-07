@@ -129,7 +129,7 @@ ${diffResult.summaryMessages.map(m => `• ${m}`).join('\n')}
             className={`px-4 py-2.5 text-xs font-bold rounded-t-xl transition-all flex items-center gap-2 cursor-pointer border-t border-x ${activeTab === 'stages' ? 'bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 border-slate-200 dark:border-slate-800 shadow-sm' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
           >
             <HardHat className="h-4 w-4" />
-            <span>مراحل الحفرية (#ffea00)</span>
+            <span>مراحل الحفرية (جاري العمل)</span>
             {diffResult.yellowLineStageChanges.length > 0 && (
               <span className="px-1.5 py-0.5 bg-amber-500 text-slate-950 text-[10px] font-black rounded-full">
                 {diffResult.yellowLineStageChanges.length}
@@ -187,13 +187,13 @@ ${diffResult.summaryMessages.map(m => `• ${m}`).join('\n')}
             </div>
           </div>
 
-          {/* Section 1: Yellow Line Stages (#ffea00) */}
+          {/* Section 1: Yellow Line Stages */}
           {(activeTab === 'all' || activeTab === 'stages') && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <HardHat className="h-4.5 w-4.5 text-amber-500" />
-                  <span>تغير وضع قطاع الحفرية للخطوط الصفراء (#ffea00)</span>
+                  <span>تغير وضع قطاع الحفرية لقطاعات العمل الجاري</span>
                 </h3>
                 <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
                   {diffResult.yellowLineStageChanges.length} قطاع متأثر
@@ -202,7 +202,7 @@ ${diffResult.summaryMessages.map(m => `• ${m}`).join('\n')}
 
               {diffResult.yellowLineStageChanges.length === 0 ? (
                 <div className="p-5 text-center rounded-2xl bg-white dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 text-slate-500 dark:text-slate-400 text-xs">
-                  لا توجد تغيرات في مراحل الحفرية للخطوط الصفراء جاري العمل في هذا التقرير.
+                  لا توجد تغيرات في مراحل الحفرية لقطاعات العمل الجاري في هذا التقرير.
                 </div>
               ) : (
                 <div className="space-y-4">
