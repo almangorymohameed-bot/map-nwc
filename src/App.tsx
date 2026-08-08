@@ -185,6 +185,24 @@ export const getProjectDifferencesMessage = (oldP: Project, newP: Project): stri
   return `وتم تعديل: ${changes.join(' و ')}`;
 };
 
+export const cleanNotificationMessage = (msg: string, pName?: string, nType?: string): string => {
+  if (!msg) return '';
+  if (
+    nType === 'change_detected' ||
+    msg.includes('تحديث جديد') ||
+    msg.includes('تغير بيان') ||
+    msg.includes('SHAPE_Length') ||
+    msg.includes('فسح:') ||
+    msg.includes('إجمالي الأطوال الحالية') ||
+    msg.includes('CONTRACTOR:') ||
+    msg.includes('PROJECTNAME:')
+  ) {
+    const cleanName = pName ? pName.replace(/^\[.*?\]\s*/, '') : '';
+    return cleanName ? `📢 يوجد تحديث جديد للمشروع (${cleanName})` : `📢 يوجد تحديث جديد للمشروع`;
+  }
+  return msg;
+};
+
 export const getUserNotifSettings = (userId: string): NotificationSettings => {
   try {
     const saved = localStorage.getItem(`water_maps_notif_settings_${userId}`);
@@ -709,7 +727,7 @@ export default function App() {
             projectId: n.projectId,
             projectName: n.projectName,
             type: n.type,
-            message: n.message,
+            message: cleanNotificationMessage(n.message, n.projectName, n.type),
             timestamp: n.timestamp,
             read: readIds.includes(String(n.id)),
             region: n.region || '',
@@ -722,7 +740,7 @@ export default function App() {
         if (unnotifiedItems.length > 0) {
           unnotifiedItems.forEach((newNotif: any) => {
             notifiedNativeIdsRef.current.add(newNotif.id);
-            sendNativeNotification('تنبيه مشاريع NWC 🔔', newNotif.message);
+            sendNativeNotification('تنبيه مشاريع NWC 🔔', cleanNotificationMessage(newNotif.message, newNotif.projectName, newNotif.type));
           });
           try {
             localStorage.setItem(
@@ -1545,7 +1563,7 @@ export default function App() {
                                   </span>
                                 ) : null}
                               </div>
-                              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-semibold">{notif.message}</p>
+                              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-semibold">{cleanNotificationMessage(notif.message, notif.projectName, notif.type)}</p>
                               <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500 pt-0.5">
                                 <span>{notif.timestamp}</span>
                                 <div className="flex items-center gap-1.5">
