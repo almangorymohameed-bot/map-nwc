@@ -218,94 +218,37 @@ export const isNotificationAllowed = (
   userNotifSettings?: NotificationSettings, 
   favoriteProjectIds?: number[]
 ): boolean => {
-  // جميع إشعارات التحديثات والتغيرات على المشاريع تظهر لجميع المستخدمين والمدراء بلا استثناء
+  if (!user) return true;
+
+  const settings = userNotifSettings || getUserNotifSettings(user.id);
+
+  // 1. التحقق مما إذا كان المستخدم قد أوقف فئة معينة صراحةً من إعداداته الشخصية
+  if (notif.type === 'add' && settings.allowNewProjects === false) return false;
+  if (notif.type === 'edit' && settings.allowProjectEdits === false) return false;
+  
   const notifTypeStr = String(notif.type || '');
-  const isChangeNotif = 
+  const isChangeType = 
     notifTypeStr === 'change_detected' || 
     notifTypeStr === 'map_change' || 
     notifTypeStr === 'update' ||
     (notif.message && (
-      notif.message.includes('تحديث جديد') || 
+      notif.message.includes('تحديث') || 
       notif.message.includes('تغير') ||
       notif.message.includes('رصد')
     ));
 
-  if (isChangeNotif) {
-    const settings = userNotifSettings || getUserNotifSettings(user.id);
-    if (settings && settings.allowMapChanges === false) return false;
-    return true;
-  }
+  if (isChangeType && settings.allowMapChanges === false) return false;
 
-  // Admin receives all other notifications
-  if (user.role === 'admin') return true;
-
-  const settings = userNotifSettings || getUserNotifSettings(user.id);
-
-  // 1. تصفية أنواع الأحداث المسموحة (نوع الإشعار)
-  if (notif.type === 'add' && !settings.allowNewProjects) return false;
-  if (notif.type === 'edit' && !settings.allowProjectEdits) return false;
-
-  // 2. تصفية المشاريع المفضلة فقط
-  if (settings.onlyFavoriteProjects && favoriteProjectIds) {
+  // 2. تصفية المشاريع المفضلة فقط في حال تفعيل الخيار من إعدادات المستخدم
+  if (settings.onlyFavoriteProjects && favoriteProjectIds && favoriteProjectIds.length > 0) {
     const numProjId = Number(notif.projectId);
     const strProjId = String(notif.projectId);
     const isFav = favoriteProjectIds.some(id => Number(id) === numProjId || String(id) === strProjId);
     if (!isFav) return false;
   }
 
-  // 3. تصفية المشاريع المسموحة المحددة للمستخدم
-  if (user.allowedProjectIds && user.allowedProjectIds.length > 0) {
-    const strProjId = String(notif.projectId);
-    const numProjId = Number(notif.projectId);
-    const isAllowed = user.allowedProjectIds.some(id => String(id) === strProjId || Number(id) === numProjId);
-    if (!isAllowed) return false;
-  }
-
-  // 4. تصفية حسب المنطقة الجغرافية
-  let isRegionAllowed = true;
-  if (settings.filterByRegion) {
-    const uRegions = (user.allowedRegions || []).map(r => r.trim());
-    const isAllRegions = uRegions.includes('الكل');
-    
-    isRegionAllowed = isAllRegions;
-    if (!isRegionAllowed && notif.region) {
-      const pr = notif.region.trim();
-      if (uRegions.includes(pr)) {
-        isRegionAllowed = true;
-      } else {
-        const northGovs = ['المجمعة', 'رماح', 'الزلفي', 'ثادق', 'حريملاء', 'الغاط', 'ثادق وحريملاء'];
-        const southGovs = ['السليل', 'وادي الدواسر', 'الأفلاج', 'حوطة بني تميم', 'الحريق', 'السيح', 'الخرج', 'تمرة', 'خيران', 'السيح والخرج'];
-        const westGovs = ['المزاحمية', 'شقراء', 'عفيف', 'القويعية', 'البجاديه', 'البجادية', 'ضرما', 'ضرماء', 'الدوادمي', 'شقراء ومرات', 'عفيف والدوادمي', 'المزاحمية و ضرماء'];
-        
-        if (uRegions.includes('المحافظات الشمالية') && (northGovs.includes(pr) || pr.includes('المجمعة') || pr.includes('رماح') || pr.includes('الزلفي') || pr.includes('حريملاء') || pr.includes('الغاط') || pr.includes('ثادق'))) {
-          isRegionAllowed = true;
-        }
-        if (uRegions.includes('المحافظات الجنوبية') && (southGovs.includes(pr) || pr.includes('السليل') || pr.includes('الدواسر') || pr.includes('الأفلاج') || pr.includes('تميم') || pr.includes('الخرج') || pr.includes('الحريق') || pr.includes('السيح'))) {
-          isRegionAllowed = true;
-        }
-        if (uRegions.includes('المحافظات الغربية') && (westGovs.includes(pr) || pr.includes('عفيف') || pr.includes('الدوادمي') || pr.includes('المزاحمية') || pr.includes('شقراء') || pr.includes('القويعية') || pr.includes('البجادية') || pr.includes('البجاديه') || pr.includes('ضرما') || pr.includes('ضرماء'))) {
-          isRegionAllowed = true;
-        }
-      }
-    }
-  }
-
-  // 5. تصفية حسب قطاع المشروع (مياه / صرف)
-  let isScopeAllowed = true;
-  if (settings.filterByScope) {
-    const isAllScopes = (user.allowedScopes || []).includes('الكل');
-    isScopeAllowed = isAllScopes;
-    if (!isScopeAllowed && notif.scope) {
-      const ns = notif.scope.trim();
-      isScopeAllowed = (user.allowedScopes || []).some(scopeType => {
-        const uScope = scopeType.trim();
-        if (!uScope) return false;
-        return ns === uScope || (ns.includes('صرف') && uScope.includes('صرف')) || (ns.includes('مياه') && uScope.includes('مياه'));
-      });
-    }
-  }
-
-  return isRegionAllowed && isScopeAllowed;
+  // جميع إشعارات التحديثات والتغيرات وإدراج/تعديل المشاريع والفحص التلقائي تظهر لجميع المستخدمين والمدراء بدون استثناء
+  return true;
 };
 
 export default function App() {
