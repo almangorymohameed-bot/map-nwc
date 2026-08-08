@@ -160,7 +160,19 @@ export async function runSequentialDailyAutoAnalysis(
           changesCount++;
           currentProgress.changesFoundCount++;
 
-          const notifMsg = `📢 يوجد تحديث جديد للمشروع (${proj.name})`;
+          let diffDetailsStr = '';
+          if (diff.addedFeaturesCount > 0 || diff.modifiedFeaturesCount > 0 || diff.deletedFeaturesCount > 0) {
+            const parts = [];
+            if (diff.addedFeaturesCount > 0) parts.push(`إضافة ${diff.addedFeaturesCount} عنصر`);
+            if (diff.modifiedFeaturesCount > 0) parts.push(`تعديل ${diff.modifiedFeaturesCount} عنصر`);
+            if (diff.deletedFeaturesCount > 0) parts.push(`حذف ${diff.deletedFeaturesCount} عنصر`);
+            if (Math.abs(diff.lengthDiffMeters) > 0.1) {
+              parts.push(`فارق أطوال (${diff.lengthDiffMeters > 0 ? '+' : ''}${diff.lengthDiffMeters.toFixed(1)}m)`);
+            }
+            diffDetailsStr = ` (${parts.join('، ')})`;
+          }
+
+          const notifMsg = `📢 تم رصد تحديثات وتغيرات جديدة بخريطة مشروع (${proj.name})${diffDetailsStr}`;
 
           const notifPayload = {
             project_id: proj.id,

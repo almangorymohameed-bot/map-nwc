@@ -188,8 +188,21 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
     if (diff.hasChanges) {
       showToast(`📊 تم رصد وتوثيق تغيرات جديدة مقارنة بالتقرير السابق لمشروع (${proj.name})`);
 
-      // 📢 إرسال إشعار فوري لقاعدة البيانات لتنبيه جميع المستخدمين بوجود تحديث جديد بالخريطة
-      const notifMsg = `📢 يوجد تحديث جديد للمشروع (${proj.name})`;
+      // بناء تفاصيل الفروقات بدقة في نص الإشعار
+      let diffDetailsStr = '';
+      if (diff.addedFeaturesCount > 0 || diff.modifiedFeaturesCount > 0 || diff.deletedFeaturesCount > 0) {
+        const parts = [];
+        if (diff.addedFeaturesCount > 0) parts.push(`إضافة ${diff.addedFeaturesCount} عنصر`);
+        if (diff.modifiedFeaturesCount > 0) parts.push(`تعديل ${diff.modifiedFeaturesCount} عنصر`);
+        if (diff.deletedFeaturesCount > 0) parts.push(`حذف ${diff.deletedFeaturesCount} عنصر`);
+        if (Math.abs(diff.lengthDiffMeters) > 0.1) {
+          parts.push(`فارق أطوال (${diff.lengthDiffMeters > 0 ? '+' : ''}${diff.lengthDiffMeters.toFixed(1)}m)`);
+        }
+        diffDetailsStr = ` (${parts.join('، ')})`;
+      }
+
+      // 📢 إرسال إشعار فوري لقاعدة البيانات لتنبيه جميع المستخدمين بوجود تحديث جديد تفصيلي بالخريطة
+      const notifMsg = `📢 تم رصد تحديثات وتغيرات جديدة بخريطة مشروع (${proj.name})${diffDetailsStr}`;
 
       const createdNotif = {
         id: Date.now() + Math.random(),

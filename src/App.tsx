@@ -232,18 +232,32 @@ export const getProjectFieldChanges = (oldP: Project, newP: Project) => {
 
 export const cleanNotificationMessage = (msg: string, pName?: string, nType?: string): string => {
   if (!msg) return '';
+  
+  // إذا كانت الرسالة نصاً شارحاً بالتفصيل (تحتوي اسم المهندس، التعديلات الحدوث، الفروقات، أو التنبيهات المباشرة) نعيدها كاملة بدون حذف التفاصيل
+  if (
+    msg.includes('قام المهندس') ||
+    msg.includes('بواسطة') ||
+    msg.includes('عنصر') ||
+    msg.includes('أطوال') ||
+    msg.includes('فارق') ||
+    msg.includes('تعديل') ||
+    msg.includes('إضافة') ||
+    msg.startsWith('🚀') ||
+    msg.startsWith('📢')
+  ) {
+    if (!msg.includes('SHAPE_Length') && !msg.includes('CONTRACTOR:') && !msg.includes('PROJECTNAME:')) {
+      return msg;
+    }
+  }
+
   if (
     nType === 'change_detected' ||
-    msg.includes('تحديث جديد') ||
-    msg.includes('تغير بيان') ||
     msg.includes('SHAPE_Length') ||
-    msg.includes('فسح:') ||
-    msg.includes('إجمالي الأطوال الحالية') ||
     msg.includes('CONTRACTOR:') ||
     msg.includes('PROJECTNAME:')
   ) {
     const cleanName = pName ? pName.replace(/^\[.*?\]\s*/, '') : '';
-    return cleanName ? `📢 يوجد تحديث جديد للمشروع (${cleanName})` : `📢 يوجد تحديث جديد للمشروع`;
+    return cleanName ? `📢 تم رصد تحديث وتغيرات جديدة بخريطة مشروع (${cleanName})` : `📢 تم رصد تحديث وتغيرات جديدة بخريطة المشروع`;
   }
   return msg;
 };
