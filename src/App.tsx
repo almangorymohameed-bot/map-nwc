@@ -20,6 +20,7 @@ import { ProjectModal } from './components/ProjectModal';
 import { ProjectList } from './components/ProjectList';
 import { NWCLogo } from './components/NWCLogo';
 import { ProjectLayersViewer } from './components/ProjectLayersViewer';
+import { ChangelogTab } from './components/ChangelogTab';
 import { 
   NotificationSettingsPage, 
   DEFAULT_NOTIF_SETTINGS, 
@@ -49,7 +50,8 @@ import {
   CheckCircle2,
   Bell,
   Sun,
-  Moon
+  Moon,
+  History
 } from 'lucide-react';
 
 // Helper to determine the actual effective scope of a project (resolving any data classification discrepancies)
@@ -183,6 +185,49 @@ export const getProjectDifferencesMessage = (oldP: Project, newP: Project): stri
   
   if (changes.length === 0) return '';
   return `وتم تعديل: ${changes.join(' و ')}`;
+};
+
+export const getProjectFieldChanges = (oldP: Project, newP: Project) => {
+  const list: { fieldLabel: string; oldValue: string; newValue: string }[] = [];
+  
+  if ((oldP.name || '').trim() !== (newP.name || '').trim()) {
+    list.push({ fieldLabel: 'اسم المشروع', oldValue: oldP.name || 'لا يوجد', newValue: newP.name || 'لا يوجد' });
+  }
+  if ((oldP.status || '').trim() !== (newP.status || '').trim()) {
+    list.push({ fieldLabel: 'الحالة التشغيلية', oldValue: oldP.status || 'غير محدد', newValue: newP.status || 'غير محدد' });
+  }
+  if ((oldP.contractor || '').trim() !== (newP.contractor || '').trim()) {
+    list.push({ fieldLabel: 'شركة المقاولات المنفذة', oldValue: oldP.contractor || 'غير محدد', newValue: newP.contractor || 'غير محدد' });
+  }
+  if ((oldP.consultant || '').trim() !== (newP.consultant || '').trim()) {
+    list.push({ fieldLabel: 'المكتب الاستشاري', oldValue: oldP.consultant || 'غير محدد', newValue: newP.consultant || 'غير محدد' });
+  }
+  if ((oldP.region || '').trim() !== (newP.region || '').trim()) {
+    list.push({ fieldLabel: 'المنطقة / المحافظة', oldValue: oldP.region || 'غير محدد', newValue: newP.region || 'غير محدد' });
+  }
+  if ((oldP.classification || '').trim() !== (newP.classification || '').trim()) {
+    list.push({ fieldLabel: 'تصنيف المشروع', oldValue: oldP.classification || 'غير محدد', newValue: newP.classification || 'غير محدد' });
+  }
+  if ((oldP.po || '').trim() !== (newP.po || '').trim()) {
+    list.push({ fieldLabel: 'رقم امر الشراء PO', oldValue: oldP.po || 'غير محدد', newValue: newP.po || 'غير محدد' });
+  }
+  if ((oldP.unifierNo || '').trim() !== (newP.unifierNo || '').trim()) {
+    list.push({ fieldLabel: 'رقم Unifier', oldValue: oldP.unifierNo || 'غير محدد', newValue: newP.unifierNo || 'غير محدد' });
+  }
+  if ((oldP.subProgram || '').trim() !== (newP.subProgram || '').trim()) {
+    list.push({ fieldLabel: 'البرنامج الفرعي', oldValue: oldP.subProgram || 'غير محدد', newValue: newP.subProgram || 'غير محدد' });
+  }
+  if ((oldP.mapUrl || '').trim() !== (newP.mapUrl || '').trim()) {
+    list.push({ fieldLabel: 'رابط الخارطة التفاعلية', oldValue: oldP.mapUrl || 'غير متاح', newValue: newP.mapUrl || 'غير متاح' });
+  }
+  if ((oldP.surveyorName || '').trim() !== (newP.surveyorName || '').trim()) {
+    list.push({ fieldLabel: 'اسم المساح الميداني', oldValue: oldP.surveyorName || 'غير محدد', newValue: newP.surveyorName || 'غير محدد' });
+  }
+  if ((oldP.surveyorPhone || '').trim() !== (newP.surveyorPhone || '').trim()) {
+    list.push({ fieldLabel: 'رقم هاتف المساح', oldValue: oldP.surveyorPhone || 'غير محدد', newValue: newP.surveyorPhone || 'غير محدد' });
+  }
+  
+  return list;
 };
 
 export const cleanNotificationMessage = (msg: string, pName?: string, nType?: string): string => {
@@ -1199,12 +1244,14 @@ export default function App() {
     };
 
     const exists = projects.some(p => p.id === savedProj.id);
+    let fieldChangesList: { fieldLabel: string; oldValue: string; newValue: string }[] = [];
     
     // 1️⃣ حساب الفروقات ودمجها بذكاء مع اسم المهندس القام بالحركة لتطير جملة واحدة مقفلة
     let dynamicDiffMsg = '';
     if (exists) {
       const oldProj = projects.find(p => p.id === savedProj.id);
       const diffDetails = oldProj ? getProjectDifferencesMessage(oldProj, savedProj) : '';
+      fieldChangesList = oldProj ? getProjectFieldChanges(oldProj, savedProj) : [];
       
       if (diffDetails) {
         dynamicDiffMsg = `قام المهندس ${currentUser.name} بتعديل مشروع: ${savedProj.name}، ${diffDetails}`;
@@ -1214,6 +1261,40 @@ export default function App() {
     } else {
       dynamicDiffMsg = `🚀 قام المهندس ${currentUser.name} بإضافة مشروع جديد: ${savedProj.name}`;
     }
+
+    // بناء كائن التوثيق التاريخي لسجل التغييرات
+    const changelogPayload = {
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      projectId: savedProj.id,
+      projectName: savedProj.name,
+      operationalNumber: savedProj.operationalNumber,
+      userName: currentUser.name,
+      userRole: currentUser.role === 'admin' ? 'مدير النظام' : 'محرر خرائط',
+      changeType: exists ? 'edit' : 'add',
+      timestamp: new Date().toLocaleString('ar-SA', { dateStyle: 'medium', timeStyle: 'short' }),
+      createdAtISO: new Date().toISOString(),
+      summary: dynamicDiffMsg,
+      fieldChanges: fieldChangesList
+    };
+
+    try {
+      await supabase.from('project_changelogs').insert([{
+        project_id: savedProj.id,
+        project_name: savedProj.name,
+        diff: changelogPayload,
+        created_at: new Date().toISOString()
+      }]);
+    } catch (clErr) {
+      console.warn("تعذر حفظ سجل التغييرات في سوبابيس:", clErr);
+    }
+
+    try {
+      const savedLocalLogs = localStorage.getItem('water_maps_local_changelogs');
+      let localLogsList = savedLocalLogs ? JSON.parse(savedLocalLogs) : [];
+      localLogsList.unshift(changelogPayload);
+      if (localLogsList.length > 200) localLogsList = localLogsList.slice(0, 200);
+      localStorage.setItem('water_maps_local_changelogs', JSON.stringify(localLogsList));
+    } catch (e) {}
 
     try {
       if (exists) {
@@ -1571,9 +1652,10 @@ export default function App() {
         <div className="border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-2xs transition-colors">
           <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
             {[
-              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('maps')) ? [{ id: 'maps', label: 'الخرائط التفاعلية', icon: MapIcon }] : []),
-              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('stats')) ? [{ id: 'stats', label: ' الإحصائيات ', icon: Layers }] : []),
-              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers']).includes('layers')) ? [{ id: 'layers', label: 'طبقات المشاريع', icon: Compass }] : []),
+              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers', 'changelog']).includes('maps')) ? [{ id: 'maps', label: 'الخرائط التفاعلية', icon: MapIcon }] : []),
+              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers', 'changelog']).includes('stats')) ? [{ id: 'stats', label: ' الإحصائيات ', icon: Layers }] : []),
+              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers', 'changelog']).includes('layers')) ? [{ id: 'layers', label: 'طبقات المشاريع', icon: Compass }] : []),
+              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers', 'changelog']).includes('changelog')) ? [{ id: 'changelog', label: 'سجل التغييرات', icon: History }] : []),
               ...(currentUser.role === 'admin' ? [{ id: 'users', label: 'إدارة وتوزيع صلاحيات الحسابات', icon: Users }] : []),
               { id: 'settings', label: 'إعدادات الإشعارات', icon: Sliders }
             ].map(tab => {
@@ -1644,6 +1726,17 @@ export default function App() {
             />
           )}
           {activeTab === 'layers' && <ProjectLayersViewer currentUser={currentUser} />}
+          {activeTab === 'changelog' && (
+            <ChangelogTab 
+              currentUser={currentUser} 
+              projects={projects} 
+              onSelectProject={(proj) => { 
+                setSelectedProjectId(proj.id); 
+                setActiveTab('maps'); 
+                setMobileViewMode('map'); 
+              }} 
+            />
+          )}
           {activeTab === 'users' && currentUser.role === 'admin' && <UserManagement users={users} currentUser={currentUser} onSaveUser={handleSaveUserPermissions} onDeleteUser={handleDeleteUser} projects={projects} />}
           {activeTab === 'settings' && (
             <NotificationSettingsPage 

@@ -54,7 +54,8 @@ const SCOPE_OPTIONS = [
 const TAB_OPTIONS = [
   { id: 'maps', label: 'الخرائط التفاعلية 🗺️' },
   { id: 'stats', label: 'الإحصائيات الجغرافية 📊' },
-  { id: 'layers', label: 'طبقات المشاريع 🥞' }
+  { id: 'layers', label: 'طبقات المشاريع 🥞' },
+  { id: 'changelog', label: 'سجل التغييرات 📜' }
 ];
 
 const LAYER_OPTIONS = [
