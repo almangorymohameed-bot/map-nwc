@@ -65,6 +65,27 @@ CREATE INDEX IF NOT EXISTS idx_project_reports_proj_id ON public.project_reports
 CREATE INDEX IF NOT EXISTS idx_project_reports_created_at ON public.project_reports(created_at DESC);
 
 -- ==========================================
+-- 1b. جدول أرشفة التقارير القديمة للمشاريع
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.archived_project_reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  original_report_id UUID,
+  project_id INT NOT NULL,
+  project_name TEXT NOT NULL,
+  map_url TEXT,
+  total_length_meters NUMERIC NOT NULL,
+  total_length_km NUMERIC NOT NULL,
+  total_features_count INT NOT NULL,
+  color_breakdown JSONB NOT NULL,
+  items JSONB NOT NULL,
+  parsed_at TEXT NOT NULL,
+  original_created_at TIMESTAMPTZ,
+  archived_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_archived_reports_proj_id ON public.archived_project_reports(project_id);
+
+-- ==========================================
 -- 2. جدول سجل التغيرات والمقارنة التاريخية (Changelog)
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.project_changelogs (
@@ -102,6 +123,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_proj_id ON public.notifications(pro
 -- 4. تفعيل سياسات الأمان Row Level Security (RLS)
 -- ==========================================
 ALTER TABLE public.project_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.archived_project_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_changelogs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
@@ -115,6 +137,15 @@ ON public.project_reports FOR SELECT USING (true);
 
 CREATE POLICY "Allow insert access for all users" 
 ON public.project_reports FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow read access for archived reports" ON public.archived_project_reports;
+DROP POLICY IF EXISTS "Allow insert access for archived reports" ON public.archived_project_reports;
+
+CREATE POLICY "Allow read access for archived reports" 
+ON public.archived_project_reports FOR SELECT USING (true);
+
+CREATE POLICY "Allow insert access for archived reports" 
+ON public.archived_project_reports FOR INSERT WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow read access for changelogs" ON public.project_changelogs;
 DROP POLICY IF EXISTS "Allow insert access for changelogs" ON public.project_changelogs;
@@ -417,7 +448,8 @@ export const ReportHistoryStore = {
         // Sort descending by created_at
         matchingRows.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
-        return matchingRows.map(mapRowToHistoricalReport);
+        // Return max 5 latest reports for display in reports UI
+        return matchingRows.slice(0, 5).map(mapRowToHistoricalReport);
       } catch (err) {
         console.error('Supabase getHistoricalReports exception:', err);
       }
@@ -425,7 +457,90 @@ export const ReportHistoryStore = {
 
     return memoryReports
       .filter((r) => isReportMatchingProject(r.projectId, r.projectName, numId, cleanName))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+  },
+
+  async archiveOldReports(projectId: number, projectName: string): Promise<void> {
+    const supabase = getSupabaseClient();
+    const cleanName = (projectName || '').trim();
+    const numId = Number(projectId);
+
+    if (supabase) {
+      try {
+        let allRows: any[] = [];
+        if (!isNaN(numId) && numId > 0) {
+          const res1 = await (supabase.from('project_reports') as any)
+            .select('*')
+            .eq('project_id', numId)
+            .order('created_at', { ascending: false });
+          if (!res1.error && res1.data) allRows.push(...res1.data);
+        }
+
+        if (cleanName) {
+          const res2 = await (supabase.from('project_reports') as any)
+            .select('*')
+            .eq('project_name', cleanName)
+            .order('created_at', { ascending: false });
+          if (!res2.error && res2.data) allRows.push(...res2.data);
+        }
+
+        const uniqueMap = new Map<string, any>();
+        for (const row of allRows) {
+          if (row && row.id && !uniqueMap.has(String(row.id))) {
+            uniqueMap.set(String(row.id), row);
+          }
+        }
+
+        const candidateRows = Array.from(uniqueMap.values());
+        const matchingRows = candidateRows.filter(row => 
+          isReportMatchingProject(row.project_id, row.project_name, numId, cleanName)
+        );
+
+        matchingRows.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+        // أرشفة أي تقارير زائدة عن آخر 5 تقارير في جدول منفصل archived_project_reports
+        if (matchingRows.length > 5) {
+          const reportsToArchive = matchingRows.slice(5);
+          for (const oldRow of reportsToArchive) {
+            try {
+              // 1. نقل إلى جدول الأرشيف المنفصل
+              await (supabase.from('archived_project_reports') as any).insert([{
+                original_report_id: oldRow.id,
+                project_id: oldRow.project_id,
+                project_name: oldRow.project_name,
+                map_url: oldRow.map_url,
+                total_length_meters: oldRow.total_length_meters,
+                total_length_km: oldRow.total_length_km,
+                total_features_count: oldRow.total_features_count,
+                color_breakdown: oldRow.color_breakdown,
+                items: oldRow.items,
+                parsed_at: oldRow.parsed_at,
+                original_created_at: oldRow.created_at,
+                archived_at: new Date().toISOString()
+              }]);
+              // 2. حذف التقرير القديم من جدول التقارير النشطة
+              await (supabase.from('project_reports') as any).delete().eq('id', oldRow.id);
+              console.log(`📦 تم أرشفة التقرير القديم (${oldRow.id}) بنجاح.`);
+            } catch (archiveErr) {
+              console.warn('⚠️ خطأ في أرشفة التقرير القديم:', archiveErr);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Supabase archiveOldReports exception:', err);
+      }
+    }
+
+    // تنظيف الذاكرة المؤقتة لمنع تجاوز 5 تقارير للمشروع
+    const projMem = memoryReports.filter(r => isReportMatchingProject(r.projectId, r.projectName, numId, cleanName));
+    if (projMem.length > 5) {
+      const toRemove = projMem.slice(5);
+      for (const rem of toRemove) {
+        const idx = memoryReports.findIndex(m => m.id === rem.id);
+        if (idx !== -1) memoryReports.splice(idx, 1);
+      }
+    }
   },
 
   async getLatestReport(projectId: number, projectName?: string): Promise<HistoricalReport | null> {
@@ -458,6 +573,8 @@ export const ReportHistoryStore = {
       segmentIdsByStatus: analysisResult.segmentIdsByStatus
     };
 
+    let resultReport = localReport;
+
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
@@ -481,7 +598,7 @@ export const ReportHistoryStore = {
           console.log('✅ Successfully inserted report row to Supabase project_reports');
           const dbReport = mapRowToHistoricalReport(data[0]);
           localReport.id = dbReport.id;
-          return dbReport;
+          resultReport = dbReport;
         }
       } catch (err: any) {
         console.error('Supabase async exception:', err);
@@ -490,7 +607,10 @@ export const ReportHistoryStore = {
       console.warn('⚠️ Supabase config not provided. Saved report in temporary session memory.');
     }
 
-    return localReport;
+    // أرشفة تلقائية للتقارير القديمة بحيث يتم الاحتفاظ بآخر 5 تقارير فقط
+    await this.archiveOldReports(projectId, projectName);
+
+    return resultReport;
   },
 
   async saveChangelog(
