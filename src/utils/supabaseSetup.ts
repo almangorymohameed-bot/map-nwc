@@ -654,6 +654,32 @@ export const ReportHistoryStore = {
           .insert([insertPayload])
           .select();
 
+        // إدراج إشعار موجه لجميع المستخدمين في جدول notifications لإتاحة التنبيه الفوري لكل المهندسين
+        if (diff && (diff.hasChanges || diff.addedFeaturesCount || diff.modifiedFeaturesCount || diff.deletedFeaturesCount)) {
+          try {
+            const parts = [];
+            if (diff.addedFeaturesCount > 0) parts.push(`إضافة ${diff.addedFeaturesCount} عنصر`);
+            if (diff.modifiedFeaturesCount > 0) parts.push(`تعديل ${diff.modifiedFeaturesCount} عنصر`);
+            if (diff.deletedFeaturesCount > 0) parts.push(`حذف ${diff.deletedFeaturesCount} عنصر`);
+            if (diff.lengthDiffMeters && Math.abs(diff.lengthDiffMeters) > 0.1) {
+              parts.push(`فارق أطوال (${diff.lengthDiffMeters > 0 ? '+' : ''}${diff.lengthDiffMeters.toFixed(1)}m)`);
+            }
+            const diffDetailsStr = parts.length > 0 ? ` (${parts.join('، ')})` : '';
+            const notifMsg = `📢 تم رصد تحديثات وتغيرات جديدة بخريطة مشروع (${projectName})${diffDetailsStr}`;
+
+            await supabase.from('notifications').insert([{
+              user_id: 'all',
+              project_id: projectId,
+              project_name: projectName,
+              type: 'change_detected',
+              message: notifMsg,
+              created_at: new Date().toISOString()
+            }]);
+          } catch (notifErr) {
+            console.warn('Error inserting changelog notification:', notifErr);
+          }
+        }
+
         if (error) {
           console.error('❌ Supabase Changelog Insert Error:', error.message);
         } else if (data && data.length > 0) {

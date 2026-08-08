@@ -652,14 +652,16 @@ export default function App() {
     })()
   );
 
-  // 🔄 المزامنة الحية لِـسحب الإشعارات من سوبابيس والتخزين المحلي وتمرير الأحداث الدقيقة
+  // 🔄 المزامنة الحية لِـسحب الإشعارات وسجلات التغيرات من سوبابيس والتخزين المحلي وتمرير الأحداث الدقيقة
   useEffect(() => {
     const fetchUserNotifications = async () => {
       if (!currentUser || !currentUser.id || !isLogged) return;
       
       try {
         let fetchedData: any[] = [];
+        let changelogData: any[] = [];
         const client = getSupabaseClient() || supabase;
+
         if (client) {
           try {
             const { data, error } = await client
@@ -674,6 +676,19 @@ export default function App() {
           } catch (e) {
             console.warn('Supabase notifications fetch error:', e);
           }
+
+          try {
+            const { data: cData, error: cErr } = await (client.from('project_changelogs') as any)
+              .select('*')
+              .order('created_at', { ascending: false })
+              .limit(100);
+
+            if (!cErr && cData) {
+              changelogData = cData;
+            }
+          } catch (e) {
+            console.warn('Supabase project_changelogs fetch error:', e);
+          }
         }
 
         // Merge with local notifications cache if present
@@ -687,7 +702,7 @@ export default function App() {
 
         const allRawMap = new Map<string, any>();
         
-        // Add fetched
+        // 1. Add fetched from notifications table
         for (const item of fetchedData) {
           const key = String(item.id);
           allRawMap.set(key, {
@@ -703,7 +718,39 @@ export default function App() {
           });
         }
 
-        // Add local
+        // 2. Add fetched from project_changelogs table for map updates coverage
+        for (const cItem of changelogData) {
+          const diff = cItem.diff || {};
+          if (diff.hasChanges || diff.addedFeaturesCount > 0 || diff.modifiedFeaturesCount > 0 || diff.deletedFeaturesCount > 0) {
+            const cKey = `changelog-${cItem.id}`;
+            if (!allRawMap.has(cKey)) {
+              const parts = [];
+              if (diff.addedFeaturesCount > 0) parts.push(`إضافة ${diff.addedFeaturesCount} عنصر`);
+              if (diff.modifiedFeaturesCount > 0) parts.push(`تعديل ${diff.modifiedFeaturesCount} عنصر`);
+              if (diff.deletedFeaturesCount > 0) parts.push(`حذف ${diff.deletedFeaturesCount} عنصر`);
+              if (diff.lengthDiffMeters && Math.abs(diff.lengthDiffMeters) > 0.1) {
+                parts.push(`فارق أطوال (${diff.lengthDiffMeters > 0 ? '+' : ''}${Number(diff.lengthDiffMeters).toFixed(1)}m)`);
+              }
+              const diffDetailsStr = parts.length > 0 ? ` (${parts.join('، ')})` : '';
+              const projName = cItem.project_name || 'مشروع';
+              const notifMsg = `📢 تم رصد تحديثات وتغيرات جديدة بخريطة مشروع (${projName})${diffDetailsStr}`;
+
+              allRawMap.set(cKey, {
+                id: cKey,
+                projectId: cItem.project_id,
+                projectName: projName,
+                type: 'change_detected',
+                message: notifMsg,
+                timestamp: cItem.created_at ? (new Date(cItem.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date(cItem.created_at).toLocaleDateString('ar-SA')) : '',
+                region: '',
+                scope: '',
+                created_at: cItem.created_at || new Date().toISOString()
+              });
+            }
+          }
+        }
+
+        // 3. Add local
         for (const item of localNotifs) {
           const key = String(item.id);
           if (!allRawMap.has(key)) {
@@ -780,13 +827,35 @@ export default function App() {
     };
 
     fetchUserNotifications();
-    const interval = setInterval(fetchUserNotifications, 15000);
+    const interval = setInterval(fetchUserNotifications, 12000);
+
+    // الاشتراك المباشر عبر Supabase Realtime لإرسال الإشعارات لحظياً لجميع الأجهزة
+    let realtimeChannel: any = null;
+    const client = getSupabaseClient() || supabase;
+    if (client && typeof client.channel === 'function') {
+      try {
+        realtimeChannel = client
+          .channel('public:notifications_and_changelogs_live')
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, () => {
+            fetchUserNotifications();
+          })
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'project_changelogs' }, () => {
+            fetchUserNotifications();
+          })
+          .subscribe();
+      } catch (e) {
+        console.warn('Supabase Realtime subscription warning:', e);
+      }
+    }
 
     const handleCustomEvent = () => fetchUserNotifications();
     window.addEventListener('water_maps_notifications_updated', handleCustomEvent);
 
     return () => {
       clearInterval(interval);
+      if (realtimeChannel && client && typeof client.removeChannel === 'function') {
+        try { client.removeChannel(realtimeChannel); } catch (e) {}
+      }
       window.removeEventListener('water_maps_notifications_updated', handleCustomEvent);
     };
   }, [currentUser, isLogged, projects, favoriteIds]);
