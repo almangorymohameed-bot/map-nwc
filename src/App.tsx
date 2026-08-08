@@ -275,7 +275,8 @@ export const isNotificationAllowed = (
   notif: AppNotification, 
   user: User, 
   userNotifSettings?: NotificationSettings, 
-  favoriteProjectIds?: number[]
+  favoriteProjectIds?: number[],
+  projectsList?: Project[]
 ): boolean => {
   if (!user) return true;
 
@@ -306,7 +307,15 @@ export const isNotificationAllowed = (
     if (!isFav) return false;
   }
 
-  // جميع إشعارات التحديثات والتغيرات وإدراج/تعديل المشاريع والفحص التلقائي تظهر لجميع المستخدمين والمدراء بدون استثناء
+  // 3. تصفية الإشعارات حسب صلاحيات الوصول للمشروع والمنطقة للمستخدمين
+  if (user.role !== 'admin' && projectsList && projectsList.length > 0 && notif.projectId) {
+    const targetProject = projectsList.find(p => String(p.id) === String(notif.projectId));
+    if (targetProject && !isProjectAllowedForUser(targetProject, user)) {
+      return false;
+    }
+  }
+
+  // جميع إشعارات التحديثات والتغيرات وإدراج/تعديل المشاريع والفحص التلقائي تظهر لجميع المستخدمين المسموح لهم
   return true;
 };
 
@@ -747,7 +756,7 @@ export default function App() {
             region: n.region || '',
             scope: n.scope || ''
           }))
-          .filter((notif: any) => isNotificationAllowed(notif, currentUser, userNotifSettings, favProjectIds) && !clearedIds.includes(String(notif.id)));
+          .filter((notif: any) => isNotificationAllowed(notif, currentUser, userNotifSettings, favProjectIds, projects) && !clearedIds.includes(String(notif.id)));
 
         // إطلاق التنبيه الخارجي مرة واحدة فقط لكل إشعار غير مقروء لمنع الانبثاق المتكرر
         const unnotifiedItems = mappedNotifs.filter((mn: any) => !mn.read && !notifiedNativeIdsRef.current.has(mn.id));
@@ -1332,7 +1341,7 @@ export default function App() {
 
           // إدخال سطر الإشعار الحامِل لِلاسم والحدث الدقيق ليتوزع وراء الستار للباقيين
           await supabase.from('notifications').insert([{
-            user_id: currentUser.id,
+            user_id: 'all',
             project_id: savedProj.id,
             project_name: savedProj.name,
             type: 'edit',
@@ -1360,7 +1369,7 @@ export default function App() {
           sendNativeNotification('إضافة مشروع جديد 🚀', `تم إدراج خارطة مشروع جديد بنجاح: ${savedProj.name}`);
 
           await supabase.from('notifications').insert([{
-            user_id: currentUser.id,
+            user_id: 'all',
             project_id: insertedData[0].id,
             project_name: savedProj.name,
             type: 'add',

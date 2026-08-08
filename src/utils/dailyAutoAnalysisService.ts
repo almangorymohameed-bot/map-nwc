@@ -175,6 +175,7 @@ export async function runSequentialDailyAutoAnalysis(
           const notifMsg = `📢 تم رصد تحديثات وتغيرات جديدة بخريطة مشروع (${proj.name})${diffDetailsStr}`;
 
           const notifPayload = {
+            user_id: 'all',
             project_id: proj.id,
             project_name: proj.name,
             type: 'change_detected',

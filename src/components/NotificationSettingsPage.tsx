@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Project } from '../types';
+import { getSupabaseClient } from '../utils/supabaseSetup';
 import { 
   Bell, 
   Sliders, 
@@ -17,7 +18,9 @@ import {
   AlertCircle,
   Clock,
   RefreshCw,
-  Crown
+  Crown,
+  Send,
+  Database
 } from 'lucide-react';
 import {
   ScheduleAutoAnalysisConfig,
@@ -105,6 +108,39 @@ export function NotificationSettingsPage({
         onShowNotification(`📊 اكتمل الفحص الشامل للمشاريع: تم معالجة ${res.processed} مشروع ورصد ${res.changesFound} تغييرات.`);
       }
     });
+  };
+
+  const [isSendingTestNotif, setIsSendingTestNotif] = useState(false);
+
+  const handleSendBroadcastTestNotif = async () => {
+    setIsSendingTestNotif(true);
+    const supabase = getSupabaseClient();
+    const testMsg = `📢 إشعار تجريبي عام من المهندس (${currentUser.name}): تم التأكد من إتاحة استلام التغيرات لجميع مهندسي ومدراء النظام بنجاح!`;
+    
+    try {
+      if (supabase) {
+        await supabase.from('notifications').insert([{
+          user_id: 'all',
+          project_id: projects[0]?.id || 1,
+          project_name: projects[0]?.name || 'مشروع عام',
+          type: 'change_detected',
+          message: testMsg,
+          created_at: new Date().toISOString()
+        }]);
+      }
+      
+      if (onSendTestNativeNotification) {
+        onSendTestNativeNotification('تجربة الإشعارات العامة 🔔', testMsg);
+      }
+      
+      if (onShowNotification) {
+        onShowNotification('🚀 تم بث الإشعار التجريبي العام لجميع المستخدمين بنجاح!');
+      }
+    } catch (err: any) {
+      console.error('Test broadcast notification error:', err);
+    } finally {
+      setIsSendingTestNotif(false);
+    }
   };
 
   useEffect(() => {
@@ -488,6 +524,48 @@ export function NotificationSettingsPage({
           </div>
         </div>
       )}
+
+      {/* Category 4: Broadcast Testing & Database RLS Policy Settings */}
+      <div className="bg-amber-500/10 dark:bg-amber-950/20 rounded-3xl p-6 border border-amber-500/30 dark:border-amber-700/40 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl border border-amber-500/30 shrink-0">
+              <Database className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span>توزيع الإشعارات وقواعد Supabase (RLS)</span>
+              </h3>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium mt-0.5">
+                تأكيد وصول إشعارات التغيرات والمشاريع المضافة لكل المهندسين والمشرفين
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSendBroadcastTestNotif}
+            disabled={isSendingTestNotif}
+            className="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+          >
+            <Send className="h-3.5 w-3.5" />
+            <span>{isSendingTestNotif ? 'جاري البث...' : 'بث إشعار تجريبي عام لكل المستخدمين 📢'}</span>
+          </button>
+        </div>
+
+        <div className="text-xs bg-white dark:bg-slate-900 p-4 rounded-2xl border border-amber-200 dark:border-amber-900/50 text-slate-700 dark:text-slate-300 space-y-2">
+          <p className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+            <ShieldCheck className="h-4 w-4 text-emerald-500" />
+            <span>إعدادات قاعدة بيانات Supabase لضمان المزامنة الحية:</span>
+          </p>
+          <p className="leading-relaxed text-[11.5px]">
+            إذا ظهرت شارة <code className="bg-slate-100 dark:bg-slate-800 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded font-mono text-[10.5px]">3 RLS policies</code> أمام جدول <code className="font-mono text-blue-600 dark:text-blue-400">notifications</code> في Supabase، يُفضل إلغاء القيد المباشر لجعل الجدول <code className="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded font-mono text-[10.5px]">UNRESTRICTED</code> تماماً مثل جدول المشاريع <code className="font-mono">projects</code> عبر تشغيل الأمر التالي في SQL Editor:
+          </p>
+          <div className="bg-slate-950 text-cyan-300 p-3 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800 select-all">
+            ALTER TABLE public.notifications DISABLE ROW LEVEL SECURITY;
+          </div>
+        </div>
+      </div>
 
       {/* Footer Info Box */}
       <div className="bg-slate-50 dark:bg-slate-900/60 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 flex items-start gap-3.5">

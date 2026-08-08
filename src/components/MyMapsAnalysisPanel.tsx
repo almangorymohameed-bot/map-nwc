@@ -228,6 +228,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
       if (supabase) {
         try {
           await supabase.from('notifications').insert([{
+            user_id: 'all',
             project_id: proj.id,
             project_name: proj.name,
             type: 'change_detected',
