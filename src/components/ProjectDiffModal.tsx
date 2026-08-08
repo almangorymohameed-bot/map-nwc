@@ -25,8 +25,11 @@ import {
   TrendingDown,
   Layers,
   Award,
-  AlertTriangle
+  AlertTriangle,
+  MapPin,
+  Navigation
 } from 'lucide-react';
+import { FeatureDetailsModal, FeatureDetailData } from './FeatureDetailsModal';
 import { groupYellowLineChangesByPermit } from '../utils/diffEngine';
 import { 
   SUPABASE_SQL_SCHEMA, 
@@ -57,6 +60,7 @@ export function ProjectDiffModal({
   const [activeTab, setActiveTab] = useState<'summary' | 'yellowLines' | 'permits' | 'lengths' | 'history' | 'sql'>('summary');
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [copiedEdge, setCopiedEdge] = useState<boolean>(false);
+  const [selectedFeatureForModal, setSelectedFeatureForModal] = useState<FeatureDetailData | null>(null);
 
   // Supabase Configuration States
   const currentConfig = getSupabaseConfig();
@@ -450,8 +454,35 @@ export function ProjectDiffModal({
                               </div>
                             </div>
 
-                            <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-mono text-left">
-                              طول العنصر: {yc.lengthMeters.toLocaleString()} متر
+                            <div className="flex items-center justify-between pt-1">
+                              <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-mono text-left">
+                                طول العنصر: {yc.lengthMeters.toLocaleString()} متر
+                              </div>
+                              <button
+                                onClick={() => setSelectedFeatureForModal({
+                                  name: yc.featureName,
+                                  segmentId: yc.segmentId,
+                                  permitNo: yc.permitNo,
+                                  stage: yc.newStage,
+                                  lengthMeters: yc.lengthMeters,
+                                  colorHex: yc.colorHex,
+                                  streetName: yc.streetName,
+                                  district: yc.district,
+                                  innerDiameter: yc.innerDiameter,
+                                  zone: yc.zone,
+                                  drillingType: yc.drillingType,
+                                  contractor: yc.contractor,
+                                  kmlProjectName: yc.kmlProjectName,
+                                  kmlProjectId: yc.kmlProjectId,
+                                  centerLat: yc.centerLat,
+                                  centerLng: yc.centerLng,
+                                  googleMapsUrl: yc.googleMapsUrl
+                                })}
+                                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 text-[10.5px] font-bold rounded-lg border border-blue-200 dark:border-blue-800 transition-all flex items-center gap-1 cursor-pointer"
+                              >
+                                <MapPin className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                                <span>📍 الموقع بالخريطة</span>
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -752,6 +783,14 @@ export function ProjectDiffModal({
         </div>
 
       </div>
+
+      {/* Feature Balloon Details & Leaflet Map Modal */}
+      {selectedFeatureForModal && (
+        <FeatureDetailsModal
+          feature={selectedFeatureForModal}
+          onClose={() => setSelectedFeatureForModal(null)}
+        />
+      )}
     </div>
   );
 }

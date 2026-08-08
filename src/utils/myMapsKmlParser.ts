@@ -434,50 +434,105 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     const description = pm.getElementsByTagName('description')[0]?.textContent?.trim() || '';
     const styleUrl = pm.getElementsByTagName('styleUrl')[0]?.textContent?.trim() || '';
 
-    // Extract ExtendedData fields if available
+    // Extract all ExtendedData / Balloon fields
     let segmentId = '';
     let permitNo = '';
     let extractedColor = '';
     let extractedStage = '';
+    let streetName = '';
+    let district = '';
+    let innerDiameter = '';
+    let zone = '';
+    let drillingType = '';
+    let contractor = '';
+    let kmlProjectName = '';
+    let kmlProjectId = '';
 
     const dataElements = Array.from(pm.getElementsByTagName('Data')).concat(Array.from(pm.getElementsByTagName('SimpleData')));
     dataElements.forEach(dataEl => {
-      const nameAttr = (dataEl.getAttribute('name') || '').toLowerCase();
+      const nameAttr = (dataEl.getAttribute('name') || '').trim().toLowerCase();
       const val = dataEl.textContent?.trim() || '';
+      if (!val || val === '-') return;
 
       if (nameAttr.includes('segment') || nameAttr.includes('قطاع') || nameAttr.includes('seg_id') || nameAttr === 'id') {
         segmentId = val;
-      }
-      if (nameAttr.includes('permit') || nameAttr.includes('تصريح') || nameAttr.includes('إذن') || nameAttr.includes('اذن')) {
+      } else if (nameAttr.includes('permit') || nameAttr.includes('تصريح') || nameAttr.includes('إذن') || nameAttr.includes('اذن')) {
         permitNo = val;
-      }
-      if (nameAttr.includes('color') || nameAttr.includes('اللون') || nameAttr.includes('لون')) {
+      } else if (nameAttr.includes('color') || nameAttr.includes('اللون') || nameAttr.includes('لون')) {
         extractedColor = val;
-      }
-      if (nameAttr.includes('stage') || nameAttr.includes('مرحلة') || nameAttr.includes('حفرية') || nameAttr.includes('وضع')) {
+      } else if (nameAttr.includes('stage') || nameAttr.includes('مرحلة') || nameAttr.includes('حفرية') || nameAttr.includes('وضع')) {
         extractedStage = val;
+      } else if (nameAttr.includes('street') || nameAttr.includes('شارع')) {
+        streetName = val;
+      } else if (nameAttr.includes('district') || nameAttr.includes('hay') || nameAttr.includes('حي')) {
+        district = val;
+      } else if (nameAttr.includes('diameter') || nameAttr.includes('قطر')) {
+        innerDiameter = val;
+      } else if (nameAttr.includes('zone') || nameAttr.includes('منطقة') || nameAttr.includes('زون')) {
+        zone = val;
+      } else if (nameAttr.includes('drilling') || nameAttr.includes('حفر')) {
+        drillingType = val;
+      } else if (nameAttr.includes('contractor') || nameAttr.includes('مقاول') || nameAttr.includes('شركة')) {
+        contractor = val;
+      } else if (nameAttr.includes('projectname') || nameAttr.includes('اسم المشروع')) {
+        kmlProjectName = val;
+      } else if (nameAttr.includes('projectid') || nameAttr.includes('رقم المشروع')) {
+        kmlProjectId = val;
       }
     });
 
-    // Fallback extraction from description text via Regex
+    // Fallback extraction from description text / HTML via Regex
+    const descText = description.replace(/<[^>]+>/g, ' ');
+
     if (!segmentId) {
-      const segMatch = description.match(/(?:Segment\s*ID|Segment|قطاع|مقطع|معرف)\s*[:=]?\s*([A-Za-z0-9_-]+)/i) || name.match(/(?:SEG|SEGMENT|SEC|SEC-)\s*([0-9_-]+)/i);
+      const segMatch = descText.match(/(?:Segment\s*ID|Segment|قطاع|مقطع|معرف)\s*[:=]?\s*([A-Za-z0-9_-]+)/i) || name.match(/(?:SEG|SEGMENT|SEC|SEC-)\s*([0-9_-]+)/i);
       if (segMatch) segmentId = segMatch[0];
     }
     if (!permitNo) {
-      const permMatch = description.match(/(?:Permit\s*No|Permit|تصريح|رقم التصريح)\s*[:=]?\s*([A-Za-z0-9_-]+)/i) || name.match(/(?:PERM|P-)\s*([0-9_-]+)/i);
+      const permMatch = descText.match(/(?:Permit\s*No|Permit|تصريح|رقم التصريح)\s*[:=]?\s*([A-Za-z0-9_-]+)/i) || name.match(/(?:PERM|P-)\s*([0-9_-]+)/i);
       if (permMatch) permitNo = permMatch[0];
     }
     if (!extractedStage) {
-      const stageMatch = description.match(/(?:Stage|مرحلة|وضع الحفرية|حالة الحفرية)\s*[:=]?\s*([^\n\r<,]+)/i);
+      const stageMatch = descText.match(/(?:Stage|مرحلة|وضع الحفرية|حالة الحفرية)\s*[:=]?\s*([^\n\r<,]+)/i);
       if (stageMatch) extractedStage = stageMatch[1].trim();
+    }
+    if (!streetName) {
+      const m = descText.match(/(?:STREETNAME|STREET_NAME|STREET|الشارع|اسم الشارع)\s*[:=]?\s*([^\r\n<,]+)/i) || descText.match(/([^\r\n<,]+)\s+STREETNAME/i);
+      if (m && m[1] && m[1].trim() !== '-') streetName = m[1].trim();
+    }
+    if (!district) {
+      const m = descText.match(/(?:DISTRICT|HAY|NEIGHBORHOOD|الحي|حي)\s*[:=]?\s*([^\r\n<,]+)/i) || descText.match(/([^\r\n<,]+)\s+DISTRICT/i);
+      if (m && m[1] && m[1].trim() !== '-') district = m[1].trim();
+    }
+    if (!innerDiameter) {
+      const m = descText.match(/(?:INNERDIAMETER|INNER_DIAMETER|DIAMETER|القطر الداخلي|القطر_الداخلي|القطر)\s*[:=]?\s*([0-9.,A-Za-z_-]+)/i) || descText.match(/([0-9.,A-Za-z_-]+)\s+INNERDIAMETER/i);
+      if (m && m[1] && m[1].trim() !== '-') innerDiameter = m[1].trim();
+    }
+    if (!zone) {
+      const m = descText.match(/(?:ZONE|ZONE_NO|المنطقة|منطقة|زون)\s*[:=]?\s*([0-9.,A-Za-z_-]+)/i) || descText.match(/([0-9.,A-Za-z_-]+)\s+ZONE/i);
+      if (m && m[1] && m[1].trim() !== '-') zone = m[1].trim();
+    }
+    if (!drillingType) {
+      const m = descText.match(/(?:Drilling\s*type|DRILLING_TYPE|DRILLINGTYPE|نوع\s*الحفر|طريقة\s*الحفر)\s*[:=]?\s*([^\r\n<,]+)/i) || descText.match(/([^\r\n<,]+)\s+Drilling\s*type/i);
+      if (m && m[1] && m[1].trim() !== '-') drillingType = m[1].trim();
+    }
+    if (!contractor) {
+      const m = descText.match(/(?:CONTRACTOR|CONTRACTOR_NAME|المقاول|شركة\s*المقاولات|اسم\s*المقاول)\s*[:=]?\s*([^\r\n<,]+)/i) || descText.match(/([^\r\n<,]+)\s+CONTRACTOR/i);
+      if (m && m[1] && m[1].trim() !== '-') contractor = m[1].trim();
+    }
+    if (!kmlProjectName) {
+      const m = descText.match(/(?:PROJECTNAME|PROJECT_NAME|اسم\s*المشروع)\s*[:=]?\s*([^\r\n<,]+)/i) || descText.match(/([^\r\n<,]+)\s+PROJECTNAME/i);
+      if (m && m[1] && m[1].trim() !== '-') kmlProjectName = m[1].trim();
+    }
+    if (!kmlProjectId) {
+      const m = descText.match(/(?:PROJECTID|PROJECT_ID|رقم\s*المشروع|معرف\s*المشروع)\s*[:=]?\s*([0-9.,A-Za-z_-]+)/i) || descText.match(/([0-9.,A-Za-z_-]+)\s+PROJECTID/i);
+      if (m && m[1] && m[1].trim() !== '-') kmlProjectId = m[1].trim();
     }
 
     // Default fallbacks for clean presentation
     if (!segmentId) {
       segmentId = `SEG-${1000 + idx + 1}`;
     }
-    // Note: if permitNo is absent, leave as empty string so system detects missing permit number
 
     // Determine hex color with maximum fallback coverage
     let hexColor = extractedColor ? normalizeColorToHex(extractedColor) : '';
@@ -515,6 +570,10 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     // 1. Calculate actual geographic line length in meters strictly from LineString coordinates using @turf/length
     let geoMeters = 0;
     let coordsCount = 0;
+    const allCoordinates: Array<[number, number]> = [];
+    let sumLat = 0;
+    let sumLng = 0;
+    let validPtsCount = 0;
 
     const lineStrings = Array.from(lineStringNodes);
     lineStrings.forEach(ls => {
@@ -530,6 +589,10 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
           const lat = parseFloat(parts[1]);
           if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
             pointsLngLat.push([lng, lat]); // Turf format: [longitude, latitude]
+            allCoordinates.push([lng, lat]);
+            sumLat += lat;
+            sumLng += lng;
+            validPtsCount++;
           }
         }
       });
@@ -540,6 +603,35 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
         geoMeters += turfLengthMeters;
       }
     });
+
+    let centerLat: number | undefined;
+    let centerLng: number | undefined;
+
+    if (validPtsCount > 0) {
+      centerLat = Number((sumLat / validPtsCount).toFixed(7));
+      centerLng = Number((sumLng / validPtsCount).toFixed(7));
+    } else {
+      // Check description text for lat, lng
+      const coordMatch = descText.match(/(?:الإحداثيات|Coordinates)\s*[:=]?\s*([0-9.-]+)\s*,\s*([0-9.-]+)/i) || descText.match(/q=([0-9.-]+),([0-9.-]+)/i);
+      if (coordMatch) {
+        const val1 = parseFloat(coordMatch[1]);
+        const val2 = parseFloat(coordMatch[2]);
+        if (!isNaN(val1) && !isNaN(val2)) {
+          if (Math.abs(val1) <= 35 && Math.abs(val2) >= 30) {
+            centerLat = val1;
+            centerLng = val2;
+          } else if (Math.abs(val2) <= 35 && Math.abs(val1) >= 30) {
+            centerLat = val2;
+            centerLng = val1;
+          }
+        }
+      }
+    }
+
+    let googleMapsUrl: string | undefined;
+    if (centerLat !== undefined && centerLng !== undefined) {
+      googleMapsUrl = `https://www.google.com/maps?q=${centerLat},${centerLng}`;
+    }
 
     // 2. Check explicit Shape_Length attribute as secondary backup if geometry points were absent
     const explicitShapeLength = extractShapeLengthAttribute(pm, description);
@@ -552,7 +644,7 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
       finalLengthMeters = explicitShapeLength;
     }
 
-    const textCtx = `${name} ${description} ${segmentId} ${permitNo}`;
+    const textCtx = `${name} ${description} ${segmentId} ${permitNo} ${streetName} ${district}`;
     const category = matchStatusCategory(hexColor, textCtx);
     const assignedConfig = COLOR_CONFIG[category];
     const statusLabel = getStatusCategoryLabel(category, projectName, projectScope);
@@ -575,7 +667,21 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
       lengthKm: Number((finalLengthMeters / 1000).toFixed(3)),
       coordinatesCount: coordsCount || 2,
       description,
-      stage: itemStage || (category === 'ongoing' ? 'حفر وتمديد' : undefined)
+      stage: itemStage || (category === 'ongoing' ? 'حفر وتمديد' : undefined),
+
+      // Extended Balloon Attributes
+      streetName: streetName || name,
+      district: district || undefined,
+      innerDiameter: innerDiameter || undefined,
+      zone: zone || undefined,
+      drillingType: drillingType || undefined,
+      contractor: contractor || undefined,
+      kmlProjectName: kmlProjectName || projectName,
+      kmlProjectId: kmlProjectId || undefined,
+      centerLat,
+      centerLng,
+      googleMapsUrl,
+      coordinates: allCoordinates.length > 0 ? allCoordinates : undefined
     });
   });
 
@@ -630,9 +736,34 @@ export function generateSyntheticProjectKMLData(
       ? (isSewage ? 'صرف' : 'مياه') 
       : cat === 'executed_sewage' ? 'صرف' : 'تنفيذي';
 
+    const sampleStreets = ['شارع الجريسي', 'شارع العليا', 'طريق الملك فهد', 'شارع الإمام مسلم', 'طريق الدائري الجنوبي', 'شارع خالد بن الوليد'];
+    const sampleDistricts = ['الدار البيضاء', 'المناخ', 'العزيزية', 'الشفا', 'الياسمين', 'النرجس'];
+    const sampleContractors = ['شركة دائن للمقاولات', 'شركة الإنشاءات الوطنية', 'شركة شبه الجزيرة', 'شركة طويق للمقاولات'];
+    const sampleDiameters = ['400', '600', '800', '1000', '1200'];
+
+    const streetName = sampleStreets[i % sampleStreets.length];
+    const district = sampleDistricts[i % sampleDistricts.length];
+    const contractor = sampleContractors[i % sampleContractors.length];
+    const innerDiameter = sampleDiameters[i % sampleDiameters.length];
+    const zone = `${(i % 3) + 1}`;
+    const drillingType = i % 2 === 0 ? 'حفر مفتوح' : 'حفر ثقبي (دفع هيدروليكي)';
+
+    // Generate Riyadh area coordinates around lat 24.582, lng 46.806
+    const baseLat = 24.582043 + (i * 0.0035);
+    const baseLng = 46.806716 + (i * 0.0028);
+    const centerLat = Number(baseLat.toFixed(7));
+    const centerLng = Number(baseLng.toFixed(7));
+    const googleMapsUrl = `https://www.google.com/maps?q=${centerLat},${centerLng}`;
+
+    const syntheticCoords: Array<[number, number]> = [
+      [Number((baseLng - 0.001).toFixed(7)), Number((baseLat - 0.001).toFixed(7))],
+      [centerLng, centerLat],
+      [Number((baseLng + 0.001).toFixed(7)), Number((baseLat + 0.001).toFixed(7))]
+    ];
+
     items.push({
       id: `sym-feature-${i + 1}`,
-      name: `قطاع خط ${lineTypeLabel} رقم ${i + 1}`,
+      name: `قطاع خط ${lineTypeLabel} - ${streetName}`,
       segmentId,
       permitNo,
       colorHex: config.hex,
@@ -642,7 +773,21 @@ export function generateSyntheticProjectKMLData(
       lengthKm: Number((lengthMeters / 1000).toFixed(3)),
       coordinatesCount: 8 + (i % 6),
       description: `مخطط خط تنفيذ ${statusLabel} للمشروع ${projectName}`,
-      stage: itemStage
+      stage: itemStage,
+
+      // Extended Balloon Details
+      streetName,
+      district,
+      innerDiameter,
+      zone,
+      drillingType,
+      contractor,
+      kmlProjectName: projectName,
+      kmlProjectId: `PRJ-2012500${(i % 5) + 1}`,
+      centerLat,
+      centerLng,
+      googleMapsUrl,
+      coordinates: syntheticCoords
     });
   }
 

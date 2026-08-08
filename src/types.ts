@@ -81,6 +81,20 @@ export interface KMLFeatureItem {
   description?: string;
   layerName?: string;
   stage?: string; // مرحلة الحفرية الحالية (خاصة بالخطوط الصفراء جاري العمل)
+
+  // Extended Balloon & KML Attributes (from My Maps balloon details)
+  streetName?: string;       // STREETNAME / الشارع
+  district?: string;         // الحي
+  innerDiameter?: string;    // INNERDIAMETER / القطر الداخلي
+  zone?: string;             // ZONE / المنطقة
+  drillingType?: string;     // Drilling type / نوع الحفر
+  contractor?: string;       // CONTRACTOR / المقاول
+  kmlProjectName?: string;   // PROJECTNAME / اسم المشروع
+  kmlProjectId?: string;     // PROJECTID / رقم المشروع
+  centerLat?: number;        // خط العرض للمركز
+  centerLng?: number;        // خط الطول للمركز
+  googleMapsUrl?: string;    // رابط فتح في خرائط جوجل
+  coordinates?: Array<[number, number]>; // قائمة الإحداثيات [lng, lat]
 }
 
 export interface ColorStatsSummary {
@@ -142,6 +156,19 @@ export interface YellowLineStageChange {
   permitNo?: string;
   lengthMeters: number;
   colorHex: string;
+
+  // Extended Balloon & KML Attributes
+  streetName?: string;
+  district?: string;
+  innerDiameter?: string;
+  zone?: string;
+  drillingType?: string;
+  contractor?: string;
+  kmlProjectName?: string;
+  kmlProjectId?: string;
+  centerLat?: number;
+  centerLng?: number;
+  googleMapsUrl?: string;
 }
 
 export interface LengthChangeDetail {
@@ -159,6 +186,19 @@ export interface PermitChangeDetail {
   permitNo: string;
   category?: string;
   segmentId?: string;
+
+  // Extended Balloon & KML Attributes
+  streetName?: string;
+  district?: string;
+  innerDiameter?: string;
+  zone?: string;
+  drillingType?: string;
+  contractor?: string;
+  kmlProjectName?: string;
+  kmlProjectId?: string;
+  centerLat?: number;
+  centerLng?: number;
+  googleMapsUrl?: string;
 }
 
 export interface ScopeChangeDetail {

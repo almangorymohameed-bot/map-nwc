@@ -81,10 +81,29 @@ CREATE TABLE IF NOT EXISTS public.project_changelogs (
 CREATE INDEX IF NOT EXISTS idx_project_changelogs_proj_id ON public.project_changelogs(project_id);
 
 -- ==========================================
--- 3. تفعيل سياسات الأمان Row Level Security (RLS)
+-- 3. جدول الإشعارات والتنبيهات العامة لجميع المستخدمين
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT,
+  project_id INT,
+  project_name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  message TEXT NOT NULL,
+  region TEXT,
+  scope TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_proj_id ON public.notifications(project_id);
+
+-- ==========================================
+-- 4. تفعيل سياسات الأمان Row Level Security (RLS)
 -- ==========================================
 ALTER TABLE public.project_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_changelogs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow read access for all authenticated users" ON public.project_reports;
 DROP POLICY IF EXISTS "Allow insert access for all authenticated users" ON public.project_reports;
@@ -105,6 +124,15 @@ ON public.project_changelogs FOR SELECT USING (true);
 
 CREATE POLICY "Allow insert access for changelogs" 
 ON public.project_changelogs FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow read access for notifications" ON public.notifications;
+DROP POLICY IF EXISTS "Allow insert access for notifications" ON public.notifications;
+
+CREATE POLICY "Allow read access for notifications" 
+ON public.notifications FOR SELECT USING (true);
+
+CREATE POLICY "Allow insert access for notifications" 
+ON public.notifications FOR INSERT WITH CHECK (true);
 `;
 
 /**

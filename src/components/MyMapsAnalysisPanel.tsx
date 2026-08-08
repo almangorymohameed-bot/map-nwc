@@ -15,7 +15,7 @@ import {
   getStatusCategoryLabel
 } from '../utils/myMapsKmlParser';
 import { compareKMLAnalyses } from '../utils/diffEngine';
-import { ReportHistoryStore } from '../utils/supabaseSetup';
+import { ReportHistoryStore, getSupabaseClient } from '../utils/supabaseSetup';
 import { ProjectDiffModal } from './ProjectDiffModal';
 import { 
   runSequentialDailyAutoAnalysis, 
@@ -23,6 +23,7 @@ import {
   AutoAnalysisProgress 
 } from '../utils/dailyAutoAnalysisService';
 import { ChangeReportModal } from './ChangeReportModal';
+import { FeatureDetailsModal, FeatureDetailData } from './FeatureDetailsModal';
 import { 
   BarChart3, 
   Globe, 
@@ -48,7 +49,9 @@ import {
   ArrowRightLeft,
   History,
   HardHat,
-  Bell
+  Bell,
+  MapPin,
+  Navigation
 } from 'lucide-react';
 
 interface MyMapsAnalysisPanelProps {
@@ -70,10 +73,35 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
 
   const [showUrlInput, setShowUrlInput] = useState<boolean>(false);
   const [isExportingPDF, setIsExportingPDF] = useState<boolean>(false);
+  const [selectedFeatureForModal, setSelectedFeatureForModal] = useState<FeatureDetailData | null>(null);
 
   // States for Project Change Tracking & Historical Comparison
   const [currentDiffResult, setCurrentDiffResult] = useState<ProjectDiffResult | null>(null);
   const [isDiffModalOpen, setIsDiffModalOpen] = useState<boolean>(false);
+
+  // Historical Project Reports State
+  const [projectHistoryReports, setProjectHistoryReports] = useState<HistoricalReport[]>([]);
+  const [isLoadingProjectHistory, setIsLoadingProjectHistory] = useState<boolean>(false);
+
+  // Fetch project history whenever activeProject changes
+  useEffect(() => {
+    if (activeProject) {
+      setIsLoadingProjectHistory(true);
+      ReportHistoryStore.getHistoricalReports(activeProject.id, activeProject.name)
+        .then(reports => {
+          setProjectHistoryReports(reports || []);
+          setIsLoadingProjectHistory(false);
+        })
+        .catch(err => {
+          console.error('Error fetching project history reports:', err);
+          setProjectHistoryReports([]);
+          setIsLoadingProjectHistory(false);
+        });
+    } else {
+      setProjectHistoryReports([]);
+      setIsLoadingProjectHistory(false);
+    }
+  }, [activeProject?.id, activeProject?.name]);
 
   // Daily Sequential Auto-Analysis Progress State
   const [autoProgress, setAutoProgress] = useState<AutoAnalysisProgress>({
@@ -88,6 +116,21 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
     return () => unsubscribe();
   }, []);
 
+  const handleOpenFeatureModalBySegmentOrPermit = (identifier: string, isPermit: boolean = false) => {
+    if (!analysisResult || !analysisResult.items) return;
+    const item = analysisResult.items.find(it => isPermit ? (it.permitNo === identifier && identifier !== '') : it.segmentId === identifier);
+    if (item) {
+      setSelectedFeatureForModal(item);
+    } else {
+      setSelectedFeatureForModal({
+        name: isPermit ? `تصريح/فسح رقم ${identifier}` : `قطاع رقم ${identifier}`,
+        permitNo: isPermit ? identifier : undefined,
+        segmentId: !isPermit ? identifier : undefined,
+        stage: 'أعمال حفرية جارية',
+        kmlProjectName: activeProject?.name || 'مشروع منفذ'
+      });
+    }
+  };
   const handleRunBatchDailyAutoAnalysis = async () => {
     if (!projects || projects.length === 0) {
       showToast('⚠️ لا توجد مشاريع مجهزة للتحليل.');
@@ -119,8 +162,36 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
     setCurrentDiffResult(diff);
     setIsDiffModalOpen(true);
 
+    // Refresh history list for active project
+    const updatedHistory = await ReportHistoryStore.getHistoricalReports(proj.id, proj.name);
+    setProjectHistoryReports(updatedHistory || []);
+
     if (diff.hasChanges) {
       showToast(`📊 تم رصد وتوثيق تغيرات جديدة مقارنة بالتقرير السابق لمشروع (${proj.name})`);
+
+      // 📢 إرسال إشعار فوري لقاعدة البيانات لتنبيه جميع المستخدمين بوجود تحديث جديد بالخريطة
+      const summaryText = diff.summaryMessages && diff.summaryMessages.length > 0
+        ? diff.summaryMessages.join(' - ')
+        : 'تمت إضافة أطوال وشبكات جديدة بالخريطة';
+
+      const notifMsg = `📢 يوجد تحديث جديد بملف خريطة مشروع (${proj.name}): ${summaryText} (إجمالي الأطوال الحالية: ${newResult.totalLengthKm} كم)`;
+
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        try {
+          await supabase.from('notifications').insert([{
+            project_id: proj.id,
+            project_name: proj.name,
+            type: 'change_detected',
+            message: notifMsg,
+            region: proj.region || '',
+            scope: proj.scope || '',
+            created_at: new Date().toISOString()
+          }]);
+        } catch (notifErr) {
+          console.error('Failed to insert notification into Supabase from analysis panel:', notifErr);
+        }
+      }
     } else {
       showToast(`✨ تم إجراء التحليل وحفظ التقرير لمشروع (${proj.name}) بقاعدة البيانات بنجاح!`);
     }
@@ -887,9 +958,15 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
                       {analysisResult.segmentIdsByStatus.executedWater.map((seg, i) => (
-                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-blue-200 dark:border-blue-800 shadow-3xs">
-                          {seg}
-                        </span>
+                        <button 
+                          key={i} 
+                          onClick={() => handleOpenFeatureModalBySegmentOrPermit(seg, false)}
+                          className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white hover:bg-blue-100 dark:bg-slate-800 dark:hover:bg-blue-900/60 text-slate-800 dark:text-slate-200 rounded border border-blue-200 dark:border-blue-800 shadow-3xs cursor-pointer transition-colors flex items-center gap-1 group"
+                          title="انقر لعرض تفاصيل وموقع القطاع بالخريطة"
+                        >
+                          <span>{seg}</span>
+                          <MapPin className="w-2.5 h-2.5 text-blue-500 opacity-60 group-hover:opacity-100" />
+                        </button>
                       ))}
                       {analysisResult.segmentIdsByStatus.executedWater.length === 0 && (
                         <span className="text-xs text-slate-400">لا يوجد قطاعات</span>
@@ -910,9 +987,15 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
                       {analysisResult.segmentIdsByStatus.executedSewage.map((seg, i) => (
-                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-emerald-200 dark:border-emerald-800 shadow-3xs">
-                          {seg}
-                        </span>
+                        <button 
+                          key={i} 
+                          onClick={() => handleOpenFeatureModalBySegmentOrPermit(seg, false)}
+                          className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white hover:bg-emerald-100 dark:bg-slate-800 dark:hover:bg-emerald-900/60 text-slate-800 dark:text-slate-200 rounded border border-emerald-200 dark:border-emerald-800 shadow-3xs cursor-pointer transition-colors flex items-center gap-1 group"
+                          title="انقر لعرض تفاصيل وموقع القطاع بالخريطة"
+                        >
+                          <span>{seg}</span>
+                          <MapPin className="w-2.5 h-2.5 text-emerald-500 opacity-60 group-hover:opacity-100" />
+                        </button>
                       ))}
                       {analysisResult.segmentIdsByStatus.executedSewage.length === 0 && (
                         <span className="text-xs text-slate-400">لا يوجد قطاعات</span>
@@ -933,9 +1016,15 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
                       {analysisResult.segmentIdsByStatus.ongoing.map((seg, i) => (
-                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-amber-200 dark:border-amber-800 shadow-3xs">
-                          {seg}
-                        </span>
+                        <button 
+                          key={i} 
+                          onClick={() => handleOpenFeatureModalBySegmentOrPermit(seg, false)}
+                          className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white hover:bg-amber-100 dark:bg-slate-800 dark:hover:bg-amber-900/60 text-slate-800 dark:text-slate-200 rounded border border-amber-200 dark:border-amber-800 shadow-3xs cursor-pointer transition-colors flex items-center gap-1 group"
+                          title="انقر لعرض تفاصيل وموقع القطاع بالخريطة"
+                        >
+                          <span>{seg}</span>
+                          <MapPin className="w-2.5 h-2.5 text-amber-500 opacity-60 group-hover:opacity-100" />
+                        </button>
                       ))}
                       {analysisResult.segmentIdsByStatus.ongoing.length === 0 && (
                         <span className="text-xs text-slate-400">لا يوجد قطاعات</span>
@@ -956,9 +1045,15 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
                       {analysisResult.segmentIdsByStatus.remaining.map((seg, i) => (
-                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-rose-200 dark:border-rose-800 shadow-3xs">
-                          {seg}
-                        </span>
+                        <button 
+                          key={i} 
+                          onClick={() => handleOpenFeatureModalBySegmentOrPermit(seg, false)}
+                          className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white hover:bg-rose-100 dark:bg-slate-800 dark:hover:bg-rose-900/60 text-slate-800 dark:text-slate-200 rounded border border-rose-200 dark:border-rose-800 shadow-3xs cursor-pointer transition-colors flex items-center gap-1 group"
+                          title="انقر لعرض تفاصيل وموقع القطاع بالخريطة"
+                        >
+                          <span>{seg}</span>
+                          <MapPin className="w-2.5 h-2.5 text-rose-500 opacity-60 group-hover:opacity-100" />
+                        </button>
                       ))}
                       {analysisResult.segmentIdsByStatus.remaining.length === 0 && (
                         <span className="text-xs text-slate-400">لا يوجد قطاعات</span>
@@ -979,9 +1074,15 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
                       {analysisResult.segmentIdsByStatus.cancelled.map((seg, i) => (
-                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-pink-200 dark:border-pink-800 shadow-3xs">
-                          {seg}
-                        </span>
+                        <button 
+                          key={i} 
+                          onClick={() => handleOpenFeatureModalBySegmentOrPermit(seg, false)}
+                          className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white hover:bg-pink-100 dark:bg-slate-800 dark:hover:bg-pink-900/60 text-slate-800 dark:text-slate-200 rounded border border-pink-200 dark:border-pink-800 shadow-3xs cursor-pointer transition-colors flex items-center gap-1 group"
+                          title="انقر لعرض تفاصيل وموقع القطاع بالخريطة"
+                        >
+                          <span>{seg}</span>
+                          <MapPin className="w-2.5 h-2.5 text-pink-500 opacity-60 group-hover:opacity-100" />
+                        </button>
                       ))}
                       {analysisResult.segmentIdsByStatus.cancelled.length === 0 && (
                         <span className="text-xs text-slate-400">لا يوجد قطاعات</span>
@@ -1031,9 +1132,15 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
                       {analysisResult.permitNosByStatus.executedWater.map((prm, i) => (
-                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-blue-200 dark:border-blue-800 shadow-3xs">
-                          {prm}
-                        </span>
+                        <button 
+                          key={i} 
+                          onClick={() => handleOpenFeatureModalBySegmentOrPermit(prm, true)}
+                          className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white hover:bg-blue-100 dark:bg-slate-800 dark:hover:bg-blue-900/60 text-slate-800 dark:text-slate-200 rounded border border-blue-200 dark:border-blue-800 shadow-3xs cursor-pointer transition-colors flex items-center gap-1 group"
+                          title="انقر لعرض تفاصيل وموقع الفسح بالخريطة"
+                        >
+                          <span>{prm}</span>
+                          <MapPin className="w-2.5 h-2.5 text-blue-500 opacity-60 group-hover:opacity-100" />
+                        </button>
                       ))}
                       {analysisResult.permitNosByStatus.executedWater.length === 0 && (
                         <span className="text-xs text-slate-400">لا يوجد تصاريح</span>
@@ -1054,9 +1161,15 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
                       {analysisResult.permitNosByStatus.executedSewage.map((prm, i) => (
-                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-emerald-200 dark:border-emerald-800 shadow-3xs">
-                          {prm}
-                        </span>
+                        <button 
+                          key={i} 
+                          onClick={() => handleOpenFeatureModalBySegmentOrPermit(prm, true)}
+                          className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white hover:bg-emerald-100 dark:bg-slate-800 dark:hover:bg-emerald-900/60 text-slate-800 dark:text-slate-200 rounded border border-emerald-200 dark:border-emerald-800 shadow-3xs cursor-pointer transition-colors flex items-center gap-1 group"
+                          title="انقر لعرض تفاصيل وموقع الفسح بالخريطة"
+                        >
+                          <span>{prm}</span>
+                          <MapPin className="w-2.5 h-2.5 text-emerald-500 opacity-60 group-hover:opacity-100" />
+                        </button>
                       ))}
                       {analysisResult.permitNosByStatus.executedSewage.length === 0 && (
                         <span className="text-xs text-slate-400">لا يوجد تصاريح</span>
@@ -1077,9 +1190,15 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
                       {analysisResult.permitNosByStatus.ongoing.map((prm, i) => (
-                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-amber-200 dark:border-amber-800 shadow-3xs">
-                          {prm}
-                        </span>
+                        <button 
+                          key={i} 
+                          onClick={() => handleOpenFeatureModalBySegmentOrPermit(prm, true)}
+                          className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white hover:bg-amber-100 dark:bg-slate-800 dark:hover:bg-amber-900/60 text-slate-800 dark:text-slate-200 rounded border border-amber-200 dark:border-amber-800 shadow-3xs cursor-pointer transition-colors flex items-center gap-1 group"
+                          title="انقر لعرض تفاصيل وموقع الفسح بالخريطة"
+                        >
+                          <span>{prm}</span>
+                          <MapPin className="w-2.5 h-2.5 text-amber-500 opacity-60 group-hover:opacity-100" />
+                        </button>
                       ))}
                       {analysisResult.permitNosByStatus.ongoing.length === 0 && (
                         <span className="text-xs text-slate-400">لا يوجد تصاريح</span>
@@ -1100,9 +1219,15 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
                       {analysisResult.permitNosByStatus.remaining.map((prm, i) => (
-                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-rose-200 dark:border-rose-800 shadow-3xs">
-                          {prm}
-                        </span>
+                        <button 
+                          key={i} 
+                          onClick={() => handleOpenFeatureModalBySegmentOrPermit(prm, true)}
+                          className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white hover:bg-rose-100 dark:bg-slate-800 dark:hover:bg-rose-900/60 text-slate-800 dark:text-slate-200 rounded border border-rose-200 dark:border-rose-800 shadow-3xs cursor-pointer transition-colors flex items-center gap-1 group"
+                          title="انقر لعرض تفاصيل وموقع الفسح بالخريطة"
+                        >
+                          <span>{prm}</span>
+                          <MapPin className="w-2.5 h-2.5 text-rose-500 opacity-60 group-hover:opacity-100" />
+                        </button>
                       ))}
                       {analysisResult.permitNosByStatus.remaining.length === 0 && (
                         <span className="text-xs text-slate-400">لا يوجد تصاريح</span>
@@ -1123,9 +1248,15 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     </div>
                     <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pl-1">
                       {analysisResult.permitNosByStatus.cancelled.map((prm, i) => (
-                        <span key={i} className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded border border-pink-200 dark:border-pink-800 shadow-3xs">
-                          {prm}
-                        </span>
+                        <button 
+                          key={i} 
+                          onClick={() => handleOpenFeatureModalBySegmentOrPermit(prm, true)}
+                          className="text-[11px] font-mono font-bold px-2 py-0.5 bg-white hover:bg-pink-100 dark:bg-slate-800 dark:hover:bg-pink-900/60 text-slate-800 dark:text-slate-200 rounded border border-pink-200 dark:border-pink-800 shadow-3xs cursor-pointer transition-colors flex items-center gap-1 group"
+                          title="انقر لعرض تفاصيل وموقع الفسح بالخريطة"
+                        >
+                          <span>{prm}</span>
+                          <MapPin className="w-2.5 h-2.5 text-pink-500 opacity-60 group-hover:opacity-100" />
+                        </button>
                       ))}
                       {analysisResult.permitNosByStatus.cancelled.length === 0 && (
                         <span className="text-xs text-slate-400">لا يوجد تصاريح</span>
@@ -1180,6 +1311,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                         <th className="p-3">الطول (متر)</th>
                         <th className="p-3">الطول (كيلومتر)</th>
                         <th className="p-3">اسم القطاع / Line</th>
+                        <th className="p-3">الموقع بالخريطة</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
@@ -1187,13 +1319,21 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                         <tr key={item.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
                           <td className="p-3 font-mono text-slate-400">{index + 1}</td>
                           <td className="p-3 font-mono font-bold text-slate-900 dark:text-slate-100">
-                            <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                            <span 
+                              onClick={() => setSelectedFeatureForModal(item)}
+                              className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 rounded border border-slate-200 dark:border-slate-700 cursor-pointer transition-colors"
+                              title="انقر لعرض تفاصيل وموقع القطاع"
+                            >
                               {item.segmentId}
                             </span>
                           </td>
                           <td className="p-3 font-mono font-bold text-slate-800 dark:text-slate-200">
-                            <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                              {item.permitNo}
+                            <span 
+                              onClick={() => setSelectedFeatureForModal(item)}
+                              className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 rounded border border-slate-200 dark:border-slate-700 cursor-pointer transition-colors"
+                              title="انقر لعرض تفاصيل وموقع الفسح"
+                            >
+                              {item.permitNo || 'بدون فسح'}
                             </span>
                           </td>
                           <td className="p-3">
@@ -1208,12 +1348,21 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                           <td className="p-3 text-slate-700 dark:text-slate-300 font-bold max-w-xs truncate" title={item.name}>
                             {item.name}
                           </td>
+                          <td className="p-3">
+                            <button
+                              onClick={() => setSelectedFeatureForModal(item)}
+                              className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs font-bold rounded-lg border border-blue-200 dark:border-blue-800 transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                              <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                              <span>📍 إظهار الموّقع</span>
+                            </button>
+                          </td>
                         </tr>
                       ))}
 
                       {filteredItems.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="p-8 text-center text-slate-400 dark:text-slate-500">
+                          <td colSpan={8} className="p-8 text-center text-slate-400 dark:text-slate-500">
                             لا يوجد نتائج مطابقة للبحث
                           </td>
                         </tr>
@@ -1225,6 +1374,209 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
             )}
           </div>
         </div>
+      )}
+
+      {/* Previous Project Reports Section */}
+      {activeProject && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded-xl">
+                <History className="h-5 w-5" />
+              </div>
+              <div>
+                <h4 className="text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <span>التقارير السابقة للمشروع</span>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-mono font-bold">
+                    {projectHistoryReports.length} تقرير
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  عرض واستعراض سجل التقارير اليومية والتاريخية المحفوظة بقاعدة البيانات لمشروع ({activeProject.name})
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsLoadingProjectHistory(true);
+                ReportHistoryStore.getHistoricalReports(activeProject.id, activeProject.name)
+                  .then(reports => {
+                    setProjectHistoryReports(reports || []);
+                    setIsLoadingProjectHistory(false);
+                  })
+                  .catch(() => setIsLoadingProjectHistory(false));
+              }}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              title="تحديث سجل التقارير"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoadingProjectHistory ? 'animate-spin' : ''}`} />
+              <span>تحديث السجل</span>
+            </button>
+          </div>
+
+          {isLoadingProjectHistory ? (
+            <div className="p-8 text-center space-y-2">
+              <RefreshCw className="h-6 w-6 text-blue-600 animate-spin mx-auto" />
+              <p className="text-xs text-slate-500">جاري تحميل سجل التقارير السابقة للمشروع...</p>
+            </div>
+          ) : projectHistoryReports.length > 0 ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                {projectHistoryReports.map((report, idx) => {
+                  const isCurrentDisplayed = analysisResult?.parsedAt === report.parsedAt || analysisResult?.parsedAt === report.createdAt;
+                  const res = report.analysisResult;
+                  
+                  return (
+                    <div
+                      key={report.id || idx}
+                      className={`p-4 rounded-xl border transition-all space-y-3 ${
+                        isCurrentDisplayed
+                          ? 'border-blue-500 bg-blue-50/40 dark:bg-blue-950/30 shadow-md ring-2 ring-blue-500/20'
+                          : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700'
+                      }`}
+                    >
+                      {/* Header info */}
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                          <span className="text-xs font-black text-slate-900 dark:text-white font-mono">
+                            {report.parsedAt || (report.createdAt ? new Date(report.createdAt).toLocaleString('ar-SA') : 'تقرير موثق')}
+                          </span>
+                        </div>
+
+                        {isCurrentDisplayed ? (
+                          <span className="px-2.5 py-0.5 bg-blue-600 text-white text-[10px] font-black rounded-full shadow-xs">
+                            التقرير المعروض حالياً 👁️
+                          </span>
+                        ) : (
+                          <span className="text-[11px] font-mono font-bold text-slate-400">
+                            التقرير #{projectHistoryReports.length - idx}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Metrics Breakdown */}
+                      {res && (
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200/80 dark:border-slate-800">
+                            <span className="text-[10px] text-slate-500 block">إجمالي الأطوال:</span>
+                            <span className="font-mono font-black text-slate-900 dark:text-white text-sm">
+                              {res.totalLengthKm} كم
+                            </span>
+                            <span className="text-[10px] text-slate-400 mr-1 font-mono">
+                              ({res.totalLengthMeters?.toLocaleString()} م)
+                            </span>
+                          </div>
+
+                          <div className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200/80 dark:border-slate-800">
+                            <span className="text-[10px] text-slate-500 block">عدد العناصر والقطاعات:</span>
+                            <span className="font-mono font-black text-blue-600 dark:text-blue-400 text-sm">
+                              {res.totalFeaturesCount || 0} قطاع
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Categories breakdown pills */}
+                      {res?.colorBreakdown && (
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {res.colorBreakdown.executed_water?.totalLengthMeters > 0 && (
+                            <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/60 text-blue-900 dark:text-blue-200 text-[10px] font-bold rounded-md border border-blue-200 dark:border-blue-800">
+                              منفذ مياه: {res.colorBreakdown.executed_water.totalLengthKm} كم
+                            </span>
+                          )}
+                          {res.colorBreakdown.executed_sewage?.totalLengthMeters > 0 && (
+                            <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200 text-[10px] font-bold rounded-md border border-emerald-200 dark:border-emerald-800">
+                              منفذ صرف: {res.colorBreakdown.executed_sewage.totalLengthKm} كم
+                            </span>
+                          )}
+                          {res.colorBreakdown.ongoing?.totalLengthMeters > 0 && (
+                            <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 text-[10px] font-bold rounded-md border border-amber-200 dark:border-amber-800">
+                              جاري العمل: {res.colorBreakdown.ongoing.totalLengthKm} كم ({res.colorBreakdown.ongoing.segmentCount} قطاع)
+                            </span>
+                          )}
+                          {res.colorBreakdown.remaining?.totalLengthMeters > 0 && (
+                            <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-900/60 text-rose-900 dark:text-rose-200 text-[10px] font-bold rounded-md border border-rose-200 dark:border-rose-800">
+                              متبقي: {res.colorBreakdown.remaining.totalLengthKm} كم
+                            </span>
+                          )}
+                          {res.colorBreakdown.cancelled?.totalLengthMeters > 0 && (
+                            <span className="px-2 py-0.5 bg-pink-100 dark:bg-pink-900/60 text-pink-900 dark:text-pink-200 text-[10px] font-bold rounded-md border border-pink-200 dark:border-pink-800">
+                              ملغى: {res.colorBreakdown.cancelled.totalLengthKm} كم
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Actions Bar */}
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 dark:border-slate-700/60 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (res) {
+                              setAnalysisResult(res);
+                              showToast(`📊 تم عرض واستعراض بيانات التقرير المؤرخ (${report.parsedAt || 'السابق'})`);
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                            isCurrentDisplayed
+                              ? 'bg-blue-600 text-white shadow-xs'
+                              : 'bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
+                          }`}
+                        >
+                          <BarChart3 className="w-3.5 h-3.5" />
+                          <span>{isCurrentDisplayed ? 'التقرير معروض حالياً' : 'عرض واستعراض هذا التقرير'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (res && activeProject) {
+                              const previousReport = projectHistoryReports[idx + 1];
+                              const diff = compareKMLAnalyses(
+                                previousReport ? previousReport.analysisResult : null,
+                                res,
+                                activeProject.id,
+                                activeProject.name,
+                                activeProject.scope
+                              );
+                              setCurrentDiffResult(diff);
+                              setIsDiffModalOpen(true);
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <ArrowRightLeft className="w-3.5 h-3.5 text-amber-500" />
+                          <span>مقارنة التغيرات</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="p-6 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+              <FileText className="w-8 h-8 text-slate-400 mx-auto" />
+              <h5 className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                لا يوجد تقارير سابقة مسجلة لهذا المشروع بعد في قاعدة البيانات
+              </h5>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                عند تشغيل التحليل المباشر أو الفحص التلقائي، يتم حصر وتوثيق جميع التحديثات والأطوال وحفظها تلقائياً كتقرير جديد بجدول التقارير التاريخية.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Feature Balloon & Map Location Modal */}
+      {selectedFeatureForModal && (
+        <FeatureDetailsModal
+          feature={selectedFeatureForModal}
+          onClose={() => setSelectedFeatureForModal(null)}
+        />
       )}
       {/* Project Change Tracking & Historical Comparison Modal */}
       {activeProject && (

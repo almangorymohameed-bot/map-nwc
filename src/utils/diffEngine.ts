@@ -150,16 +150,40 @@ export function compareKMLAnalyses(
         type: 'added',
         permitNo: p,
         category: matchingItem?.statusLabel || 'فسح جديد',
-        segmentId: matchingItem?.segmentId
+        segmentId: matchingItem?.segmentId,
+        streetName: matchingItem?.streetName,
+        district: matchingItem?.district,
+        innerDiameter: matchingItem?.innerDiameter,
+        zone: matchingItem?.zone,
+        drillingType: matchingItem?.drillingType,
+        contractor: matchingItem?.contractor,
+        kmlProjectName: matchingItem?.kmlProjectName,
+        kmlProjectId: matchingItem?.kmlProjectId,
+        centerLat: matchingItem?.centerLat,
+        centerLng: matchingItem?.centerLng,
+        googleMapsUrl: matchingItem?.googleMapsUrl
       });
     }
   });
 
   oldPermits.forEach((p) => {
     if (!newPermits.has(p)) {
+      const matchingItem = oldResult.items?.find(it => it.permitNo === p);
       removedPermits.push({
         type: 'removed',
-        permitNo: p
+        permitNo: p,
+        segmentId: matchingItem?.segmentId,
+        streetName: matchingItem?.streetName,
+        district: matchingItem?.district,
+        innerDiameter: matchingItem?.innerDiameter,
+        zone: matchingItem?.zone,
+        drillingType: matchingItem?.drillingType,
+        contractor: matchingItem?.contractor,
+        kmlProjectName: matchingItem?.kmlProjectName,
+        kmlProjectId: matchingItem?.kmlProjectId,
+        centerLat: matchingItem?.centerLat,
+        centerLng: matchingItem?.centerLng,
+        googleMapsUrl: matchingItem?.googleMapsUrl
       });
     }
   });
@@ -194,7 +218,18 @@ export function compareKMLAnalyses(
             newStage: currentStage,
             permitNo: newItem.permitNo,
             lengthMeters: newItem.lengthMeters,
-            colorHex: newItem.colorHex || '#ffea00'
+            colorHex: newItem.colorHex || '#ffea00',
+            streetName: newItem.streetName,
+            district: newItem.district,
+            innerDiameter: newItem.innerDiameter,
+            zone: newItem.zone,
+            drillingType: newItem.drillingType,
+            contractor: newItem.contractor,
+            kmlProjectName: newItem.kmlProjectName,
+            kmlProjectId: newItem.kmlProjectId,
+            centerLat: newItem.centerLat,
+            centerLng: newItem.centerLng,
+            googleMapsUrl: newItem.googleMapsUrl
           });
         }
       } else {
@@ -206,7 +241,18 @@ export function compareKMLAnalyses(
           newStage: currentStage,
           permitNo: newItem.permitNo,
           lengthMeters: newItem.lengthMeters,
-          colorHex: newItem.colorHex || '#ffea00'
+          colorHex: newItem.colorHex || '#ffea00',
+          streetName: newItem.streetName,
+          district: newItem.district,
+          innerDiameter: newItem.innerDiameter,
+          zone: newItem.zone,
+          drillingType: newItem.drillingType,
+          contractor: newItem.contractor,
+          kmlProjectName: newItem.kmlProjectName,
+          kmlProjectId: newItem.kmlProjectId,
+          centerLat: newItem.centerLat,
+          centerLng: newItem.centerLng,
+          googleMapsUrl: newItem.googleMapsUrl
         });
       }
     });

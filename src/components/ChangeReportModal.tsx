@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { ProjectDiffResult } from '../types';
 import { groupYellowLineChangesByPermit } from '../utils/diffEngine';
+import { FeatureDetailsModal, FeatureDetailData } from './FeatureDetailsModal';
 import { 
   X, 
   ArrowLeftRight, 
@@ -23,7 +24,8 @@ import {
   Check,
   TrendingUp,
   TrendingDown,
-  ArrowRight
+  ArrowRight,
+  MapPin
 } from 'lucide-react';
 
 interface ChangeReportModalProps {
@@ -41,6 +43,7 @@ export function ChangeReportModal({
 }: ChangeReportModalProps) {
   const [activeTab, setActiveTab] = useState<'all' | 'stages' | 'permits' | 'lengths'>('all');
   const [isCopied, setIsCopied] = useState<boolean>(false);
+  const [selectedFeatureForModal, setSelectedFeatureForModal] = useState<FeatureDetailData | null>(null);
 
   if (!isOpen || !diffResult) return null;
 
@@ -295,8 +298,35 @@ ${diffResult.summaryMessages.map(m => `• ${m}`).join('\n')}
                               </div>
                             </div>
 
-                            <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-mono text-left pt-0.5">
-                              طول العنصر: {change.lengthMeters.toLocaleString()} متر
+                            <div className="flex items-center justify-between pt-1">
+                              <div className="text-[10.5px] text-slate-500 dark:text-slate-400 font-mono text-left">
+                                طول العنصر: {change.lengthMeters.toLocaleString()} متر
+                              </div>
+                              <button
+                                onClick={() => setSelectedFeatureForModal({
+                                  name: change.featureName,
+                                  segmentId: change.segmentId,
+                                  permitNo: change.permitNo,
+                                  stage: change.newStage,
+                                  lengthMeters: change.lengthMeters,
+                                  colorHex: change.colorHex,
+                                  streetName: change.streetName,
+                                  district: change.district,
+                                  innerDiameter: change.innerDiameter,
+                                  zone: change.zone,
+                                  drillingType: change.drillingType,
+                                  contractor: change.contractor,
+                                  kmlProjectName: change.kmlProjectName,
+                                  kmlProjectId: change.kmlProjectId,
+                                  centerLat: change.centerLat,
+                                  centerLng: change.centerLng,
+                                  googleMapsUrl: change.googleMapsUrl
+                                })}
+                                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 text-[10.5px] font-bold rounded-lg border border-blue-200 dark:border-blue-800 transition-all flex items-center gap-1 cursor-pointer"
+                              >
+                                <MapPin className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                                <span>📍 الموقع بالخريطة</span>
+                              </button>
                             </div>
                           </div>
                         ))}
@@ -460,6 +490,14 @@ ${diffResult.summaryMessages.map(m => `• ${m}`).join('\n')}
         </div>
 
       </div>
+
+      {/* Feature Balloon Details & Leaflet Map Modal */}
+      {selectedFeatureForModal && (
+        <FeatureDetailsModal
+          feature={selectedFeatureForModal}
+          onClose={() => setSelectedFeatureForModal(null)}
+        />
+      )}
     </div>
   );
 }
