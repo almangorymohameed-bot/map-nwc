@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Project, KMLAnalysisResult, StatusCategory, ProjectDiffResult, HistoricalReport } from '../types';
 import { MapLegend } from './MapLegend';
 import { exportAnalysisToPDF } from '../utils/pdfExport';
@@ -65,6 +65,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   const [mapInputUrl, setMapInputUrl] = useState<string>(selectedProject?.mapUrl || '');
   const [activeProject, setActiveProject] = useState<Project | null>(selectedProject || null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [projectSearchTerm, setProjectSearchTerm] = useState<string>('');
   const [analysisResult, setAnalysisResult] = useState<KMLAnalysisResult | null>(null);
   const [activeAnalysisTab, setActiveAnalysisTab] = useState<'overview' | 'segments' | 'permits' | 'lines'>('overview');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -74,6 +75,9 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   const [showUrlInput, setShowUrlInput] = useState<boolean>(false);
   const [isExportingPDF, setIsExportingPDF] = useState<boolean>(false);
   const [selectedFeatureForModal, setSelectedFeatureForModal] = useState<FeatureDetailData | null>(null);
+
+  // Ref to scroll to the top of displayed report section
+  const reportDisplaySectionRef = useRef<HTMLDivElement>(null);
 
   // States for Project Change Tracking & Historical Comparison
   const [currentDiffResult, setCurrentDiffResult] = useState<ProjectDiffResult | null>(null);
@@ -102,6 +106,21 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
       setIsLoadingProjectHistory(false);
     }
   }, [activeProject?.id, activeProject?.name]);
+
+  // Filtered projects list based on search term
+  const filteredProjects = projects.filter(proj => {
+    if (!projectSearchTerm.trim()) return true;
+    const term = projectSearchTerm.trim().toLowerCase();
+    const nameMatch = proj.name?.toLowerCase().includes(term);
+    const numMatch = (proj.operationalNumber || String(proj.id))?.toLowerCase().includes(term);
+    const poMatch = proj.po?.toLowerCase().includes(term);
+    const unifierMatch = proj.unifierNo?.toLowerCase().includes(term);
+    const contractorMatch = proj.contractor?.toLowerCase().includes(term);
+    const regionMatch = proj.region?.toLowerCase().includes(term);
+    const scopeMatch = proj.scope?.toLowerCase().includes(term);
+    const unitMatch = proj.businessUnit?.toLowerCase().includes(term);
+    return nameMatch || numMatch || poMatch || unifierMatch || contractorMatch || regionMatch || scopeMatch || unitMatch;
+  });
 
   // Daily Sequential Auto-Analysis Progress State
   const [autoProgress, setAutoProgress] = useState<AutoAnalysisProgress>({
@@ -175,6 +194,26 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
         : 'تمت إضافة أطوال وشبكات جديدة بالخريطة';
 
       const notifMsg = `📢 يوجد تحديث جديد بملف خريطة مشروع (${proj.name}): ${summaryText} (إجمالي الأطوال الحالية: ${newResult.totalLengthKm} كم)`;
+
+      const createdNotif = {
+        id: Date.now() + Math.random(),
+        projectId: proj.id,
+        projectName: proj.name,
+        type: 'change_detected',
+        message: notifMsg,
+        region: proj.region || '',
+        scope: proj.scope || '',
+        created_at: new Date().toISOString()
+      };
+
+      try {
+        const savedLocal = localStorage.getItem('water_maps_local_notifications');
+        let localList: any[] = savedLocal ? JSON.parse(savedLocal) : [];
+        localList.unshift(createdNotif);
+        if (localList.length > 100) localList = localList.slice(0, 100);
+        localStorage.setItem('water_maps_local_notifications', JSON.stringify(localList));
+        window.dispatchEvent(new Event('water_maps_notifications_updated'));
+      } catch (e) {}
 
       const supabase = getSupabaseClient();
       if (supabase) {
@@ -464,20 +503,79 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
           </div>
         )}
 
-        {/* Dropdown Project Selector */}
+        {/* Dropdown Project Selector with Instant Search */}
         <div className="space-y-3 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <label className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-              <span>اختر المشروع من القائمة المنسدلة:</span>
+              <span>اختر المشروع أو ابحث عنه باسم المشروع أو رقم العقد:</span>
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
             </label>
             {activeProject?.mapUrl && (
-              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 self-start sm:self-auto">
                 <Globe className="h-3 w-3" />
                 <span>رابط خريطة قوقل مسجل لهذا المشروع (مخفي)</span>
               </span>
             )}
           </div>
+
+          {/* Search Input Box */}
+          <div className="relative">
+            <input
+              type="text"
+              value={projectSearchTerm}
+              onChange={(e) => setProjectSearchTerm(e.target.value)}
+              placeholder="🔍 ابحث عن مشروع محدد بالاسم، رقم العقد، القطاع، أو المنطقة..."
+              className="w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs font-bold pr-10 pl-8 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs"
+            />
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            {projectSearchTerm && (
+              <button
+                type="button"
+                onClick={() => setProjectSearchTerm('')}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-black p-1 cursor-pointer"
+                title="مسح البحث"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Filter Status Badge & Quick Suggestions */}
+          {projectSearchTerm.trim() && (
+            <div className="space-y-2">
+              <div className="text-[11px] font-bold text-blue-600 dark:text-blue-400 flex items-center justify-between px-1">
+                <span>نتائج البحث عن "{projectSearchTerm}":</span>
+                <span className="bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 px-2.5 py-0.5 rounded-full font-mono text-[10px] font-black">
+                  {filteredProjects.length} مشروع مطابق
+                </span>
+              </div>
+
+              {/* Quick Click Badges if 5 or fewer matches */}
+              {filteredProjects.length > 0 && filteredProjects.length <= 5 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {filteredProjects.map(p => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveProject(p);
+                        setMapInputUrl(p.mapUrl || '');
+                        setAnalysisResult(null);
+                      }}
+                      className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                        activeProject?.id === p.id
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                          : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-blue-400'
+                      }`}
+                    >
+                      <span className="font-mono text-[10px]">[{p.operationalNumber || p.id}]</span>
+                      <span className="truncate max-w-[200px]">{p.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <div className="relative flex-1">
@@ -495,7 +593,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 className="w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs font-black px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs appearance-none cursor-pointer"
               >
                 <option value="" disabled>-- اختر مشروعاً من القائمة --</option>
-                {projects.map(proj => (
+                {filteredProjects.map(proj => (
                   <option key={proj.id} value={proj.id}>
                     [{proj.operationalNumber || proj.id}] {proj.name} ({proj.region || proj.businessUnit})
                   </option>
@@ -681,7 +779,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
 
       {/* Main Analysis Display Panel */}
       {analysisResult && (
-        <div className="space-y-6">
+        <div ref={reportDisplaySectionRef} id="top-analysis-report-section" className="space-y-6 scroll-mt-6">
           {/* Dynamic Map Legend Component */}
           <MapLegend
             analysisResult={analysisResult}
@@ -1518,6 +1616,13 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                             if (res) {
                               setAnalysisResult(res);
                               showToast(`📊 تم عرض واستعراض بيانات التقرير المؤرخ (${report.parsedAt || 'السابق'})`);
+                              setTimeout(() => {
+                                if (reportDisplaySectionRef.current) {
+                                  reportDisplaySectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                } else {
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }
+                              }, 50);
                             }
                           }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${

@@ -10,6 +10,7 @@ import { INITIAL_USERS } from './data/initialUsers';
 
 // استيراد عميل سوبابيس
 import { supabase } from './supabase';
+import { getSupabaseClient } from './utils/supabaseSetup';
 
 // Components
 import { DashboardStats } from './components/DashboardStats';
@@ -199,6 +200,9 @@ export const isNotificationAllowed = (
   userNotifSettings?: NotificationSettings, 
   favoriteProjectIds?: number[]
 ): boolean => {
+  // Admin receives all project notifications
+  if (user.role === 'admin') return true;
+
   const settings = userNotifSettings || getUserNotifSettings(user.id);
 
   // 1. تصفية أنواع الأحداث المسموحة (نوع الإشعار)
@@ -208,20 +212,23 @@ export const isNotificationAllowed = (
 
   // 2. تصفية المشاريع المفضلة فقط
   if (settings.onlyFavoriteProjects && favoriteProjectIds) {
-    if (!favoriteProjectIds.includes(Number(notif.projectId))) return false;
+    const numProjId = Number(notif.projectId);
+    const strProjId = String(notif.projectId);
+    const isFav = favoriteProjectIds.some(id => Number(id) === numProjId || String(id) === strProjId);
+    if (!isFav) return false;
   }
 
   // 3. تصفية المشاريع المسموحة المحددة للمستخدم
   if (user.allowedProjectIds && user.allowedProjectIds.length > 0) {
-    if (!user.allowedProjectIds.includes(Number(notif.projectId))) return false;
+    const strProjId = String(notif.projectId);
+    const numProjId = Number(notif.projectId);
+    const isAllowed = user.allowedProjectIds.some(id => String(id) === strProjId || Number(id) === numProjId);
+    if (!isAllowed) return false;
   }
-
-  // إذا كان مدير النظام وقام بإيقاف تصفية المنطقة والقطاع
-  if (user.role === 'admin' && !settings.filterByRegion && !settings.filterByScope) return true;
 
   // 4. تصفية حسب المنطقة الجغرافية
   let isRegionAllowed = true;
-  if (settings.filterByRegion && user.role !== 'admin') {
+  if (settings.filterByRegion) {
     const uRegions = (user.allowedRegions || []).map(r => r.trim());
     const isAllRegions = uRegions.includes('الكل');
     
@@ -250,12 +257,12 @@ export const isNotificationAllowed = (
 
   // 5. تصفية حسب قطاع المشروع (مياه / صرف)
   let isScopeAllowed = true;
-  if (settings.filterByScope && user.role !== 'admin') {
-    const isAllScopes = user.allowedScopes.includes('الكل');
+  if (settings.filterByScope) {
+    const isAllScopes = (user.allowedScopes || []).includes('الكل');
     isScopeAllowed = isAllScopes;
     if (!isScopeAllowed && notif.scope) {
       const ns = notif.scope.trim();
-      isScopeAllowed = user.allowedScopes.some(scopeType => {
+      isScopeAllowed = (user.allowedScopes || []).some(scopeType => {
         const uScope = scopeType.trim();
         if (!uScope) return false;
         return ns === uScope || (ns.includes('صرف') && uScope.includes('صرف')) || (ns.includes('مياه') && uScope.includes('مياه'));
@@ -599,82 +606,144 @@ export default function App() {
     })()
   );
 
-  // 🔄 المزامنة الحية لِـسحب الإشعارات من سوبابيس وتمرير الأحداث الدقيقة لِـستارة الجوال بدون تكرار
+  // 🔄 المزامنة الحية لِـسحب الإشعارات من سوبابيس والتخزين المحلي وتمرير الأحداث الدقيقة
   useEffect(() => {
     const fetchUserNotifications = async () => {
       if (!currentUser || !currentUser.id || !isLogged) return;
-      const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
-      if (!supabaseUrl) return; // تجنب الاستدعاء إذا لم يتم ربط سوبابيس لتقليل استهلاك الشبكة
       
       try {
-        // سحب آخر 100 إشعار مشاريع من السيرفر بشكل عام لجميع المستخدمين
-        const { data, error } = await supabase
-          .from('notifications')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(100);
-
-        if (!error && data) {
-          // استدعاء معرفات الإشعارات المقروءة والممسوحة المخزنة محلياً لهذا المستخدم بالذات لعدم التداخل
-          const readIdsKey = `water_maps_read_notifs_${currentUser.id}`;
-          const clearedIdsKey = `water_maps_cleared_notifs_${currentUser.id}`;
-          
-          let readIds: string[] = [];
-          let clearedIds: string[] = [];
-          
+        let fetchedData: any[] = [];
+        const client = getSupabaseClient() || supabase;
+        if (client) {
           try {
-            const savedRead = localStorage.getItem(readIdsKey);
-            readIds = savedRead ? JSON.parse(savedRead) : [];
-          } catch (e) {}
-          
-          try {
-            const savedCleared = localStorage.getItem(clearedIdsKey);
-            clearedIds = savedCleared ? JSON.parse(savedCleared) : [];
-          } catch (e) {}
+            const { data, error } = await client
+              .from('notifications')
+              .select('*')
+              .order('created_at', { ascending: false })
+              .limit(100);
 
-          const userNotifSettings = getUserNotifSettings(currentUser.id);
-          const favProjectIds = projects.filter(p => p.isFavorite || favoriteIds.includes(p.id)).map(p => p.id);
-
-          const mappedNotifs = data
-            .map((n: any) => ({
-              id: String(n.id),
-              projectId: n.project_id,
-              projectName: n.project_name,
-              type: n.type,
-              message: n.message,
-              timestamp: new Date(n.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date(n.created_at).toLocaleDateString('ar-SA'),
-              read: readIds.includes(String(n.id)),
-              region: n.region || '',
-              scope: n.scope || ''
-            }))
-            .filter((notif: any) => isNotificationAllowed(notif, currentUser, userNotifSettings, favProjectIds) && !clearedIds.includes(String(notif.id)));
-
-          // إطلاق التنبيه الخارجي مرة واحدة فقط لكل إشعار غير مقروء لمنع الانبثاق المتكرر
-          const unnotifiedItems = mappedNotifs.filter((mn: any) => !mn.read && !notifiedNativeIdsRef.current.has(mn.id));
-          if (unnotifiedItems.length > 0) {
-            unnotifiedItems.forEach((newNotif: any) => {
-              notifiedNativeIdsRef.current.add(newNotif.id);
-              sendNativeNotification('تنبيه مشاريع NWC 🔔', newNotif.message);
-            });
-            try {
-              localStorage.setItem(
-                'water_maps_already_notified_ids',
-                JSON.stringify(Array.from(notifiedNativeIdsRef.current))
-              );
-            } catch (e) {}
+            if (!error && data) {
+              fetchedData = data;
+            }
+          } catch (e) {
+            console.warn('Supabase notifications fetch error:', e);
           }
-
-          setNotifications(mappedNotifs);
         }
+
+        // Merge with local notifications cache if present
+        let localNotifs: any[] = [];
+        try {
+          const savedLocal = localStorage.getItem('water_maps_local_notifications');
+          if (savedLocal) {
+            localNotifs = JSON.parse(savedLocal);
+          }
+        } catch (e) {}
+
+        const allRawMap = new Map<string, any>();
+        
+        // Add fetched
+        for (const item of fetchedData) {
+          const key = String(item.id);
+          allRawMap.set(key, {
+            id: key,
+            projectId: item.project_id || item.projectId,
+            projectName: item.project_name || item.projectName,
+            type: item.type || 'change_detected',
+            message: item.message,
+            timestamp: item.created_at ? (new Date(item.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date(item.created_at).toLocaleDateString('ar-SA')) : (item.timestamp || ''),
+            region: item.region || '',
+            scope: item.scope || '',
+            created_at: item.created_at || new Date().toISOString()
+          });
+        }
+
+        // Add local
+        for (const item of localNotifs) {
+          const key = String(item.id);
+          if (!allRawMap.has(key)) {
+            allRawMap.set(key, {
+              id: key,
+              projectId: item.project_id || item.projectId,
+              projectName: item.project_name || item.projectName,
+              type: item.type || 'change_detected',
+              message: item.message,
+              timestamp: item.created_at ? (new Date(item.created_at).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date(item.created_at).toLocaleDateString('ar-SA')) : (item.timestamp || ''),
+              region: item.region || '',
+              scope: item.scope || '',
+              created_at: item.created_at || new Date().toISOString()
+            });
+          }
+        }
+
+        const combinedRows = Array.from(allRawMap.values());
+        combinedRows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        // Read & Cleared IDs for current user
+        const readIdsKey = `water_maps_read_notifs_${currentUser.id}`;
+        const clearedIdsKey = `water_maps_cleared_notifs_${currentUser.id}`;
+        
+        let readIds: string[] = [];
+        let clearedIds: string[] = [];
+        
+        try {
+          const savedRead = localStorage.getItem(readIdsKey);
+          readIds = savedRead ? JSON.parse(savedRead) : [];
+        } catch (e) {}
+        
+        try {
+          const savedCleared = localStorage.getItem(clearedIdsKey);
+          clearedIds = savedCleared ? JSON.parse(savedCleared) : [];
+        } catch (e) {}
+
+        const userNotifSettings = getUserNotifSettings(currentUser.id);
+        const favProjectIds = projects.filter(p => p.isFavorite || favoriteIds.includes(p.id)).map(p => p.id);
+
+        const mappedNotifs = combinedRows
+          .map((n: any) => ({
+            id: String(n.id),
+            projectId: n.projectId,
+            projectName: n.projectName,
+            type: n.type,
+            message: n.message,
+            timestamp: n.timestamp,
+            read: readIds.includes(String(n.id)),
+            region: n.region || '',
+            scope: n.scope || ''
+          }))
+          .filter((notif: any) => isNotificationAllowed(notif, currentUser, userNotifSettings, favProjectIds) && !clearedIds.includes(String(notif.id)));
+
+        // إطلاق التنبيه الخارجي مرة واحدة فقط لكل إشعار غير مقروء لمنع الانبثاق المتكرر
+        const unnotifiedItems = mappedNotifs.filter((mn: any) => !mn.read && !notifiedNativeIdsRef.current.has(mn.id));
+        if (unnotifiedItems.length > 0) {
+          unnotifiedItems.forEach((newNotif: any) => {
+            notifiedNativeIdsRef.current.add(newNotif.id);
+            sendNativeNotification('تنبيه مشاريع NWC 🔔', newNotif.message);
+          });
+          try {
+            localStorage.setItem(
+              'water_maps_already_notified_ids',
+              JSON.stringify(Array.from(notifiedNativeIdsRef.current))
+            );
+          } catch (e) {}
+        }
+
+        setNotifications(mappedNotifs);
       } catch (err) {
-        console.error(err);
+        console.error('fetchUserNotifications exception:', err);
       }
     };
 
     fetchUserNotifications();
-    const interval = setInterval(fetchUserNotifications, 30000);
-    return () => clearInterval(interval);
-  }, [currentUser.id, isLogged]);
+    const interval = setInterval(fetchUserNotifications, 15000);
+
+    const handleCustomEvent = () => fetchUserNotifications();
+    window.addEventListener('water_maps_notifications_updated', handleCustomEvent);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('water_maps_notifications_updated', handleCustomEvent);
+    };
+  }, [currentUser, isLogged, projects, favoriteIds]);
 
   useEffect(() => {
     localStorage.setItem('water_maps_active_user_id', currentUser.id);

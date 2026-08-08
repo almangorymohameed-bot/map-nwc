@@ -306,173 +306,131 @@ function mapRowToChangelogRecord(row: any): ProjectChangelogRecord {
   };
 }
 
+function isReportMatchingProject(rowProjId: number, rowProjName: string, targetId: number, targetName: string): boolean {
+  if (!targetName && (isNaN(targetId) || targetId <= 0)) return false;
+
+  const numTargetId = Number(targetId);
+  const numRowId = Number(rowProjId);
+  const cleanTargetName = (targetName || '').trim();
+  const cleanRowName = (rowProjName || '').trim();
+
+  // Extract operational numbers inside brackets if present, e.g. "24/19/2/13/0043/1" from "[24/19/2/13/0043/1] ..."
+  const getOpNum = (str: string) => {
+    const match = str.match(/\[(.*?)\]/);
+    return match ? match[1].trim() : '';
+  };
+
+  const targetOpNum = getOpNum(cleanTargetName);
+  const rowOpNum = getOpNum(cleanRowName);
+
+  // If both have operational numbers, match them strictly
+  if (targetOpNum && rowOpNum) {
+    return targetOpNum === rowOpNum;
+  }
+
+  // Exact string match on project name
+  if (cleanTargetName && cleanRowName && cleanTargetName === cleanRowName) {
+    return true;
+  }
+
+  // Exact operational number present in the other string
+  if (targetOpNum && cleanRowName && cleanRowName.includes(targetOpNum)) {
+    return true;
+  }
+  if (rowOpNum && cleanTargetName && cleanTargetName.includes(rowOpNum)) {
+    return true;
+  }
+
+  // Exact project ID match (provided names don't conflict)
+  if (!isNaN(numTargetId) && numTargetId > 0 && numRowId === numTargetId) {
+    if (targetOpNum && rowOpNum && targetOpNum !== rowOpNum) {
+      return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
 export const ReportHistoryStore = {
   async getHistoricalReports(projectId: number, projectName?: string): Promise<HistoricalReport[]> {
     const supabase = getSupabaseClient();
+    const cleanName = (projectName || '').trim();
+    const numId = Number(projectId);
+
+    // Extract operational number if present
+    const opNumMatch = cleanName.match(/\[(.*?)\]/);
+    const opNum = opNumMatch ? opNumMatch[1].trim() : '';
+
     if (supabase) {
       try {
-        const numId = Number(projectId);
-        let data: any[] | null = null;
+        let allRows: any[] = [];
 
-        // Tier 1: Query by numeric project_id
-        if (!isNaN(numId)) {
+        // 1. Fetch by project_id
+        if (!isNaN(numId) && numId > 0) {
           const res1 = await (supabase.from('project_reports') as any)
             .select('*')
             .eq('project_id', numId)
             .order('created_at', { ascending: false });
-          if (!res1.error && res1.data && res1.data.length > 0) {
-            data = res1.data;
+          if (!res1.error && res1.data) {
+            allRows.push(...res1.data);
           }
         }
 
-        // Tier 2: Query by string project_id
-        if ((!data || data.length === 0) && projectId) {
+        // 2. Fetch by operational number if available
+        if (opNum) {
           const res2 = await (supabase.from('project_reports') as any)
             .select('*')
-            .eq('project_id', String(projectId))
+            .ilike('project_name', `%${opNum}%`)
             .order('created_at', { ascending: false });
-          if (!res2.error && res2.data && res2.data.length > 0) {
-            data = res2.data;
+          if (!res2.error && res2.data) {
+            allRows.push(...res2.data);
           }
         }
 
-        // Tier 3: Query by exact project_name
-        if ((!data || data.length === 0) && projectName) {
-          const cleanName = projectName.trim();
+        // 3. Fetch by exact project_name
+        if (cleanName) {
           const res3 = await (supabase.from('project_reports') as any)
             .select('*')
             .eq('project_name', cleanName)
             .order('created_at', { ascending: false });
-          if (!res3.error && res3.data && res3.data.length > 0) {
-            data = res3.data;
+          if (!res3.error && res3.data) {
+            allRows.push(...res3.data);
           }
         }
 
-        // Tier 4: Query by ilike project_name
-        if ((!data || data.length === 0) && projectName) {
-          const cleanName = projectName.trim();
-          const res4 = await (supabase.from('project_reports') as any)
-            .select('*')
-            .ilike('project_name', `%${cleanName}%`)
-            .order('created_at', { ascending: false });
-          if (!res4.error && res4.data && res4.data.length > 0) {
-            data = res4.data;
+        // Deduplicate rows by id
+        const uniqueMap = new Map<string, any>();
+        for (const row of allRows) {
+          if (row && row.id && !uniqueMap.has(String(row.id))) {
+            uniqueMap.set(String(row.id), row);
           }
         }
 
-        // Tier 5: Query by key word in project_name
-        if ((!data || data.length === 0) && projectName) {
-          const words = projectName.trim().split(/\s+/).filter(w => w.length > 3);
-          const lastWord = words[words.length - 1];
-          if (lastWord) {
-            const res5 = await (supabase.from('project_reports') as any)
-              .select('*')
-              .ilike('project_name', `%${lastWord}%`)
-              .order('created_at', { ascending: false });
-            if (!res5.error && res5.data && res5.data.length > 0) {
-              data = res5.data;
-            }
-          }
-        }
+        const candidateRows = Array.from(uniqueMap.values());
 
-        if (data && data.length > 0) {
-          return data.map(mapRowToHistoricalReport);
-        }
+        // Strictly filter candidateRows so only reports for THIS specific project remain
+        const matchingRows = candidateRows.filter(row => 
+          isReportMatchingProject(row.project_id, row.project_name, numId, cleanName)
+        );
+
+        // Sort descending by created_at
+        matchingRows.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+        return matchingRows.map(mapRowToHistoricalReport);
       } catch (err) {
         console.error('Supabase getHistoricalReports exception:', err);
       }
     }
 
     return memoryReports
-      .filter((r) => r.projectId === projectId || (projectName && r.projectName.includes(projectName.trim())))
+      .filter((r) => isReportMatchingProject(r.projectId, r.projectName, numId, cleanName))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
   async getLatestReport(projectId: number, projectName?: string): Promise<HistoricalReport | null> {
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const numId = Number(projectId);
-        let data: any[] | null = null;
-
-        // Tier 1: Query by numeric project_id
-        if (!isNaN(numId)) {
-          const res1 = await (supabase.from('project_reports') as any)
-            .select('*')
-            .eq('project_id', numId)
-            .order('created_at', { ascending: false })
-            .limit(1);
-          if (!res1.error && res1.data && res1.data.length > 0) {
-            data = res1.data;
-          }
-        }
-
-        // Tier 2: Query by string project_id
-        if ((!data || data.length === 0) && projectId) {
-          const res2 = await (supabase.from('project_reports') as any)
-            .select('*')
-            .eq('project_id', String(projectId))
-            .order('created_at', { ascending: false })
-            .limit(1);
-          if (!res2.error && res2.data && res2.data.length > 0) {
-            data = res2.data;
-          }
-        }
-
-        // Tier 3: Query by exact project_name
-        if ((!data || data.length === 0) && projectName) {
-          const cleanName = projectName.trim();
-          const res3 = await (supabase.from('project_reports') as any)
-            .select('*')
-            .eq('project_name', cleanName)
-            .order('created_at', { ascending: false })
-            .limit(1);
-          if (!res3.error && res3.data && res3.data.length > 0) {
-            data = res3.data;
-          }
-        }
-
-        // Tier 4: Query by ilike project_name
-        if ((!data || data.length === 0) && projectName) {
-          const cleanName = projectName.trim();
-          const res4 = await (supabase.from('project_reports') as any)
-            .select('*')
-            .ilike('project_name', `%${cleanName}%`)
-            .order('created_at', { ascending: false })
-            .limit(1);
-          if (!res4.error && res4.data && res4.data.length > 0) {
-            data = res4.data;
-          }
-        }
-
-        // Tier 5: Query by key word in project_name
-        if ((!data || data.length === 0) && projectName) {
-          const words = projectName.trim().split(/\s+/).filter(w => w.length > 3);
-          const lastWord = words[words.length - 1];
-          if (lastWord) {
-            const res5 = await (supabase.from('project_reports') as any)
-              .select('*')
-              .ilike('project_name', `%${lastWord}%`)
-              .order('created_at', { ascending: false })
-              .limit(1);
-            if (!res5.error && res5.data && res5.data.length > 0) {
-              data = res5.data;
-            }
-          }
-        }
-
-        if (data && data.length > 0) {
-          return mapRowToHistoricalReport(data[0]);
-        }
-      } catch (err) {
-        console.error('Supabase getLatestReport exception:', err);
-      }
-    }
-
-    const list = memoryReports
-      .filter((r) => r.projectId === projectId || (projectName && r.projectName.includes(projectName.trim())))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return list.length > 0 ? list[0] : null;
+    const reports = await this.getHistoricalReports(projectId, projectName);
+    return reports.length > 0 ? reports[0] : null;
   },
 
   async saveReport(

@@ -215,6 +215,17 @@ export async function runSequentialDailyAutoAnalysis(
             }
           }
 
+          // Save notification locally and trigger window update event
+          try {
+            const savedLocal = localStorage.getItem('water_maps_local_notifications');
+            let localList: any[] = savedLocal ? JSON.parse(savedLocal) : [];
+            localList.unshift(createdObj);
+            // keep up to 100
+            if (localList.length > 100) localList = localList.slice(0, 100);
+            localStorage.setItem('water_maps_local_notifications', JSON.stringify(localList));
+            window.dispatchEvent(new Event('water_maps_notifications_updated'));
+          } catch (e) {}
+
           if (options.onNotificationCreated) {
             options.onNotificationCreated(createdObj);
           }
