@@ -218,7 +218,25 @@ export const isNotificationAllowed = (
   userNotifSettings?: NotificationSettings, 
   favoriteProjectIds?: number[]
 ): boolean => {
-  // Admin receives all project notifications
+  // جميع إشعارات التحديثات والتغيرات على المشاريع تظهر لجميع المستخدمين والمدراء بلا استثناء
+  const notifTypeStr = String(notif.type || '');
+  const isChangeNotif = 
+    notifTypeStr === 'change_detected' || 
+    notifTypeStr === 'map_change' || 
+    notifTypeStr === 'update' ||
+    (notif.message && (
+      notif.message.includes('تحديث جديد') || 
+      notif.message.includes('تغير') ||
+      notif.message.includes('رصد')
+    ));
+
+  if (isChangeNotif) {
+    const settings = userNotifSettings || getUserNotifSettings(user.id);
+    if (settings && settings.allowMapChanges === false) return false;
+    return true;
+  }
+
+  // Admin receives all other notifications
   if (user.role === 'admin') return true;
 
   const settings = userNotifSettings || getUserNotifSettings(user.id);
@@ -226,12 +244,6 @@ export const isNotificationAllowed = (
   // 1. تصفية أنواع الأحداث المسموحة (نوع الإشعار)
   if (notif.type === 'add' && !settings.allowNewProjects) return false;
   if (notif.type === 'edit' && !settings.allowProjectEdits) return false;
-
-  // إشعارات التحديثات والتغيرات على المشاريع تظهر لجميع المستخدمين بلا استثناء إلا في حال إيقاف تفعيلها من إعدادات المستخدم الشخصية
-  if (notif.type === 'change_detected' || (notif.message && notif.message.includes('تحديث جديد'))) {
-    if (settings.allowMapChanges === false) return false;
-    return true;
-  }
 
   // 2. تصفية المشاريع المفضلة فقط
   if (settings.onlyFavoriteProjects && favoriteProjectIds) {
