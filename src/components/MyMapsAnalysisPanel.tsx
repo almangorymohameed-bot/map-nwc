@@ -189,11 +189,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
       showToast(`📊 تم رصد وتوثيق تغيرات جديدة مقارنة بالتقرير السابق لمشروع (${proj.name})`);
 
       // 📢 إرسال إشعار فوري لقاعدة البيانات لتنبيه جميع المستخدمين بوجود تحديث جديد بالخريطة
-      const summaryText = diff.summaryMessages && diff.summaryMessages.length > 0
-        ? diff.summaryMessages.join(' - ')
-        : 'تمت إضافة أطوال وشبكات جديدة بالخريطة';
-
-      const notifMsg = `📢 يوجد تحديث جديد بملف خريطة مشروع (${proj.name}): ${summaryText} (إجمالي الأطوال الحالية: ${newResult.totalLengthKm} كم)`;
+      const notifMsg = `📢 يوجد تحديث جديد للمشروع (${proj.name})`;
 
       const createdNotif = {
         id: Date.now() + Math.random(),

@@ -207,8 +207,13 @@ export const isNotificationAllowed = (
 
   // 1. تصفية أنواع الأحداث المسموحة (نوع الإشعار)
   if (notif.type === 'add' && !settings.allowNewProjects) return false;
-  if ((notif.type === 'change_detected' || (notif.message && notif.message.includes('تحديث جديد'))) && !settings.allowMapChanges) return false;
   if (notif.type === 'edit' && !settings.allowProjectEdits) return false;
+
+  // إشعارات التحديثات والتغيرات على المشاريع تظهر لجميع المستخدمين بلا استثناء إلا في حال إيقاف تفعيلها من إعدادات المستخدم الشخصية
+  if (notif.type === 'change_detected' || (notif.message && notif.message.includes('تحديث جديد'))) {
+    if (settings.allowMapChanges === false) return false;
+    return true;
+  }
 
   // 2. تصفية المشاريع المفضلة فقط
   if (settings.onlyFavoriteProjects && favoriteProjectIds) {

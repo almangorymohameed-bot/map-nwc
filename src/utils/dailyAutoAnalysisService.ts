@@ -160,11 +160,7 @@ export async function runSequentialDailyAutoAnalysis(
           changesCount++;
           currentProgress.changesFoundCount++;
 
-          const summaryText = diff.summaryMessages && diff.summaryMessages.length > 0
-            ? diff.summaryMessages.join(' - ')
-            : 'تمت إضافة أطوال وشبكات جديدة بالخريطة';
-
-          const notifMsg = `📢 يوجد تحديث جديد بملف خريطة مشروع (${proj.name}): ${summaryText} (إجمالي الأطوال الحالية: ${newAnalysis.totalLengthKm} كم)`;
+          const notifMsg = `📢 يوجد تحديث جديد للمشروع (${proj.name})`;
 
           const notifPayload = {
             project_id: proj.id,
