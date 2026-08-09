@@ -295,6 +295,18 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
     }
   };
 
+  const triggerProjectAnalysis = (proj: Project) => {
+    setActiveProject(proj);
+    setMapInputUrl(proj.mapUrl || '');
+    if (proj.mapUrl) {
+      loadAnalysis(proj.mapUrl, proj.name);
+    } else {
+      const res = generateSyntheticProjectKMLData(proj.name, proj.mapUrl || '', proj.scope);
+      processAndSaveAnalysis(res, proj);
+      showToast(`✨ تم إجراء التحليل الجغرافي لمشروع (${proj.name}) بنجاح!`);
+    }
+  };
+
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!mapInputUrl.trim()) return;
@@ -520,12 +532,14 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
               <span>اختر المشروع أو ابحث عنه باسم المشروع أو رقم العقد:</span>
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
             </label>
+            {/* Hidden from UI display per user request - preserved in code
             {activeProject?.mapUrl && (
               <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 self-start sm:self-auto">
                 <Globe className="h-3 w-3" />
                 <span>رابط خريطة قوقل مسجل لهذا المشروع (مخفي)</span>
               </span>
             )}
+            */}
           </div>
 
           {/* Search Input Box */}
@@ -617,15 +631,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
             {activeProject && (
               <button
                 type="button"
-                onClick={() => {
-                  if (activeProject.mapUrl) {
-                    loadAnalysis(activeProject.mapUrl, activeProject.name);
-                  } else {
-                    const res = generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '');
-                    setAnalysisResult(res);
-                    showToast(`✨ تم إجراء التحليل الجغرافي لمشروع (${activeProject.name}) بنجاح!`);
-                  }
-                }}
+                onClick={() => triggerProjectAnalysis(activeProject)}
                 disabled={isLoading}
                 className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0 border-0"
               >
@@ -777,11 +783,21 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
           {activeProject && (
             <button
               type="button"
-              onClick={() => handleSelectProjectClick(activeProject)}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer inline-flex items-center gap-2"
+              onClick={() => triggerProjectAnalysis(activeProject)}
+              disabled={isLoading}
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer inline-flex items-center gap-2"
             >
-              <Sparkles className="h-4 w-4 text-amber-300" />
-              <span>بدء التحليل لمشروع ({activeProject.name})</span>
+              {isLoading ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>جاري استخراج وحساب الأطوال...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 text-amber-300" />
+                  <span>بدء التحليل لمشروع ({activeProject.name})</span>
+                </>
+              )}
             </button>
           )}
         </div>
@@ -795,7 +811,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
             analysisResult={analysisResult}
             projectName={activeProject?.name}
             isLoading={isLoading}
-            onRunAnalysis={activeProject ? () => handleSelectProjectClick(activeProject) : undefined}
+            onRunAnalysis={activeProject ? () => triggerProjectAnalysis(activeProject) : undefined}
             defaultExpanded={true}
           />
 

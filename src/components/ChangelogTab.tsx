@@ -183,7 +183,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
       }
     });
 
-    const sorted = Array.from(uniqueLogsMap.values()).sort((a, b) => {
+    const sorted = Array.from(uniqueLogsMap.values()).sort((a: ChangelogItem, b: ChangelogItem) => {
       return new Date(b.createdAtISO).getTime() - new Date(a.createdAtISO).getTime();
     });
 

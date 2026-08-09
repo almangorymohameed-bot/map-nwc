@@ -5,6 +5,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { HistoricalReport, ProjectChangelogRecord, KMLAnalysisResult, ProjectDiffResult } from '../types';
+import { getSharedSupabaseClient } from '../supabase';
 
 export function getSupabaseConfig() {
   const metaEnv = (import.meta as any).env || {};
@@ -16,23 +17,12 @@ export function getSupabaseConfig() {
 export function saveSupabaseConfig(url: string, anonKey: string) {
   if (url) localStorage.setItem('VITE_SUPABASE_URL', url.trim());
   if (anonKey) localStorage.setItem('VITE_SUPABASE_ANON_KEY', anonKey.trim());
-  supabaseInstance = null; // reset cached instance
 }
-
-let supabaseInstance: SupabaseClient | null = null;
 
 export function getSupabaseClient(): SupabaseClient | null {
   const { url, anonKey } = getSupabaseConfig();
   if (!url || !anonKey) return null;
-  if (!supabaseInstance) {
-    try {
-      supabaseInstance = createClient(url, anonKey);
-    } catch (e) {
-      console.error('Failed to initialize Supabase client:', e);
-      return null;
-    }
-  }
-  return supabaseInstance;
+  return getSharedSupabaseClient();
 }
 
 /**

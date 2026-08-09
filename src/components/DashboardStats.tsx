@@ -103,10 +103,12 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
           </button>
         </div>
 
+        {/* Hidden from UI display per user request - preserved in code
         <div className="text-xs text-slate-500 dark:text-slate-400 font-bold px-3 py-1 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 hidden sm:flex items-center gap-1.5">
           <Sparkles className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
           <span>استخراج أطوال الخطوط، Segment ID، أرقام التصاريح والألوان</span>
         </div>
+        */}
       </div>
 
       {activeSubTab === 'mymaps' ? (

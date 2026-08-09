@@ -216,6 +216,10 @@ export interface ProjectDiffResult {
   previousReportDate: string;
   totalLengthDiffKm: number;
   totalLengthDiffMeters: number;
+  lengthDiffMeters?: number;
+  addedFeaturesCount?: number;
+  modifiedFeaturesCount?: number;
+  deletedFeaturesCount?: number;
   lengthChanges: LengthChangeDetail[];
   addedPermits: PermitChangeDetail[];
   removedPermits: PermitChangeDetail[];

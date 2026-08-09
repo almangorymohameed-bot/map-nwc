@@ -525,7 +525,8 @@ export function NotificationSettingsPage({
         </div>
       )}
 
-      {/* Category 4: Broadcast Testing & Database RLS Policy Settings */}
+      {/* Category 4: Broadcast Testing & Database RLS Policy Settings - Hidden from UI per user request, preserved in code */}
+      {/* 
       <div className="bg-amber-500/10 dark:bg-amber-950/20 rounded-3xl p-6 border border-amber-500/30 dark:border-amber-700/40 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -566,6 +567,7 @@ export function NotificationSettingsPage({
           </div>
         </div>
       </div>
+      */}
 
       {/* Footer Info Box */}
       <div className="bg-slate-50 dark:bg-slate-900/60 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 flex items-start gap-3.5">
