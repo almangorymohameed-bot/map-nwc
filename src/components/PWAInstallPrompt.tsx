@@ -1,24 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Download, X, Sparkles, MapPin, CheckCircle, Share, PlusSquare, Monitor, HelpCircle, ArrowUpRight, Laptop } from 'lucide-react';
+import { 
+  Smartphone, 
+  Download, 
+  Share, 
+  PlusSquare, 
+  CheckCircle2, 
+  X, 
+  Sparkles, 
+  Monitor, 
+  ArrowLeft, 
+  Info, 
+  ExternalLink,
+  MapPin,
+  Laptop
+} from 'lucide-react';
 import appLogoImg from '../assets/images/app_icon_1786272093633.jpg';
 
-/**
- * Retrieves the deferred PWA installation prompt event from window scope or local state
- */
-const getPWAInstallPrompt = (localPrompt: any) => {
-  return localPrompt || (window as any).deferredPWAInstallPrompt || null;
-};
-
-// Device & Browser environment helpers
-const isIOS = () => {
-  if (typeof window === 'undefined') return false;
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-};
-
-const isAndroid = () => {
-  if (typeof window === 'undefined') return false;
-  return /Android/i.test(navigator.userAgent);
-};
+interface InstallPwaModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  lang?: 'ar' | 'en';
+  deferredPrompt: any;
+  setDeferredPrompt: (prompt: any) => void;
+  isStandalone: boolean;
+}
 
 const isInIframe = () => {
   if (typeof window === 'undefined') return false;
@@ -29,55 +34,341 @@ const isInIframe = () => {
   }
 };
 
-export const PWAInstallPrompt: React.FC = () => {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstalled, setIsInstalled] = useState<boolean>(false);
-  const [showBanner, setShowBanner] = useState<boolean>(false);
-  const [isInstalling, setIsInstalling] = useState<boolean>(false);
-  const [imgError, setImgError] = useState<boolean>(false);
-  const [showGuideModal, setShowGuideModal] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'desktop' | 'android' | 'ios'>('desktop');
-  const [statusMessage, setStatusMessage] = useState<string>('');
+export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({
+  isOpen,
+  onClose,
+  lang = 'ar',
+  deferredPrompt,
+  setDeferredPrompt,
+  isStandalone
+}) => {
+  const [isIOS, setIsIOS] = useState(false);
+  const [isAndroid, setIsAndroid] = useState(false);
+  const [installedSuccess, setInstalledSuccess] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
-    // Set default guide tab based on device
-    if (isIOS()) setActiveTab('ios');
-    else if (isAndroid()) setActiveTab('android');
-    else setActiveTab('desktop');
+    const userAgent = String(window.navigator.userAgent || '').toLowerCase();
+    const iosDevice = /iphone|ipad|ipod/.test(userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const androidDevice = /android/.test(userAgent);
+    setIsIOS(iosDevice);
+    setIsAndroid(androidDevice);
+  }, []);
 
-    // Check if app is running in standalone mode (already installed PWA)
-    const checkIsStandalone = () => {
-      const isStandaloneMode =
+  const handleInstallClick = async () => {
+    // If inside iframe, open in new top-level browser tab
+    if (isInIframe()) {
+      window.open(window.location.href, '_blank');
+      return;
+    }
+
+    const promptEvent = deferredPrompt || (window as any).deferredPWAInstallPrompt;
+
+    if (promptEvent) {
+      try {
+        setInstalling(true);
+        await promptEvent.prompt();
+        const { outcome } = await promptEvent.userChoice;
+        if (outcome === 'accepted') {
+          setInstalledSuccess(true);
+          setDeferredPrompt(null);
+          (window as any).deferredPWAInstallPrompt = null;
+          localStorage.setItem('nwc_pwa_installed', 'true');
+        }
+      } catch (err) {
+        console.error('Error triggering PWA prompt:', err);
+      } finally {
+        setInstalling(false);
+      }
+    } else {
+      // If promptEvent not ready, attempt fallback open or guide
+      if (isInIframe()) {
+        window.open(window.location.href, '_blank');
+      }
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const isAr = lang === 'ar';
+
+  return (
+    <div className="fixed inset-0 z-[3000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto" dir={isAr ? 'rtl' : 'ltr'}>
+      <div className="bg-[#0e3f53] border border-white/10 w-full max-w-xl rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in-95 duration-200">
+        
+        {/* Modal Header */}
+        <div className="p-6 border-b border-white/10 flex items-center justify-between bg-black/20 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-cyan-400/10 border border-cyan-400/30 flex items-center justify-center text-cyan-300 shadow-inner">
+              <Smartphone className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-white">
+                {isAr ? 'تثبيت تطبيق الخرائط التفاعلية GeoGIS' : 'Install GeoGIS Interactive Maps'}
+              </h2>
+              <p className="text-xs text-white/60 font-bold mt-0.5">
+                {isAr ? 'احصل على تجربة تطبيق هاتف متكاملة وملء الشاشة' : 'Get a full-screen native mobile application experience'}
+              </p>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={onClose} 
+            className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center text-white/60 hover:bg-red-500/20 hover:text-red-400 transition-all cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Content Body */}
+        <div className="p-6 overflow-y-auto space-y-6 max-h-[80vh] custom-scrollbar">
+          
+          {/* App Badge Card */}
+          <div className="bg-gradient-to-br from-white/10 to-white/5 border border-white/10 p-5 rounded-2xl flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-[#0b2d3d] border border-cyan-400/40 flex items-center justify-center shrink-0 shadow-lg overflow-hidden">
+              {!imgError ? (
+                <img 
+                  src={appLogoImg} 
+                  alt="الخرائط التفاعلية" 
+                  className="w-full h-full object-cover" 
+                  onError={() => setImgError(true)} 
+                />
+              ) : (
+                <MapPin className="w-7 h-7 text-cyan-300" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-white">الخرائط التفاعلية NWC</span>
+                <span className="px-2 py-0.5 bg-cyan-400/20 text-cyan-300 text-[10px] font-black rounded-full border border-cyan-400/30">
+                  {isAr ? 'تطبيق ويب تقدمي PWA' : 'PWA App'}
+                </span>
+              </div>
+              <p className="text-xs text-white/70 font-medium mt-1 leading-relaxed">
+                {isAr ? 'يعمل على أجهزة iPhone و Android و Windows بدون الحاجة للمتجر.' : 'Works on iPhone, iPad, Android & PC without app store installation.'}
+              </p>
+            </div>
+          </div>
+
+          {/* If inside iframe note */}
+          {isInIframe() && (
+            <div className="bg-amber-500/10 border border-amber-500/30 p-4 rounded-2xl flex items-start gap-3 text-amber-200 text-xs leading-relaxed">
+              <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold mb-1">تنبيه المعاينة:</p>
+                <p>أنت تتصفح الموقع داخل المعاينة. لتثبيت التطبيق بآيقونة مستقيمة، اضغط الزر أدناه للفتح بتبويب مستقل ثم اضغط تثبيت.</p>
+                <button
+                  type="button"
+                  onClick={() => window.open(window.location.href, '_blank')}
+                  className="mt-2 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>فتح الرابط بتبويب جديد للتثبيت</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* If already installed / standalone */}
+          {isStandalone || installedSuccess ? (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 p-5 rounded-2xl text-center space-y-3">
+              <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
+              <h3 className="text-base font-black text-emerald-300">
+                {isAr ? 'التطبيق مثبت بالفعل على جهازك!' : 'App is already installed on your device!'}
+              </h3>
+              <p className="text-xs text-white/80 font-medium leading-relaxed">
+                {isAr 
+                  ? 'تم تثبيت نظام الخرائط بنجاح على الشاشة الرئيسية للجوال أو سطح المكتب. يمكنك فتحه مباشرة من أيقونة التطبيقات.'
+                  : 'GeoGIS Interactive Maps is successfully installed on your home screen. You can launch it directly from your apps grid.'}
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Direct One-Click Install Button (if browser supports beforeinstallprompt or prompt ready) */}
+              {(deferredPrompt || (window as any).deferredPWAInstallPrompt) && (
+                <div className="bg-cyan-400/10 border border-cyan-400/30 p-5 rounded-2xl text-center space-y-3">
+                  <div className="flex items-center justify-center gap-2 text-cyan-300 font-black text-sm">
+                    <Sparkles className="w-5 h-5 animate-pulse text-amber-300" />
+                    <span>{isAr ? 'تثبيت مباشر بضغطة زر واحدة' : 'One-Click Instant Install Available'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleInstallClick}
+                    disabled={installing}
+                    className="w-full py-3.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-sm rounded-xl transition-all shadow-xl flex items-center justify-center gap-2.5 transform active:scale-98 cursor-pointer"
+                  >
+                    <Download className="w-5 h-5 text-slate-950" />
+                    <span>{installing ? (isAr ? 'جاري التثبيت...' : 'Installing...') : (isAr ? 'اضغط هنا لتثبيت التطبيق الآن' : 'Click Here to Install App Now')}</span>
+                  </button>
+                </div>
+              )}
+
+              {/* iOS Safari Instructions */}
+              {(isIOS || (!deferredPrompt && !(window as any).deferredPWAInstallPrompt && !isAndroid)) && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-cyan-300 font-black text-xs uppercase tracking-wider">
+                    <Smartphone className="w-4 h-4" />
+                    <span>{isAr ? 'طريقة التثبيت على أجهزة آيفون وآيباد (iOS Safari):' : 'Installation Steps for iPhone & iPad (iOS Safari):'}</span>
+                  </div>
+
+                  <div className="space-y-2.5 bg-black/20 p-4 rounded-2xl border border-white/5">
+                    <div className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-cyan-400/20 text-cyan-300 font-black text-xs flex items-center justify-center shrink-0 mt-0.5">1</div>
+                      <p className="text-xs text-white/90 font-bold leading-relaxed">
+                        {isAr ? (
+                          <>اضغط على زر المشاركة <Share className="w-4 h-4 text-cyan-300 inline-block mx-1" /> في الشريط السفلي لمتصفح Safari.</>
+                        ) : (
+                          <>Tap the Share button <Share className="w-4 h-4 text-cyan-300 inline-block mx-1" /> in Safari’s bottom toolbar.</>
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-cyan-400/20 text-cyan-300 font-black text-xs flex items-center justify-center shrink-0 mt-0.5">2</div>
+                      <p className="text-xs text-white/90 font-bold leading-relaxed">
+                        {isAr ? (
+                          <>مرر القائمة لأسفل واضغط على <span className="text-cyan-300 underline font-black">"إضافة إلى الشاشة الرئيسية"</span> (Add to Home Screen) <PlusSquare className="w-4 h-4 text-cyan-300 inline-block mx-1" />.</>
+                        ) : (
+                          <>Scroll down and tap <span className="text-cyan-300 underline font-black">"Add to Home Screen"</span> <PlusSquare className="w-4 h-4 text-cyan-300 inline-block mx-1" />.</>
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-cyan-400/20 text-cyan-300 font-black text-xs flex items-center justify-center shrink-0 mt-0.5">3</div>
+                      <p className="text-xs text-white/90 font-bold leading-relaxed">
+                        {isAr ? (
+                          <>اضغط على كلمة <span className="text-cyan-300 font-black">"إضافة"</span> (Add) في الزاوية العلوية لتأكيد التثبيت.</>
+                        ) : (
+                          <>Tap <span className="text-cyan-300 font-black">"Add"</span> in the top right corner to complete installation.</>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Android Chrome Instructions */}
+              {(isAndroid || (!deferredPrompt && !(window as any).deferredPWAInstallPrompt && !isIOS)) && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-cyan-300 font-black text-xs uppercase tracking-wider">
+                    <Smartphone className="w-4 h-4" />
+                    <span>{isAr ? 'طريقة التثبيت على أندرويد متصفح Chrome / Edge / الكمبيوتر:' : 'Installation Steps for Android / PC Chrome:'}</span>
+                  </div>
+
+                  <div className="space-y-2.5 bg-black/20 p-4 rounded-2xl border border-white/5">
+                    <div className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-cyan-400/20 text-cyan-300 font-black text-xs flex items-center justify-center shrink-0 mt-0.5">1</div>
+                      <p className="text-xs text-white/90 font-bold leading-relaxed">
+                        {isAr ? (
+                          <>اضغط على قائمة الخيارات (النقاط الثلاث ⋮) في أعلى المتصفح أو زر التثبيت (⊕) بشريط العنوان.</>
+                        ) : (
+                          <>Tap the menu icon (three dots ⋮) or Install icon in Chrome address bar.</>
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-cyan-400/20 text-cyan-300 font-black text-xs flex items-center justify-center shrink-0 mt-0.5">2</div>
+                      <p className="text-xs text-white/90 font-bold leading-relaxed">
+                        {isAr ? (
+                          <>اختر <span className="text-cyan-300 font-black">"تثبيت التطبيق"</span> (Install app) أو <span className="text-cyan-300 font-black">"إضافة إلى الشاشة الرئيسية"</span>.</>
+                        ) : (
+                          <>Select <span className="text-cyan-300 font-black">"Install App"</span> or <span className="text-cyan-300 font-black">"Add to Home Screen"</span>.</>
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="w-6 h-6 rounded-full bg-cyan-400/20 text-cyan-300 font-black text-xs flex items-center justify-center shrink-0 mt-0.5">3</div>
+                      <p className="text-xs text-white/90 font-bold leading-relaxed">
+                        {isAr ? 'تأكد من الضغط على "تثبيت" وسيظهر التطبيق مباشرة في قائمة تطبيقاتك.' : 'Confirm by clicking "Install" and the app icon will appear on your device.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* App Advantages Feature List */}
+              <div className="space-y-2 pt-2 border-t border-white/10">
+                <h4 className="text-xs font-black text-white/80 uppercase">
+                  {isAr ? 'مميزات تثبيت المنظومة كتطبيق:' : 'Why install as a Mobile / PC App:'}
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-white/70 font-medium">
+                  <div className="flex items-center gap-2 bg-white/5 p-2.5 rounded-xl">
+                    <CheckCircle2 className="w-4 h-4 text-cyan-300 shrink-0" />
+                    <span>{isAr ? 'شاشة كاملة بدون شريط المتصفح' : 'Full-screen app view'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/5 p-2.5 rounded-xl">
+                    <CheckCircle2 className="w-4 h-4 text-cyan-300 shrink-0" />
+                    <span>{isAr ? 'فتح واستجابة أسرع للخرائط' : 'Faster map load speeds'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/5 p-2.5 rounded-xl">
+                    <CheckCircle2 className="w-4 h-4 text-cyan-300 shrink-0" />
+                    <span>{isAr ? 'وصول بنقرة واحدة من الشاشة الرئيسية' : '1-click home screen access'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white/5 p-2.5 rounded-xl">
+                    <CheckCircle2 className="w-4 h-4 text-cyan-300 shrink-0" />
+                    <span>{isAr ? 'استخراج وتحليل بيانات KML ميدانياً' : 'Field GIS & KML processing'}</span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="p-4 border-t border-white/10 bg-black/30 flex items-center justify-between shrink-0">
+          <p className="text-[10px] text-white/50 font-bold">
+            {isAr ? 'النسخة 2.5 • التثبيت آمن ومجاني 100%' : 'v2.5 • Safe & 100% Free Mobile App'}
+          </p>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-5 py-2 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
+          >
+            {isAr ? 'إغلاق' : 'Close'}
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+};
+
+export const PWAInstallPrompt: React.FC = () => {
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStandalone, setIsStandalone] = useState<boolean>(false);
+  const [showBanner, setShowBanner] = useState<boolean>(false);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [imgError, setImgError] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkStandalone = () => {
+      const standalone =
         window.matchMedia('(display-mode: standalone)').matches ||
         (window.navigator as any).standalone === true ||
         document.referrer.includes('android-app://');
-
-      if (isStandaloneMode) {
-        setIsInstalled(true);
-        setShowBanner(false);
-        return true;
-      }
-      return false;
+      setIsStandalone(standalone);
+      return standalone;
     };
 
-    if (checkIsStandalone()) return;
+    if (checkStandalone()) return;
 
-    // Capture beforeinstallprompt event
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
       (window as any).deferredPWAInstallPrompt = e;
-      
       if (!sessionStorage.getItem('nwc_pwa_dismissed')) {
         setShowBanner(true);
       }
     };
 
-    // Listen for actual OS installation event
     const handleAppInstalled = () => {
-      setIsInstalled(true);
+      setIsStandalone(true);
       setShowBanner(false);
-      setShowGuideModal(false);
+      setIsModalOpen(false);
       setDeferredPrompt(null);
       (window as any).deferredPWAInstallPrompt = null;
       localStorage.setItem('nwc_pwa_installed', 'true');
@@ -86,12 +377,12 @@ export const PWAInstallPrompt: React.FC = () => {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // Auto show installation banner after 1s if not standalone
+    // Auto-show bottom banner after 1.2s if not dismissed and not installed
     const timer = setTimeout(() => {
-      if (!checkIsStandalone() && !sessionStorage.getItem('nwc_pwa_dismissed')) {
+      if (!checkStandalone() && !sessionStorage.getItem('nwc_pwa_dismissed')) {
         setShowBanner(true);
       }
-    }, 1000);
+    }, 1200);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -100,333 +391,120 @@ export const PWAInstallPrompt: React.FC = () => {
     };
   }, []);
 
-  const handleInstallClick = async () => {
-    // 1. If running inside an iframe (like AI Studio preview), browser BLOCKS native install prompts.
-    if (isInIframe()) {
-      setStatusMessage('تنبيه: لتثبيت التطبيق على جهازك، يجب فتح الموقع بتبويب مستقل خارج المعاينة.');
-      setShowGuideModal(true);
-      return;
-    }
-
-    // 2. iOS Safari handling (Safari doesn't support beforeinstallprompt)
-    if (isIOS()) {
-      setActiveTab('ios');
-      setShowGuideModal(true);
-      return;
-    }
-
-    // 3. Android / Desktop Chrome & Edge native prompt
-    const promptEvent = getPWAInstallPrompt(deferredPrompt);
-
-    if (promptEvent) {
-      setIsInstalling(true);
-      setStatusMessage('جاري تشغيل نافذة تثبيت النظام المباشرة...');
-      try {
-        await promptEvent.prompt();
-        const choiceResult = await promptEvent.userChoice;
-        if (choiceResult && choiceResult.outcome === 'accepted') {
-          setIsInstalled(true);
-          setShowBanner(false);
-          localStorage.setItem('nwc_pwa_installed', 'true');
-          setStatusMessage('');
-        } else {
-          setStatusMessage('تم إلغاء التثبيت من قبل المستخدم');
-          setTimeout(() => setStatusMessage(''), 3000);
-        }
-      } catch (err) {
-        console.warn('PWA Prompt execution failed:', err);
-        setShowGuideModal(true);
-      } finally {
-        setIsInstalling(false);
-      }
-    } else {
-      // Browser native prompt event not triggered yet -> Show precise interactive installation guide
-      setShowGuideModal(true);
-    }
+  const handleOpenModal = () => {
+    setIsModalOpen(true);
   };
 
-  const handleDismiss = () => {
+  const handleDismissBanner = () => {
     setShowBanner(false);
     sessionStorage.setItem('nwc_pwa_dismissed', 'true');
   };
 
-  if (isInstalled || !showBanner) return null;
+  if (isStandalone) {
+    return (
+      <InstallPwaModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        lang="ar"
+        deferredPrompt={deferredPrompt}
+        setDeferredPrompt={setDeferredPrompt}
+        isStandalone={isStandalone}
+      />
+    );
+  }
 
   return (
     <>
-      <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-6 md:max-w-md z-50 animate-in fade-in slide-in-from-bottom-5 duration-300 dir-rtl">
-        <div className="bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md text-white p-4 rounded-2xl border border-blue-500/40 shadow-2xl shadow-blue-900/50 relative overflow-hidden">
-          {/* Subtle decorative glowing background blur */}
-          <div className="absolute -top-12 -right-12 w-32 h-32 bg-blue-500/20 rounded-full blur-2xl pointer-events-none" />
+      {showBanner && (
+        <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-6 md:max-w-md z-[2000] animate-in fade-in slide-in-from-bottom-5 duration-300 dir-rtl">
+          <div className="bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md text-white p-4 rounded-2xl border border-cyan-500/40 shadow-2xl shadow-cyan-950/50 relative overflow-hidden">
+            <div className="absolute -top-12 -right-12 w-32 h-32 bg-cyan-500/20 rounded-full blur-2xl pointer-events-none" />
 
-          <div className="flex items-start gap-3.5 relative z-10">
-            {/* App Logo */}
-            <div className="relative shrink-0">
-              {!imgError ? (
-                <img
-                  src={appLogoImg}
-                  alt="شعار الخرائط التفاعلية"
-                  className="w-14 h-14 rounded-2xl object-cover border border-blue-400/50 shadow-lg shadow-blue-900/50"
-                  referrerPolicy="no-referrer"
-                  onError={() => setImgError(true)}
-                />
-              ) : (
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-800 border border-blue-400/50 shadow-lg flex items-center justify-center">
-                  <MapPin className="w-7 h-7 text-cyan-300 animate-pulse" />
+            <div className="flex items-start gap-3.5 relative z-10">
+              <div className="relative shrink-0">
+                {!imgError ? (
+                  <img
+                    src={appLogoImg}
+                    alt="شعار الخرائط"
+                    className="w-13 h-13 rounded-2xl object-cover border border-cyan-400/50 shadow-md"
+                    onError={() => setImgError(true)}
+                  />
+                ) : (
+                  <div className="w-13 h-13 rounded-2xl bg-cyan-600/30 border border-cyan-400/50 flex items-center justify-center">
+                    <MapPin className="w-6 h-6 text-cyan-300" />
+                  </div>
+                )}
+                <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 p-0.5 rounded-full shadow">
+                  <Sparkles className="w-3 h-3" />
                 </div>
-              )}
-              <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 p-0.5 rounded-full shadow">
-                <Sparkles className="w-3 h-3" />
               </div>
-            </div>
 
-            {/* Banner Content */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="font-bold text-sm text-white flex items-center gap-1.5">
-                  <span>تثبيت تطبيق الخرائط التفاعلية</span>
-                </h4>
-                <button
-                  type="button"
-                  onClick={handleDismiss}
-                  className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
-                  title="إغلاق الإشعار"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              
-              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                تثبيت المنظومة كبرنامج مباشر وآيقونة مستقيمة على الكمبيوتر أو الهواتف الذكية.
-              </p>
-
-              {statusMessage && (
-                <div className="mt-2 p-2 bg-blue-950/80 border border-blue-500/40 rounded-xl text-[11px] text-cyan-300 font-semibold leading-relaxed animate-in fade-in duration-200">
-                  {statusMessage}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="font-bold text-sm text-white">تثبيت تطبيق الخرائط التفاعلية</h4>
+                  <button
+                    type="button"
+                    onClick={handleDismissBanner}
+                    className="text-slate-400 hover:text-white p-1 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-              )}
 
-              {/* Action Buttons */}
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleInstallClick}
-                  disabled={isInstalling}
-                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-md hover:shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                >
-                  {isInstalling ? (
-                    <span>جاري التثبيت...</span>
-                  ) : (
-                    <>
-                      <Download className="w-4 h-4 text-amber-300 animate-bounce" />
-                      <span>تثبيت التطبيق الآن</span>
-                    </>
-                  )}
-                </button>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  احصل على آيقونة مستقيمة وشاشة كاملة سريعة على الجوال والكمبيوتر.
+                </p>
 
-                <button
-                  type="button"
-                  onClick={() => setShowGuideModal(true)}
-                  className="px-2.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer flex items-center gap-1"
-                  title="دليل التثبيت"
-                >
-                  <HelpCircle className="w-4 h-4 text-amber-400" />
-                  <span className="hidden sm:inline">التعليمات</span>
-                </button>
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOpenModal}
+                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                  >
+                    <Download className="w-4 h-4 text-amber-300 animate-bounce" />
+                    <span>تثبيت التطبيق الآن</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={handleDismiss}
-                  className="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
-                >
-                  إغلاق
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Guide Modal for Desktop / Android / iOS Manual Installation */}
-      {showGuideModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 animate-in fade-in duration-200 dir-rtl">
-          <div className="bg-slate-900 border border-blue-500/40 text-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setShowGuideModal(false)}
-              className="absolute top-4 left-4 text-slate-400 hover:text-white p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-800 border border-blue-400/40 flex items-center justify-center text-cyan-300 shrink-0 shadow-lg">
-                <Smartphone className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">طريقة تثبيت تطبيق الخرائط</h3>
-                <p className="text-xs text-slate-400">خطوات تثبيت التطبيق بآيقونة مستقيمة على جهازك</p>
-              </div>
-            </div>
-
-            {/* Device Tabs */}
-            <div className="flex bg-slate-950/60 p-1 rounded-2xl border border-slate-800 mb-4 gap-1">
-              <button
-                type="button"
-                onClick={() => setActiveTab('desktop')}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  activeTab === 'desktop'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Laptop className="w-3.5 h-3.5" />
-                <span>الكمبيوتر</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('android')}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  activeTab === 'android'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>أندرويد</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('ios')}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  activeTab === 'ios'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Share className="w-3.5 h-3.5" />
-                <span>آيفون (iOS)</span>
-              </button>
-            </div>
-
-            {/* Tab Instructions Content */}
-            <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80 text-xs text-slate-200 leading-relaxed space-y-3">
-              {isInIframe() && (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-xs font-medium leading-relaxed mb-2">
-                  <strong>ملاحظة هامة:</strong> أنت تعاين الموقع داخل نافذة معزولة. اضغط على <strong>"فتح بتبويب جديد للتثبيت"</strong> أدناه لتفعيل زر التثبيت المباشر بالمتصفح!
+                  <button
+                    type="button"
+                    onClick={handleDismissBanner}
+                    className="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                  >
+                    إغلاق
+                  </button>
                 </div>
-              )}
-
-              {activeTab === 'desktop' && (
-                <>
-                  <div className="font-semibold text-amber-300 text-sm mb-1 flex items-center gap-1.5">
-                    <Monitor className="w-4 h-4 text-cyan-400" />
-                    <span>تثبيت التطبيق على الكمبيوتر (Windows / Mac)</span>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">1</span>
-                    <span>افتح رابط الموقع بمتصفح <strong>Google Chrome</strong> أو <strong>Microsoft Edge</strong>.</span>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">2</span>
-                    <span>اضغط على أيقونة التثبيت <strong>(⊕)</strong> الموجودة أعلى شريط العنوان بجوار رابط الموقع، أو خيارات القائمة <strong>(⋮)</strong> ثم اختر <strong>"تثبيت الخرائط التفاعلية"</strong>.</span>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <span className="bg-emerald-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">3</span>
-                    <span>اضغط <strong>"تثبيت" (Install)</strong> وسيتم إضافة اختصار مباشر برمز التطبيق على سطح المكتب وفائقة السرعة!</span>
-                  </div>
-                </>
-              )}
-
-              {activeTab === 'android' && (
-                <>
-                  <div className="font-semibold text-amber-300 text-sm mb-1 flex items-center gap-1.5">
-                    <Smartphone className="w-4 h-4 text-emerald-400" />
-                    <span>تثبيت التطبيق على أندرويد (Android)</span>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">1</span>
-                    <span>افتح الموقع بمتصفح <strong>Google Chrome</strong> للجوال.</span>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">2</span>
-                    <span>اضغط على قائمة الخيارات <strong>(⋮)</strong> في أعلى المتصفح.</span>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <span className="bg-emerald-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">3</span>
-                    <span>اختر <strong>"تثبيت التطبيق"</strong> أو <strong>"الإضافة إلى الشاشة الرئيسية"</strong>.</span>
-                  </div>
-                </>
-              )}
-
-              {activeTab === 'ios' && (
-                <>
-                  <div className="font-semibold text-amber-300 text-sm mb-1 flex items-center gap-1.5">
-                    <Share className="w-4 h-4 text-blue-400" />
-                    <span>تثبيت التطبيق على آيفون / آيباد (Safari)</span>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">1</span>
-                    <span>افتح الموقع باستخدام متصفح <strong>Safari</strong> الرسمي.</span>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">2</span>
-                    <span>اضغط على زر <strong>المشاركة (Share ⎕↑)</strong> في أسفل شاشة Safari.</span>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <span className="bg-emerald-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">3</span>
-                    <span>اختر <strong>"إضافة إلى الشاشة الرئيسية" (Add to Home Screen)</strong> ثم اضغط <strong>"إضافة"</strong>.</span>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Modal Bottom Actions */}
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  window.open(window.location.href, '_blank');
-                  setShowGuideModal(false);
-                }}
-                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md active:scale-95 transition-transform"
-              >
-                <span>فتح بتبويب مستقل للتثبيت</span>
-                <ArrowUpRight className="w-4 h-4 text-amber-300" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowGuideModal(false)}
-                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                إغلاق
-              </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      <InstallPwaModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        lang="ar"
+        deferredPrompt={deferredPrompt}
+        setDeferredPrompt={setDeferredPrompt}
+        isStandalone={isStandalone}
+      />
     </>
   );
 };
 
 export const PWAInstallHeaderButton: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstalled, setIsInstalled] = useState<boolean>(false);
+  const [isStandalone, setIsStandalone] = useState<boolean>(false);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    const checkIsStandalone = () => {
-      const isStandaloneMode =
+    const checkStandalone = () => {
+      const standalone =
         window.matchMedia('(display-mode: standalone)').matches ||
         (window.navigator as any).standalone === true;
-      if (isStandaloneMode) {
-        setIsInstalled(true);
-      }
+      setIsStandalone(standalone);
     };
 
-    checkIsStandalone();
+    checkStandalone();
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
@@ -435,10 +513,9 @@ export const PWAInstallHeaderButton: React.FC = () => {
     };
 
     const handleAppInstalled = () => {
-      setIsInstalled(true);
+      setIsStandalone(true);
       setDeferredPrompt(null);
       (window as any).deferredPWAInstallPrompt = null;
-      localStorage.setItem('nwc_pwa_installed', 'true');
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -450,49 +527,36 @@ export const PWAInstallHeaderButton: React.FC = () => {
     };
   }, []);
 
-  if (isInstalled) {
+  if (isStandalone) {
     return (
       <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-bold">
-        <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
         <span>التطبيق مثبت</span>
       </div>
     );
   }
 
-  const handleInstallClick = async () => {
-    if (isInIframe()) {
-      window.open(window.location.href, '_blank');
-      return;
-    }
-
-    const promptEvent = getPWAInstallPrompt(deferredPrompt);
-
-    if (promptEvent) {
-      try {
-        await promptEvent.prompt();
-        const choiceResult = await promptEvent.userChoice;
-        if (choiceResult && choiceResult.outcome === 'accepted') {
-          setIsInstalled(true);
-          localStorage.setItem('nwc_pwa_installed', 'true');
-        }
-      } catch (err) {
-        console.warn('Install prompt error:', err);
-      }
-    } else {
-      window.open(window.location.href, '_blank');
-    }
-  };
-
   return (
-    <button
-      type="button"
-      onClick={handleInstallClick}
-      className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer active:scale-95"
-      title="تثبيت التطبيق فوراً على سطح المكتب أو الجوال"
-    >
-      <Smartphone className="w-3.5 h-3.5 text-amber-300" />
-      <span className="hidden sm:inline">تثبيت التطبيق</span>
-      <span className="sm:hidden">تثبيت</span>
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => setIsModalOpen(true)}
+        className="flex items-center gap-1.5 px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold rounded-xl text-xs shadow-sm transition-all cursor-pointer active:scale-95"
+        title="تثبيت التطبيق فوراً على الجوال أو الكمبيوتر"
+      >
+        <Smartphone className="w-3.5 h-3.5 text-slate-950" />
+        <span className="hidden sm:inline">تثبيت التطبيق</span>
+        <span className="sm:hidden">تثبيت</span>
+      </button>
+
+      <InstallPwaModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        lang="ar"
+        deferredPrompt={deferredPrompt}
+        setDeferredPrompt={setDeferredPrompt}
+        isStandalone={isStandalone}
+      />
+    </>
   );
 };
