@@ -1,13 +1,66 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
   return {
     plugins: [
       react(), 
       tailwindcss(),
+      VitePWA({
+        registerType: 'autoUpdate',
+        injectRegister: 'auto',
+        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'app-logo.jpg', 'app-logo.png'],
+        manifest: {
+          name: 'تطبيق الخرائط التفاعلية - NWC',
+          short_name: 'الخرائط التفاعلية',
+          description: 'منظومة الخرائط التفاعلية واستخراج البيانات وتحليل أطوال الشبكات والتصاريح',
+          theme_color: '#1e40af',
+          background_color: '#0f172a',
+          display: 'standalone',
+          orientation: 'any',
+          lang: 'ar',
+          dir: 'rtl',
+          start_url: '/',
+          scope: '/',
+          icons: [
+            {
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any'
+            },
+            {
+              src: '/pwa-192x192.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'maskable'
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'any'
+            },
+            {
+              src: '/pwa-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable'
+            },
+            {
+              src: '/apple-touch-icon.png',
+              sizes: '180x180',
+              type: 'image/png'
+            }
+          ]
+        },
+        devOptions: {
+          enabled: true
+        }
+      }),
       {
         name: 'kml-proxy-middleware',
         configureServer(server) {
