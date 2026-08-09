@@ -40,7 +40,7 @@
       }, { capture: true });
     </script>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#1e40af" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -49,12 +49,19 @@
     <meta name="application-name" content="الخرائط التفاعلية" />
     <title>الخرائط التفاعلية NWC</title>
     
-    <!-- أيقونة وشعار تطبيق الخرائط التفاعلية PWA والجوال -->
+    <!-- أيقونة علامة التبويب متوافقة مع جميع المتصفحات (Favicons) -->
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    
+    <!-- أيقونات تطبيقات الجوال (Android / PWA) -->
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png" />
+    
+    <!-- أيقونات أجهزة آبل (iOS / iPadOS Home Screen) -->
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="apple-touch-icon-precomposed" href="/apple-touch-icon.png" />
+    
+    <!-- ملف الـ Manifest لتحديد الهوية البصرية أثناء التثبيت -->
     <link rel="manifest" href="/manifest.json" />
   </head>
   <body>
