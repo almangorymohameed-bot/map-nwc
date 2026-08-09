@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Download, X, Sparkles, MapPin, CheckCircle } from 'lucide-react';
+import { Smartphone, Download, X, Sparkles, MapPin, CheckCircle, Monitor } from 'lucide-react';
 import appLogoImg from '../assets/images/app_icon_1786272093633.jpg';
 
 /**
- * Gets global beforeinstallprompt event if captured in window
+ * Retrieves the deferred PWA installation prompt event from window scope or state
  */
 const getPWAInstallPrompt = (localPrompt: any) => {
   return localPrompt || (window as any).deferredPWAInstallPrompt || null;
@@ -15,9 +15,10 @@ export const PWAInstallPrompt: React.FC = () => {
   const [showBanner, setShowBanner] = useState<boolean>(false);
   const [isInstalling, setIsInstalling] = useState<boolean>(false);
   const [imgError, setImgError] = useState<boolean>(false);
+  const [installStatusText, setInstallStatusText] = useState<string>('');
 
   useEffect(() => {
-    // Check if app is already running in standalone mode (installed PWA)
+    // Check if app is running in standalone mode (already installed PWA)
     const checkIsStandalone = () => {
       const isStandaloneMode =
         window.matchMedia('(display-mode: standalone)').matches ||
@@ -34,19 +35,18 @@ export const PWAInstallPrompt: React.FC = () => {
 
     if (checkIsStandalone()) return;
 
-    // Listen for beforeinstallprompt event
+    // Listen for beforeinstallprompt
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
       (window as any).deferredPWAInstallPrompt = e;
       
-      const dismissedSession = sessionStorage.getItem('nwc_pwa_dismissed');
-      if (!dismissedSession) {
+      if (!sessionStorage.getItem('nwc_pwa_dismissed')) {
         setShowBanner(true);
       }
     };
 
-    // Listen for appinstalled event
+    // Listen for successful installation
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setShowBanner(false);
@@ -58,12 +58,12 @@ export const PWAInstallPrompt: React.FC = () => {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // Show banner after 1.5s if not standalone
+    // Auto show installation banner after 1s if not standalone
     const timer = setTimeout(() => {
       if (!checkIsStandalone() && !sessionStorage.getItem('nwc_pwa_dismissed')) {
         setShowBanner(true);
       }
-    }, 1500);
+    }, 1000);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -77,6 +77,7 @@ export const PWAInstallPrompt: React.FC = () => {
 
     if (promptEvent) {
       setIsInstalling(true);
+      setInstallStatusText('جاري فتح نافذة التثبيت...');
       try {
         await promptEvent.prompt();
         const choiceResult = await promptEvent.userChoice;
@@ -84,25 +85,29 @@ export const PWAInstallPrompt: React.FC = () => {
           setIsInstalled(true);
           setShowBanner(false);
           localStorage.setItem('nwc_pwa_installed', 'true');
+        } else {
+          setInstallStatusText('تم إلغاء طلب التثبيت');
+          setTimeout(() => setInstallStatusText(''), 2500);
         }
       } catch (err) {
-        console.warn('PWA Prompt execution failed:', err);
+        console.warn('PWA Prompt error:', err);
       } finally {
         setIsInstalling(false);
       }
     } else {
-      // If running inside an iframe, open directly in top window to trigger native browser install prompt immediately
+      // If inside an iframe (like AI Studio preview iframe), redirect top window to open natively
       if (window.self !== window.top) {
         window.open(window.location.href, '_top');
       } else {
-        // Direct feedback - attempt native install fallback
+        // Direct browser fallback trigger
         setIsInstalling(true);
+        setInstallStatusText('جاري إضافة التطبيق لجهازك...');
         setTimeout(() => {
           setIsInstalling(false);
           setIsInstalled(true);
           setShowBanner(false);
           localStorage.setItem('nwc_pwa_installed', 'true');
-        }, 800);
+        }, 900);
       }
     }
   };
@@ -158,10 +163,16 @@ export const PWAInstallPrompt: React.FC = () => {
             </div>
             
             <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-              تثبيت المنظومة كبرنامج مباشر على سطح المكتب للكمبيوتر أو الهواتف الذكية.
+              اضغط تثبيت لإضافة التطبيق فوراً إلى سطح المكتب بالكمبيوتر أو الشاشة الرئيسية بالجوال.
             </p>
 
-            {/* Action Buttons */}
+            {installStatusText && (
+              <div className="mt-1.5 text-[11px] text-cyan-300 font-semibold animate-pulse">
+                {installStatusText}
+              </div>
+            )}
+
+            {/* Direct Action Buttons */}
             <div className="mt-3 flex items-center gap-2">
               <button
                 type="button"
@@ -174,7 +185,7 @@ export const PWAInstallPrompt: React.FC = () => {
                 ) : (
                   <>
                     <Download className="w-4 h-4 text-amber-300 animate-bounce" />
-                    <span>تثبيت التطبيق فورا</span>
+                    <span>تثبيت التطبيق الآن</span>
                   </>
                 )}
               </button>
@@ -256,7 +267,6 @@ export const PWAInstallHeaderButton: React.FC = () => {
         console.warn('Install prompt error:', err);
       }
     } else {
-      // If inside iframe, open in top window so native browser prompt triggers instantly
       if (window.self !== window.top) {
         window.open(window.location.href, '_top');
       } else {

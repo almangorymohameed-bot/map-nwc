@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nwc-interactive-maps-v1';
+const CACHE_NAME = 'nwc-interactive-maps-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -6,13 +6,21 @@ const ASSETS_TO_CACHE = [
   '/pwa-192x192.png',
   '/pwa-512x512.png',
   '/apple-touch-icon.png',
+  '/app-logo.jpg',
   '/app-logo.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      // Safely attempt to cache each asset individually so one missing asset doesn't break SW registration
+      return Promise.allSettled(
+        ASSETS_TO_CACHE.map((asset) =>
+          cache.add(asset).catch((err) => {
+            console.warn(`[PWA SW] Failed to cache ${asset}:`, err);
+          })
+        )
+      );
     }).then(() => self.skipWaiting())
   );
 });
@@ -32,19 +40,22 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Only handle GET requests for same-origin or static assets
   if (event.request.method !== 'GET') return;
   
-  // Ignore API requests or Supabase/Google Maps requests from caching
   const url = new URL(event.request.url);
-  if (url.pathname.startsWith('/api') || url.hostname.includes('supabase') || url.hostname.includes('google')) {
+  // Ignore API requests, websockets, or external dynamic services
+  if (
+    url.pathname.startsWith('/api') || 
+    url.hostname.includes('supabase') || 
+    url.hostname.includes('google') ||
+    url.hostname.includes('run.app')
+  ) {
     return;
   }
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Fetch fresh version in background
         fetch(event.request).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             caches.open(CACHE_NAME).then((cache) => {
@@ -64,7 +75,6 @@ self.addEventListener('fetch', (event) => {
         });
         return networkResponse;
       }).catch(() => {
-        // If offline and request is HTML document, return cached index
         if (event.request.headers.get('accept')?.includes('text/html')) {
           return caches.match('/index.html');
         }
