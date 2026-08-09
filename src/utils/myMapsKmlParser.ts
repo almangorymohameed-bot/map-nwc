@@ -26,13 +26,11 @@ export function isSewageProject(projectName?: string, projectScope?: string): bo
 }
 
 /**
- * Get context-aware category label:
- * If project is sewage, 'executed_water' category (#01579B) should NOT say "منفذ - مياه", but "منفذ - صرف".
+ * Category label mapping:
+ * 'executed_water' (#01579B) always returns "منفذ - مياه"
  */
+
 export function getStatusCategoryLabel(category: StatusCategory, projectName?: string, projectScope?: string): string {
-  if (category === 'executed_water' && isSewageProject(projectName, projectScope)) {
-    return 'منفذ - صرف';
-  }
   return COLOR_CONFIG[category]?.label || category;
 }
 
