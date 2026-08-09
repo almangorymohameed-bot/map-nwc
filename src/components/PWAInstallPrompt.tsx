@@ -140,7 +140,7 @@ export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-black text-white">الخرائط التفاعلية NWC</span>
+                <span className="text-sm font-black text-white">الخرائط التفاعلية</span>
                 <span className="px-2 py-0.5 bg-cyan-400/20 text-cyan-300 text-[10px] font-black rounded-full border border-cyan-400/30">
                   {isAr ? 'تطبيق ويب تقدمي PWA' : 'PWA App'}
                 </span>

@@ -811,7 +811,7 @@ export default function App() {
         if (unnotifiedItems.length > 0) {
           unnotifiedItems.forEach((newNotif: any) => {
             notifiedNativeIdsRef.current.add(newNotif.id);
-            sendNativeNotification('تنبيه مشاريع NWC 🔔', cleanNotificationMessage(newNotif.message, newNotif.projectName, newNotif.type));
+            sendNativeNotification('تنبيه مشاريع الخرائط 🔔', cleanNotificationMessage(newNotif.message, newNotif.projectName, newNotif.type));
           });
           try {
             localStorage.setItem(
