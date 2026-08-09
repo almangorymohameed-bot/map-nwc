@@ -18,7 +18,7 @@ export interface ScheduleAutoAnalysisConfig {
 }
 
 export const DEFAULT_SCHEDULE_CONFIG: ScheduleAutoAnalysisConfig = {
-  autoScheduledEnabled: true,
+  autoScheduledEnabled: false, // Default is OFF to conserve Edge Requests and server resources
   scheduledHourKSA: 3 // 03:00 AM Saudi Arabia Time
 };
 
@@ -81,6 +81,15 @@ export async function runSequentialDailyAutoAnalysis(
   projects: Project[],
   options: { forceRun?: boolean; onNotificationCreated?: (notif: any) => void } = {}
 ): Promise<{ processed: number; changesFound: number }> {
+  // If not forced by Admin click, check if auto analysis is explicitly enabled
+  if (!options.forceRun) {
+    const config = getScheduleAutoAnalysisConfig();
+    if (!config.autoScheduledEnabled) {
+      console.log('🛑 Daily auto-analysis is disabled by Admin policy to conserve bandwidth and Edge Requests.');
+      return { processed: 0, changesFound: 0 };
+    }
+  }
+
   if (isAnalysisRunning) {
     console.log('🔄 Daily auto-analysis is already running in background.');
     return { processed: 0, changesFound: 0 };

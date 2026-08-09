@@ -449,13 +449,13 @@ export function NotificationSettingsPage({
               </div>
               <div>
                 <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
-                  <span>جدولة التقرير اليومي الشامل وحفظ السعة</span>
+                  <span>إدارة التقرير اليومي الشامل وحفظ استهلاك Vercel</span>
                   <span className="bg-amber-400/20 text-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-400/30">
                     خاص بمدير النظام
                   </span>
                 </h3>
                 <p className="text-[11px] text-indigo-200/80 font-medium mt-0.5">
-                  ضبط موعد التحديث التلقائي اليومي لمنع امتلاء قاعدة البيانات بالبيانات المكررة عند فتح المستخدمين العاديين للموقع.
+                  تم إيقاف الفحص التلقائي بالخلفية لجميع المستخدمين للحفاظ على رصيد طلبات Vercel (Edge Requests). يتم تشغيل الفحص فقط بطلب من مدير النظام.
                 </p>
               </div>
             </div>
@@ -467,7 +467,7 @@ export function NotificationSettingsPage({
               className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
             >
               <RefreshCw className={`h-3.5 w-3.5 text-cyan-300 ${autoProgress.isRunning ? 'animate-spin' : ''}`} />
-              <span>{autoProgress.isRunning ? 'جاري الفحص الآن...' : 'بدء التقرير اليومي الشامل الآن 🚀'}</span>
+              <span>{autoProgress.isRunning ? 'جاري الفحص الآن...' : 'تحليل كامل المشاريع الآن (يدوي) 🚀'}</span>
             </button>
           </div>
 
@@ -477,10 +477,10 @@ export function NotificationSettingsPage({
               <div>
                 <div className="text-xs font-bold text-indigo-100 flex items-center gap-1.5">
                   <Clock className="h-4 w-4 text-cyan-400" />
-                  <span>تفعيل التحديث اليومي المجدول</span>
+                  <span>تفعيل التحديث اليومي التلقائي المجدول</span>
                 </div>
                 <div className="text-[10.5px] text-slate-300 mt-0.5">
-                  يتشغل الفحص التلقائي مرة واحدة يومياً بالساعة المحددة بتوقيت السعودية.
+                  (معطل افتراضياً لحفظ استهلاك خوادم Vercel - يوصى بالتشغيل اليدوي فقط)
                 </div>
               </div>
               <label className="relative inline-flex items-center cursor-pointer shrink-0 mr-2">

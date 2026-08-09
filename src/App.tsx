@@ -828,7 +828,12 @@ export default function App() {
     };
 
     fetchUserNotifications();
-    const interval = setInterval(fetchUserNotifications, 12000);
+    // تقليل التكرار المفرط لمنع استهلاك Vercel Edge Requests: المزامنة تتم فورياً عبر Supabase Realtime وأحداث النافذة
+    const interval = setInterval(fetchUserNotifications, 300000); // كل 5 دقائق كفحص احتياطي نادراً بدلاً من كل 12 ثانية
+
+    // تحديث الإشعارات عند عودة المستخدم إلى تبويب التطبيق
+    const handleWindowFocus = () => fetchUserNotifications();
+    window.addEventListener('focus', handleWindowFocus);
 
     // الاشتراك المباشر عبر Supabase Realtime لإرسال الإشعارات لحظياً لجميع الأجهزة
     let realtimeChannel: any = null;
@@ -854,6 +859,7 @@ export default function App() {
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener('focus', handleWindowFocus);
       if (realtimeChannel && client && typeof client.removeChannel === 'function') {
         try { client.removeChannel(realtimeChannel); } catch (e) {}
       }
