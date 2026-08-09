@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Download, X, Sparkles, MapPin, CheckCircle, ExternalLink, Share, PlusSquare, Monitor } from 'lucide-react';
+import { Smartphone, Download, X, Sparkles, MapPin, CheckCircle, Share, PlusSquare, Monitor, HelpCircle, ArrowUpRight } from 'lucide-react';
 import appLogoImg from '../assets/images/app_icon_1786272093633.jpg';
 
 /**
- * Retrieves the deferred PWA installation prompt event from window scope or state
+ * Retrieves the deferred PWA installation prompt event from window scope
  */
 const getPWAInstallPrompt = (localPrompt: any) => {
   return localPrompt || (window as any).deferredPWAInstallPrompt || null;
@@ -31,6 +31,7 @@ export const PWAInstallPrompt: React.FC = () => {
   const [isInstalling, setIsInstalling] = useState<boolean>(false);
   const [imgError, setImgError] = useState<boolean>(false);
   const [showIOSGuide, setShowIOSGuide] = useState<boolean>(false);
+  const [showManualGuide, setShowManualGuide] = useState<boolean>(false);
   const [installStatusText, setInstallStatusText] = useState<string>('');
 
   useEffect(() => {
@@ -62,11 +63,12 @@ export const PWAInstallPrompt: React.FC = () => {
       }
     };
 
-    // Listen for successful installation
+    // Listen for successful installation event from OS
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setShowBanner(false);
       setShowIOSGuide(false);
+      setShowManualGuide(false);
       setDeferredPrompt(null);
       (window as any).deferredPWAInstallPrompt = null;
       localStorage.setItem('nwc_pwa_installed', 'true');
@@ -90,17 +92,17 @@ export const PWAInstallPrompt: React.FC = () => {
   }, []);
 
   const handleInstallClick = async () => {
-    // 1. If inside an iframe (like AI Studio preview), opening in top tab enables native PWA installation immediately
+    // 1. If inside an iframe (like AI Studio preview), browser BLOCKS native install prompts.
+    // Must redirect top window to open app directly in full browser tab.
     if (isInIframe()) {
-      setInstallStatusText('جاري فتح التطبيق بتبويب مستقل لتشغيل نافذة التثبيت المباشرة...');
+      setInstallStatusText('جاري فتح التطبيق بتبويب جديد لتشغيل نافذة التثبيت المباشرة...');
       setTimeout(() => {
-        window.open(window.location.href, '_blank');
-        setInstallStatusText('');
-      }, 300);
+        window.open(window.location.href, '_top');
+      }, 400);
       return;
     }
 
-    // 2. iOS Safari handling (Safari doesn't support beforeinstallprompt)
+    // 2. iOS Safari handling (Safari doesn't support standard beforeinstallprompt)
     if (isIOS()) {
       setShowIOSGuide(true);
       return;
@@ -111,7 +113,7 @@ export const PWAInstallPrompt: React.FC = () => {
 
     if (promptEvent) {
       setIsInstalling(true);
-      setInstallStatusText('جاري إظهار نافذة تثبيت النظام...');
+      setInstallStatusText('جاري فتح نافذة تثبيت النظام المباشرة...');
       try {
         await promptEvent.prompt();
         const choiceResult = await promptEvent.userChoice;
@@ -120,23 +122,18 @@ export const PWAInstallPrompt: React.FC = () => {
           setShowBanner(false);
           localStorage.setItem('nwc_pwa_installed', 'true');
         } else {
-          setInstallStatusText('');
+          setInstallStatusText('تم إلغاء طلب التثبيت');
+          setTimeout(() => setInstallStatusText(''), 2500);
         }
       } catch (err) {
         console.warn('PWA Prompt error:', err);
+        setShowManualGuide(true);
       } finally {
         setIsInstalling(false);
       }
     } else {
-      // Direct browser install trigger fallback
-      setIsInstalling(true);
-      setInstallStatusText('جاري إعداد حزمة التثبيت لجهازك...');
-      setTimeout(() => {
-        setIsInstalling(false);
-        setIsInstalled(true);
-        setShowBanner(false);
-        localStorage.setItem('nwc_pwa_installed', 'true');
-      }, 800);
+      // Prompt event not fired yet by browser, show clear instruction guide
+      setShowManualGuide(true);
     }
   };
 
@@ -151,7 +148,7 @@ export const PWAInstallPrompt: React.FC = () => {
     <>
       <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-6 md:max-w-md z-50 animate-in fade-in slide-in-from-bottom-5 duration-300 dir-rtl">
         <div className="bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-md text-white p-4 rounded-2xl border border-blue-500/30 shadow-2xl shadow-blue-900/40 relative overflow-hidden">
-          {/* Subtle decorative glowing background blur */}
+          {/* Subtle decorative background glow */}
           <div className="absolute -top-12 -right-12 w-32 h-32 bg-blue-500/20 rounded-full blur-2xl pointer-events-none" />
 
           <div className="flex items-start gap-3.5 relative z-10">
@@ -192,7 +189,7 @@ export const PWAInstallPrompt: React.FC = () => {
               </div>
               
               <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                اضغط تثبيت لتنزيل تطبيق الخرائط فوراً على سطح المكتب بالكمبيوتر أو جهاز الجوال.
+                اضغط تثبيت لتأكيد إشعار النظام وتنزيل التطبيق بآيقونة مستقيمة على جهازك.
               </p>
 
               {installStatusText && (
@@ -201,7 +198,7 @@ export const PWAInstallPrompt: React.FC = () => {
                 </div>
               )}
 
-              {/* Direct Action Buttons */}
+              {/* Action Buttons */}
               <div className="mt-3 flex items-center gap-2">
                 <button
                   type="button"
@@ -232,6 +229,63 @@ export const PWAInstallPrompt: React.FC = () => {
         </div>
       </div>
 
+      {/* Manual Chrome/Desktop Guide Modal if prompt is suppressed */}
+      {showManualGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200 dir-rtl">
+          <div className="bg-slate-900 border border-blue-500/40 text-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowManualGuide(false)}
+              className="absolute top-4 left-4 text-slate-400 hover:text-white p-1 rounded-full bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
+                <Monitor className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-bold text-white">خطوات التثبيت المباشر للمتصفح</h3>
+            </div>
+
+            <div className="space-y-3 bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80 text-xs text-slate-200 leading-relaxed">
+              <p className="font-semibold text-amber-300">
+                لتفعيل نافذة التثبيت الرسمية من المتصفح:
+              </p>
+              <div className="flex items-start gap-2">
+                <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold">1</span>
+                <span>تأكد من فتح الموقع في <strong>متصفح مستمر (Chrome أو Edge)</strong> وليس داخل المعاينة.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold">2</span>
+                <span>في أعلى شريط العنوان على الكمبيوتر أو خيارات القائمة بالجوال، اضغط على <strong>أيقونة التثبيت (Install)</strong> أو اختر <strong>"تثبيت التطبيق"</strong>.</span>
+              </div>
+            </div>
+
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  window.open(window.location.href, '_blank');
+                  setShowManualGuide(false);
+                }}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>فتح في نافذة مستقلة</span>
+                <ArrowUpRight className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowManualGuide(false)}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* iOS Modal Guide */}
       {showIOSGuide && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-in fade-in duration-200 dir-rtl">
@@ -258,7 +312,7 @@ export const PWAInstallPrompt: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <PlusSquare className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>2. اختر <strong>"إضافة إلى الشاشة الرئيسية"</strong>.</span>
+                <span>2. اختر <strong>"إضافة إلى الشاشة الرئيسية" (Add to Home Screen)</strong>.</span>
               </div>
             </div>
 
@@ -325,7 +379,7 @@ export const PWAInstallHeaderButton: React.FC = () => {
 
   const handleInstallClick = async () => {
     if (isInIframe()) {
-      window.open(window.location.href, '_blank');
+      window.open(window.location.href, '_top');
       return;
     }
 
@@ -342,9 +396,6 @@ export const PWAInstallHeaderButton: React.FC = () => {
       } catch (err) {
         console.warn('Install prompt error:', err);
       }
-    } else {
-      setIsInstalled(true);
-      localStorage.setItem('nwc_pwa_installed', 'true');
     }
   };
 
