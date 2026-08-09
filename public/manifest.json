@@ -1,14 +1,17 @@
 {
-  "name": "الخرائط التفاعلية",
+  "name": "تطبيق الخرائط التفاعلية",
   "short_name": "الخرائط التفاعلية",
   "description": "منظومة الخرائط التفاعلية واستخراج البيانات وتحليل أطوال الشبكات والتصاريح",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#1e40af",
   "orientation": "any",
   "lang": "ar",
   "dir": "rtl",
+  "categories": ["utilities", "productivity"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/pwa-192x192.png",
@@ -26,6 +29,15 @@
       "src": "/apple-touch-icon.png",
       "sizes": "180x180",
       "type": "image/png"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "إحصائيات الخرائط",
+      "short_name": "الخرائط",
+      "description": "تحليل أطوال وحصر الخرائط",
+      "url": "/",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
     }
   ]
 }
