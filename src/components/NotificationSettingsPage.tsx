@@ -105,7 +105,7 @@ export function NotificationSettingsPage({
     if (autoProgress.isRunning) return;
     runSequentialDailyAutoAnalysis(projects, { forceRun: true }).then(res => {
       if (onShowNotification) {
-        onShowNotification(`📊 اكتمل الفحص الشامل للمشاريع: تم معالجة ${res.processed} مشروع ورصد ${res.changesFound} تغييرات.`);
+        onShowNotification(`📊 اكتمل الفحص الشامل للمشاريع (تحت بند جاري): تم معالجة ${res.processed} مشروع ورصد ${res.changesFound} تغييرات.`);
       }
     });
   };
@@ -467,7 +467,7 @@ export function NotificationSettingsPage({
               className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
             >
               <RefreshCw className={`h-3.5 w-3.5 text-cyan-300 ${autoProgress.isRunning ? 'animate-spin' : ''}`} />
-              <span>{autoProgress.isRunning ? 'جاري الفحص الآن...' : 'تحليل كامل المشاريع الآن (يدوي) 🚀'}</span>
+              <span>{autoProgress.isRunning ? 'جاري الفحص الآن...' : 'تحليل المشاريع (تحت بند جاري) 🚀'}</span>
             </button>
           </div>
 

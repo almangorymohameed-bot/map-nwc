@@ -51,12 +51,21 @@ export const getSaudiCurrentHourAndDate = () => {
 type ProgressCallback = (progress: AutoAnalysisProgress) => void;
 
 let isAnalysisRunning = false;
+let cancelRequested = false;
 let currentProgress: AutoAnalysisProgress = {
   isRunning: false,
   totalProjects: 0,
   completedProjects: 0,
   changesFoundCount: 0
 };
+
+export function stopDailyAutoAnalysis() {
+  if (isAnalysisRunning) {
+    cancelRequested = true;
+    currentProgress.currentProjectName = 'جاري إيقاف الفحص...';
+    notifyListeners();
+  }
+}
 
 const listeners: Set<ProgressCallback> = new Set();
 
@@ -98,12 +107,18 @@ export async function runSequentialDailyAutoAnalysis(
   const todayDateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   const lastRunKey = 'water_maps_last_daily_auto_run_date';
 
-  const eligibleProjects = projects.filter(p => p.mapUrl && p.mapUrl.trim().length > 10);
+  // تصفية المشاريع بححيث يتم تحليل المشاريع التي تحتوي رابط خريطة ومصنفة ضمن بند (جاري) فقط
+  const eligibleProjects = projects.filter(p => {
+    const hasMapUrl = p.mapUrl && p.mapUrl.trim().length > 10;
+    const isOngoingStatus = (p.status || '').trim() === 'جاري';
+    return hasMapUrl && isOngoingStatus;
+  });
   if (eligibleProjects.length === 0) {
     return { processed: 0, changesFound: 0 };
   }
 
   isAnalysisRunning = true;
+  cancelRequested = false;
   currentProgress = {
     isRunning: true,
     totalProjects: eligibleProjects.length,
@@ -119,6 +134,11 @@ export async function runSequentialDailyAutoAnalysis(
   const supabase = getSupabaseClient();
 
   for (const proj of eligibleProjects) {
+    if (cancelRequested) {
+      console.log('🛑 Auto analysis loop cancelled by user.');
+      break;
+    }
+
     currentProgress.currentProjectName = proj.name;
     notifyListeners();
 
@@ -257,15 +277,23 @@ export async function runSequentialDailyAutoAnalysis(
     currentProgress.completedProjects++;
     notifyListeners();
 
+    if (cancelRequested) break;
+
     // Delay 400ms between projects to yield event loop and avoid freezing UI
     await new Promise(resolve => setTimeout(resolve, 400));
+    if (cancelRequested) break;
   }
 
-  localStorage.setItem(lastRunKey, todayDateStr);
+  const wasCancelled = cancelRequested;
+  if (!wasCancelled) {
+    localStorage.setItem(lastRunKey, todayDateStr);
+  }
+
+  cancelRequested = false;
   isAnalysisRunning = false;
   currentProgress.isRunning = false;
   currentProgress.currentProjectName = undefined;
   notifyListeners();
 
-  return { processed: processedCount, changesFound: changesCount };
+  return { processed: processedCount, changesFound: changesCount, wasCancelled };
 }

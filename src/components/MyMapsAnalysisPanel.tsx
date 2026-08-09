@@ -155,12 +155,17 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
       showToast('⚠️ لا توجد مشاريع مجهزة للتحليل.');
       return;
     }
-    showToast('🚀 جاري بدء الفحص والتحليل التلقائي التتابعي لجميع المشاريع وتوثيق التقارير بقاعدة البيانات...');
+    const ongoingCount = projects.filter(p => p.mapUrl && p.mapUrl.trim().length > 10 && (p.status || '').trim() === 'جاري').length;
+    if (ongoingCount === 0) {
+      showToast('⚠️ لا توجد مشاريع مجهزة مصنفة تحت بند (جاري) للتحليل.');
+      return;
+    }
+    showToast(`🚀 جاري بدء الفحص والتحليل التتابعي لـ (${ongoingCount}) مشروع مصنف تحت بند (جاري)...`);
     const result = await runSequentialDailyAutoAnalysis(projects, { forceRun: true });
     if (result.changesFound > 0) {
-      showToast(`✨ اكتمل التحليل التتابعي: تم رصد وتوثيق تغيرات في ${result.changesFound} مشروع بقاعدة البيانات!`);
+      showToast(`✨ اكتمل التحليل التتابعي: تم رصد وتوثيق تغيرات في ${result.changesFound} مشروع (جاري) بقاعدة البيانات!`);
     } else {
-      showToast(`✨ اكتمل التحليل التتابعي لـ ${result.processed} مشروع وتم حفظ جميع التقارير اليومية بنجاح!`);
+      showToast(`✨ اكتمل التحليل التتابعي لـ ${result.processed} مشروع (جاري) وتم حفظ جميع التقارير اليومية بنجاح!`);
     }
   };
 
