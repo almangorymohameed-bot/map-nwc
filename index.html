@@ -2,6 +2,18 @@
 <html lang="ar" dir="rtl">
   <head>
     <script>
+      // Global PWA prompt listener captured as early as possible
+      window.deferredPWAInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        window.deferredPWAInstallPrompt = e;
+        console.log('PWA beforeinstallprompt captured globally');
+      });
+      window.addEventListener('appinstalled', () => {
+        window.deferredPWAInstallPrompt = null;
+        console.log('PWA successfully installed');
+      });
+
       // Instantly catch any errors from external cross-origin iframes or CDNs
       window.onerror = function(message, source, lineno, colno, error) {
         console.warn("Global suppressed script error:", message, "from", source);
