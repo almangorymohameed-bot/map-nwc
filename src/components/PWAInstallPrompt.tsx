@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Download, X, Sparkles, MapPin, CheckCircle, Share, PlusSquare, Monitor, HelpCircle, ExternalLink, ArrowUpRight, Laptop } from 'lucide-react';
+import { Smartphone, Download, X, Sparkles, MapPin, CheckCircle, Share, PlusSquare, Monitor, HelpCircle, ArrowUpRight, Laptop } from 'lucide-react';
 import appLogoImg from '../assets/images/app_icon_1786272093633.jpg';
 
 /**
@@ -102,17 +102,9 @@ export const PWAInstallPrompt: React.FC = () => {
 
   const handleInstallClick = async () => {
     // 1. If running inside an iframe (like AI Studio preview), browser BLOCKS native install prompts.
-    // We must open the application in a new standalone browser tab.
     if (isInIframe()) {
-      setStatusMessage('جاري فتح التطبيق بتبويب جديد لتفعيل نافذة التثبيت الرسمية...');
-      const newWin = window.open(window.location.href, '_blank');
-      if (!newWin) {
-        // Fallback if popup blocked
-        window.top?.location.assign(window.location.href);
-      }
-      setTimeout(() => {
-        setStatusMessage('يرجى الضغط على زر "تثبيت التطبيق" بالصفحة الجديدة التي تم فتحها لتأكيد التثبيت.');
-      }, 800);
+      setStatusMessage('تنبيه: لتثبيت التطبيق على جهازك، يجب فتح الموقع بتبويب مستقل خارج المعاينة.');
+      setShowGuideModal(true);
       return;
     }
 
@@ -128,7 +120,7 @@ export const PWAInstallPrompt: React.FC = () => {
 
     if (promptEvent) {
       setIsInstalling(true);
-      setStatusMessage('جاري إظهار نافذة تثبيت النظام المباشرة...');
+      setStatusMessage('جاري تشغيل نافذة تثبيت النظام المباشرة...');
       try {
         await promptEvent.prompt();
         const choiceResult = await promptEvent.userChoice;
@@ -148,7 +140,7 @@ export const PWAInstallPrompt: React.FC = () => {
         setIsInstalling(false);
       }
     } else {
-      // Browser native prompt event not ready or blocked by browser settings -> Show guide modal
+      // Browser native prompt event not triggered yet -> Show precise interactive installation guide
       setShowGuideModal(true);
     }
   };
@@ -273,7 +265,7 @@ export const PWAInstallPrompt: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-base font-bold text-white">طريقة تثبيت تطبيق الخرائط</h3>
-                <p className="text-xs text-slate-400">اختر نوع جهازك لمعرفة خطوات التثبيت الفورية</p>
+                <p className="text-xs text-slate-400">خطوات تثبيت التطبيق بآيقونة مستقيمة على جهازك</p>
               </div>
             </div>
 
@@ -321,6 +313,12 @@ export const PWAInstallPrompt: React.FC = () => {
 
             {/* Tab Instructions Content */}
             <div className="bg-slate-800/80 p-4 rounded-2xl border border-slate-700/80 text-xs text-slate-200 leading-relaxed space-y-3">
+              {isInIframe() && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-xs font-medium leading-relaxed mb-2">
+                  <strong>ملاحظة هامة:</strong> أنت تعاين الموقع داخل نافذة معزولة. اضغط على <strong>"فتح بتبويب جديد للتثبيت"</strong> أدناه لتفعيل زر التثبيت المباشر بالمتصفح!
+                </div>
+              )}
+
               {activeTab === 'desktop' && (
                 <>
                   <div className="font-semibold text-amber-300 text-sm mb-1 flex items-center gap-1.5">
@@ -329,7 +327,7 @@ export const PWAInstallPrompt: React.FC = () => {
                   </div>
                   <div className="flex items-start gap-2.5">
                     <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">1</span>
-                    <span>تأكد من فتح الرابط بمتصفح <strong>Google Chrome</strong> أو <strong>Microsoft Edge</strong> في نافذة مستقلة.</span>
+                    <span>افتح رابط الموقع بمتصفح <strong>Google Chrome</strong> أو <strong>Microsoft Edge</strong>.</span>
                   </div>
                   <div className="flex items-start gap-2.5">
                     <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">2</span>
@@ -337,7 +335,7 @@ export const PWAInstallPrompt: React.FC = () => {
                   </div>
                   <div className="flex items-start gap-2.5">
                     <span className="bg-emerald-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">3</span>
-                    <span>اضغط <strong>"تثبيت" (Install)</strong> وسيتم إنشاء اختصار مباشر برمز التطبيق على سطح المكتب.</span>
+                    <span>اضغط <strong>"تثبيت" (Install)</strong> وسيتم إضافة اختصار مباشر برمز التطبيق على سطح المكتب وفائقة السرعة!</span>
                   </div>
                 </>
               )}
@@ -350,15 +348,15 @@ export const PWAInstallPrompt: React.FC = () => {
                   </div>
                   <div className="flex items-start gap-2.5">
                     <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">1</span>
-                    <span>افتح الموقع في متصفح <strong>Google Chrome</strong> للجوال.</span>
+                    <span>افتح الموقع بمتصفح <strong>Google Chrome</strong> للجوال.</span>
                   </div>
                   <div className="flex items-start gap-2.5">
                     <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">2</span>
-                    <span>اضغط على زر القائمة <strong>(⋮)</strong> في أعلى يسار المتصفح.</span>
+                    <span>اضغط على قائمة الخيارات <strong>(⋮)</strong> في أعلى المتصفح.</span>
                   </div>
                   <div className="flex items-start gap-2.5">
                     <span className="bg-emerald-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">3</span>
-                    <span>اختر <strong>"تثبيت التطبيق"</strong> أو <strong>"الإضافة إلى الشاشة الرئيسية"</strong> واستمتع بتطبيق مستقل كاملاً!</span>
+                    <span>اختر <strong>"تثبيت التطبيق"</strong> أو <strong>"الإضافة إلى الشاشة الرئيسية"</strong>.</span>
                   </div>
                 </>
               )}
@@ -371,11 +369,11 @@ export const PWAInstallPrompt: React.FC = () => {
                   </div>
                   <div className="flex items-start gap-2.5">
                     <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">1</span>
-                    <span>افتح الموقع باستخدام متصفح <strong>Safari</strong> الرسمي على جهاز الآيفون.</span>
+                    <span>افتح الموقع باستخدام متصفح <strong>Safari</strong> الرسمي.</span>
                   </div>
                   <div className="flex items-start gap-2.5">
                     <span className="bg-blue-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">2</span>
-                    <span>اضغط على زر <strong>المشاركة (Share ⎕↑)</strong> في أسفل شاشة المتصفح.</span>
+                    <span>اضغط على زر <strong>المشاركة (Share ⎕↑)</strong> في أسفل شاشة Safari.</span>
                   </div>
                   <div className="flex items-start gap-2.5">
                     <span className="bg-emerald-600 text-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">3</span>
@@ -387,24 +385,22 @@ export const PWAInstallPrompt: React.FC = () => {
 
             {/* Modal Bottom Actions */}
             <div className="mt-5 flex gap-2">
-              {isInIframe() && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.open(window.location.href, '_blank');
-                    setShowGuideModal(false);
-                  }}
-                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-                >
-                  <span>فتح بتبويب جديد للتثبيت</span>
-                  <ArrowUpRight className="w-4 h-4 text-amber-300" />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  window.open(window.location.href, '_blank');
+                  setShowGuideModal(false);
+                }}
+                className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md active:scale-95 transition-transform"
+              >
+                <span>فتح بتبويب مستقل للتثبيت</span>
+                <ArrowUpRight className="w-4 h-4 text-amber-300" />
+              </button>
 
               <button
                 type="button"
                 onClick={() => setShowGuideModal(false)}
-                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
               >
                 إغلاق
               </button>

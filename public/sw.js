@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nwc-interactive-maps-v2';
+const CACHE_NAME = 'nwc-interactive-maps-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -13,11 +13,10 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      // Safely attempt to cache each asset individually so one missing asset doesn't break SW registration
       return Promise.allSettled(
         ASSETS_TO_CACHE.map((asset) =>
           cache.add(asset).catch((err) => {
-            console.warn(`[PWA SW] Failed to cache ${asset}:`, err);
+            console.warn(`[PWA SW] Caching failed for ${asset}:`, err);
           })
         )
       );
@@ -43,12 +42,13 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   
   const url = new URL(event.request.url);
-  // Ignore API requests, websockets, or external dynamic services
+
+  // Ignore internal API endpoints, Vite HMR, or external browser extensions
   if (
-    url.pathname.startsWith('/api') || 
-    url.hostname.includes('supabase') || 
-    url.hostname.includes('google') ||
-    url.hostname.includes('run.app')
+    url.pathname.startsWith('/api') ||
+    url.pathname.includes('@vite') ||
+    url.pathname.includes('hot-update') ||
+    url.protocol.startsWith('chrome-extension')
   ) {
     return;
   }
@@ -56,8 +56,9 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
+        // Fetch fresh copy in background to keep cache up to date
         fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
             caches.open(CACHE_NAME).then((cache) => {
               cache.put(event.request, networkResponse);
             });
@@ -65,6 +66,7 @@ self.addEventListener('fetch', (event) => {
         }).catch(() => {});
         return cachedResponse;
       }
+
       return fetch(event.request).then((networkResponse) => {
         if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
           return networkResponse;
@@ -75,6 +77,7 @@ self.addEventListener('fetch', (event) => {
         });
         return networkResponse;
       }).catch(() => {
+        // Fallback to index.html for navigation requests if offline
         if (event.request.headers.get('accept')?.includes('text/html')) {
           return caches.match('/index.html');
         }
