@@ -26,6 +26,7 @@ import {
   DEFAULT_NOTIF_SETTINGS, 
   NotificationSettings 
 } from './components/NotificationSettingsPage';
+import { PWAInstallPrompt, PWAInstallHeaderButton } from './components/PWAInstallPrompt';
 
 // Icons
 import { 
@@ -1646,6 +1647,9 @@ export default function App() {
                 )}
               </button>
 
+              {/* PWA Application Install Button */}
+              <PWAInstallHeaderButton />
+
               <div className="relative" id="notifications-bell-container">
                 <button type="button" onClick={() => setShowNotificationsDropdown(!showNotificationsDropdown)} className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center relative ${showNotificationsDropdown ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}><Bell className="h-4 w-4" />{unreadNotificationsCount > 0 && (<span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-extrabold h-4 w-4 rounded-full flex items-center justify-center animate-bounce">{unreadNotificationsCount}</span>)}</button>
 
@@ -1861,6 +1865,9 @@ export default function App() {
           <p>© {new Date().getFullYear()} نظام الخرائط التفاعلية الآمن •   </p>
         </div>
       </footer>
+
+      {/* Floating PWA Installation Notification Prompt */}
+      <PWAInstallPrompt />
     </div>
   );
 }
