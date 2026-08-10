@@ -1,0 +1,1541 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { Project, StatusCategory, KMLAnalysisResult, HistoricalReport } from '../types';
+import { ReportHistoryStore } from '../utils/supabaseSetup';
+import { DashboardMetricsStore, DashboardProjectMetric } from '../utils/dashboardMetricsStore';
+import { generateSyntheticProjectKMLData, getStatusCategoryLabel } from '../utils/myMapsKmlParser';
+import {
+  Ruler,
+  FileCheck,
+  Scissors,
+  Building2,
+  Layers,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
+  Globe,
+  MapPin,
+  Droplet,
+  Wind,
+  BarChart3,
+  Search,
+  ExternalLink,
+  Sparkles,
+  Printer,
+  Table,
+  SlidersHorizontal,
+  Info,
+  Filter
+} from 'lucide-react';
+
+interface ProjectLengthsDashboardProps {
+  projects: Project[];
+  onSelectProject?: (project: Project) => void;
+}
+
+type CategoryType = 'all' | 'riyadh' | 'governorates' | 'central_sewage' | 'central_water';
+
+interface CategoryStats {
+  projectsCount: number;
+  totalContractMeters: number;
+  totalContractKm: number;
+  totalPermitsCount: number;
+  totalSegmentsCount: number;
+  uniqueSegmentsCount: number;
+  statusBreakdown: Record<StatusCategory, {
+    category: StatusCategory;
+    label: string;
+    hex: string;
+    totalMeters: number;
+    totalKm: number;
+    percentage: number;
+    permitCount: number;
+    segmentCount: number;
+    uniqueSegmentCount: number;
+    projectsCount: number;
+  }>;
+}
+
+export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLengthsDashboardProps) {
+  const [activeCategory, setActiveCategory] = useState<CategoryType>('all');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedScope, setSelectedScope] = useState<'all' | 'water' | 'sewage'>('all');
+  const [reportsMap, setReportsMap] = useState<Map<number, HistoricalReport>>(new Map());
+  const [metricsMap, setMetricsMap] = useState<Map<number, DashboardProjectMetric>>(new Map());
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [showComparisonTable, setShowComparisonTable] = useState<boolean>(true);
+
+  // Dynamically compute list of available statuses from projects
+  const availableStatuses = useMemo(() => {
+    const set = new Set<string>();
+    projects.forEach(p => {
+      if (p.status && p.status.trim()) {
+        set.add(p.status.trim());
+      }
+    });
+    return Array.from(set);
+  }, [projects]);
+
+  // Load latest reports and dashboard metrics for all projects from Supabase / dedicated store
+  const loadReportsAndMetrics = async () => {
+    setIsLoading(true);
+    try {
+      const map = await ReportHistoryStore.getAllLatestReportsMap();
+      setReportsMap(map);
+
+      // Sync and load dedicated dashboard metrics table
+      const metrics = await DashboardMetricsStore.syncAllProjectMetrics(projects, map);
+      setMetricsMap(metrics);
+    } catch (err) {
+      console.error('Error loading reports & dashboard metrics map:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadReportsAndMetrics();
+  }, [projects]);
+
+  // Helper functions for categorization
+  const isWaterProject = (p: Project): boolean => {
+    const scopeStr = (p.scope || '').toLowerCase();
+    const nameStr = (p.name || '').toLowerCase();
+    const classStr = (p.classification || '').toLowerCase();
+
+    // Explicit sewage keywords (e.g. sewage networks, wastewater treatment, etc.)
+    const isExplicitSewageName = nameStr.includes('مياه الصرف') || 
+                                 nameStr.includes('صرف صحي') || 
+                                 nameStr.includes('شبكات صرف') || 
+                                 nameStr.includes('خطوط صرف') || 
+                                 nameStr.includes('المعالجة البيئية') ||
+                                 scopeStr.includes('صرف صحي');
+
+    if (isExplicitSewageName) {
+      // Unless the name explicitly mentions water network automation or water supply
+      if (!nameStr.includes('أتمتة شبكة المياه') && !nameStr.includes('شبكة المياه')) {
+        return false;
+      }
+    }
+
+    if (nameStr.includes('أتمتة شبكة المياه') || nameStr.includes('شبكة المياه') || nameStr.includes('شبكات المياه') || nameStr.includes('خطوط المياه') || nameStr.includes('خزانات') || nameStr.includes('تنقية المياه') || nameStr.includes('تغذية المياه') || nameStr.includes('المخطط الاستراتيجي للمياه')) {
+      return true;
+    }
+
+    if (scopeStr.includes('مياه') && !scopeStr.includes('صرف')) {
+      return true;
+    }
+
+    if (classStr.includes('مياه') || classStr.includes('خزان')) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const isSewageProject = (p: Project): boolean => {
+    return !isWaterProject(p);
+  };
+
+  const isRiyadhProject = (p: Project): boolean => {
+    const text = ((p.region || '') + ' ' + (p.businessUnit || '') + ' ' + (p.name || '')).toLowerCase();
+    const isGov = text.includes('محافظ') || text.includes('محافظة');
+    const isRiyadh = text.includes('الرياض');
+    return isRiyadh && !isGov;
+  };
+
+  const isGovernoratesProject = (p: Project): boolean => {
+    return !isRiyadhProject(p);
+  };
+
+  const isCentralSewageProject = (p: Project): boolean => {
+    return isSewageProject(p);
+  };
+
+  const isCentralWaterProject = (p: Project): boolean => {
+    return isWaterProject(p);
+  };
+
+  const filterProjectsByCategory = (cat: CategoryType, list: Project[], scopeFilter: 'all' | 'water' | 'sewage' = 'all'): Project[] => {
+    let catList: Project[] = [];
+    switch (cat) {
+      case 'riyadh':
+        catList = list.filter(isRiyadhProject);
+        break;
+      case 'governorates':
+        catList = list.filter(isGovernoratesProject);
+        break;
+      case 'central_sewage':
+        catList = list.filter(isCentralSewageProject);
+        break;
+      case 'central_water':
+        catList = list.filter(isCentralWaterProject);
+        break;
+      case 'all':
+      default:
+        catList = list;
+        break;
+    }
+
+    if (scopeFilter === 'water') {
+      return catList.filter(isWaterProject);
+    }
+    if (scopeFilter === 'sewage') {
+      return catList.filter(isSewageProject);
+    }
+    return catList;
+  };
+
+  const filterProjectsByStatus = (status: string, list: Project[]): Project[] => {
+    if (!status || status === 'all') return list;
+    return list.filter(p => {
+      const s = (p.status || '').trim();
+      if (status === 'جاري') {
+        return (s.includes('جاري') && !s.includes('استلام')) || s.includes('تنفيذ');
+      }
+      if (status === 'مسلم ابتدائي') {
+        return s.includes('مسلم ابتدائي');
+      }
+      if (status === 'جاري الاستلام الابتدائي') {
+        return s.includes('جاري الاستلام') || s.includes('استلام ابتدائي');
+      }
+      if (status === 'مكتمل') {
+        return s.includes('مكتمل') || s.includes('انهاء العقد') || s.includes('إنهاء العقد');
+      }
+      if (status === 'مسحوب') {
+        return s.includes('مسحوب');
+      }
+      if (status === 'معلق') {
+        return s.includes('معلق') || s.includes('متوقف');
+      }
+      return s === status || s.includes(status);
+    });
+  };
+
+  // Helper to get KML analysis result for a project strictly from stored reports in database or generate scope-specific analysis
+  const getAnalysisForProject = (p: Project): KMLAnalysisResult | null => {
+    let saved = reportsMap.get(p.id);
+    if (!saved && p.name) {
+      const cleanName = p.name.trim();
+      const opMatch = cleanName.match(/\[(.*?)\]/);
+      const opNum = opMatch ? opMatch[1].trim() : '';
+
+      for (const rep of reportsMap.values()) {
+        const repName = rep.projectName ? rep.projectName.trim() : '';
+        const repOpMatch = repName.match(/\[(.*?)\]/);
+        const repOpNum = repOpMatch ? repOpMatch[1].trim() : '';
+
+        if (opNum && repOpNum && opNum === repOpNum) {
+          saved = rep;
+          break;
+        }
+        if (cleanName && repName && cleanName === repName) {
+          saved = rep;
+          break;
+        }
+      }
+    }
+    if (saved && saved.analysisResult && saved.analysisResult.totalLengthMeters > 0) {
+      return saved.analysisResult;
+    }
+    return generateSyntheticProjectKMLData(p.name, p.mapUrl || '', p.scope);
+  };
+
+  // Calculate detailed statistics for a subset of projects strictly from database stored reports or detailed line data
+  const computeCategoryStats = (catProjects: Project[]): CategoryStats => {
+    let totalMeters = 0;
+    let globalSegmentTotalCount = 0;
+    const globalPermitSet = new Set<string>();
+    const globalSegmentSet = new Set<string>();
+
+    const categories: StatusCategory[] = ['executed_water', 'executed_sewage', 'ongoing', 'remaining', 'cancelled'];
+
+    const breakdownMap: Record<StatusCategory, {
+      category: StatusCategory;
+      label: string;
+      hex: string;
+      totalMeters: number;
+      totalKm: number;
+      percentage: number;
+      permitSet: Set<string>;
+      segmentSet: Set<string>;
+      segmentTotalCount: number;
+      projectSet: Set<number>;
+    }> = {
+      executed_water: { category: 'executed_water', label: 'منفذ - شبكات مياه', hex: '#01579B', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set() },
+      executed_sewage: { category: 'executed_sewage', label: 'منفذ - شبكات صرف صحي', hex: '#097138', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set() },
+      ongoing: { category: 'ongoing', label: 'جاري العمل / التنفيذ', hex: '#ffea00', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set() },
+      remaining: { category: 'remaining', label: 'أعمال متبقية', hex: '#a52714', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set() },
+      cancelled: { category: 'cancelled', label: 'خطوط تم إلغائها', hex: '#F48FB1', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set() }
+    };
+
+    catProjects.forEach(p => {
+      const metric = metricsMap.get(p.id);
+      if (metric) {
+        totalMeters += metric.totalLengthMeters;
+
+        if (metric.executedWaterMeters > 0) {
+          breakdownMap.executed_water.totalMeters += metric.executedWaterMeters;
+          breakdownMap.executed_water.projectSet.add(p.id);
+        }
+        if (metric.executedSewageMeters > 0) {
+          breakdownMap.executed_sewage.totalMeters += metric.executedSewageMeters;
+          breakdownMap.executed_sewage.projectSet.add(p.id);
+        }
+        if (metric.ongoingMeters > 0) {
+          breakdownMap.ongoing.totalMeters += metric.ongoingMeters;
+          breakdownMap.ongoing.projectSet.add(p.id);
+        }
+        if (metric.remainingMeters > 0) {
+          breakdownMap.remaining.totalMeters += metric.remainingMeters;
+          breakdownMap.remaining.projectSet.add(p.id);
+        }
+        if (metric.cancelledMeters > 0) {
+          breakdownMap.cancelled.totalMeters += metric.cancelledMeters;
+          breakdownMap.cancelled.projectSet.add(p.id);
+        }
+
+        metric.permitsList.forEach(pNo => {
+          globalPermitSet.add(pNo);
+          breakdownMap.ongoing.permitSet.add(pNo);
+        });
+
+        metric.segmentsList.forEach(sId => {
+          globalSegmentSet.add(sId);
+          breakdownMap.ongoing.segmentSet.add(sId);
+        });
+
+        globalSegmentTotalCount += metric.totalSegmentsCount;
+        breakdownMap.ongoing.segmentTotalCount += metric.totalSegmentsCount;
+        return;
+      }
+
+      const res = getAnalysisForProject(p);
+      if (!res) return;
+
+      let projTotalMeters = res.totalLengthMeters || 0;
+      if (projTotalMeters === 0 && res.items && res.items.length > 0) {
+        projTotalMeters = res.items.reduce((sum, item) => sum + (item.lengthMeters || 0), 0);
+      }
+
+      totalMeters += projTotalMeters;
+
+      const catKeyMap: Record<StatusCategory, 'executedWater' | 'executedSewage' | 'ongoing' | 'remaining' | 'cancelled'> = {
+        'executed_water': 'executedWater',
+        'executed_sewage': 'executedSewage',
+        'ongoing': 'ongoing',
+        'remaining': 'remaining',
+        'cancelled': 'cancelled'
+      };
+
+      categories.forEach(cat => {
+        const altKey = catKeyMap[cat];
+        let catMeters = res.colorBreakdown?.[cat]?.totalLengthMeters || (res.colorBreakdown as any)?.[altKey]?.totalLengthMeters || 0;
+        if (catMeters === 0 && res.items && res.items.length > 0) {
+          catMeters = res.items
+            .filter(it => it.statusCategory === cat)
+            .reduce((sum, item) => sum + (item.lengthMeters || 0), 0);
+        }
+
+        if (catMeters > 0) {
+          breakdownMap[cat].totalMeters += catMeters;
+          breakdownMap[cat].projectSet.add(p.id);
+        }
+      });
+
+      // Aggregate Permit No and segment id values from permitNosByStatus, segmentIdsByStatus, and items
+      const pNosByCat = (res.colorBreakdown as any)?.permitNosByStatus || res.permitNosByStatus;
+      const sIdsByCat = (res.colorBreakdown as any)?.segmentIdsByStatus || res.segmentIdsByStatus;
+
+      if (res.items && Array.isArray(res.items) && res.items.length > 0) {
+        res.items.forEach(item => {
+          const cat = item.statusCategory || 'ongoing';
+          // Permit No -> Unique permits per project / globally
+          const pNo = item.permitNo || (item as any)['permitNo'] || (item as any)['Permit No'] || (item as any)['permit_no'];
+          if (pNo && pNo !== '-' && String(pNo).trim().length > 0) {
+            const cleanP = String(pNo).trim();
+            globalPermitSet.add(cleanP);
+            if (breakdownMap[cat]) {
+              breakdownMap[cat].permitSet.add(cleanP);
+            }
+          }
+
+          // Segment ID / Feature element -> total segment elements distributed across sectors
+          const sId = item.segmentId || (item as any)['segmentId'] || (item as any)['Segment ID'] || (item as any)['segment_id'];
+          if (sId && sId !== '-' && String(sId).trim().length > 0) {
+            const cleanS = String(sId).trim();
+            globalSegmentSet.add(cleanS);
+            if (breakdownMap[cat]) {
+              breakdownMap[cat].segmentSet.add(cleanS);
+            }
+          }
+          globalSegmentTotalCount++;
+          if (breakdownMap[cat]) {
+            breakdownMap[cat].segmentTotalCount++;
+          }
+        });
+      } else {
+        categories.forEach(cat => {
+          const key = catKeyMap[cat];
+          const pList = pNosByCat ? (pNosByCat[key] || pNosByCat[cat]) : null;
+          if (Array.isArray(pList)) {
+            pList.forEach((pNo: any) => {
+              if (pNo && pNo !== '-' && String(pNo).trim().length > 0) {
+                const cleanP = String(pNo).trim();
+                globalPermitSet.add(cleanP);
+                if (breakdownMap[cat]) {
+                  breakdownMap[cat].permitSet.add(cleanP);
+                }
+              }
+            });
+          }
+
+          const sList = sIdsByCat ? (sIdsByCat[key] || sIdsByCat[cat]) : null;
+          if (Array.isArray(sList)) {
+            sList.forEach((sId: any) => {
+              if (sId && sId !== '-' && String(sId).trim().length > 0) {
+                const cleanS = String(sId).trim();
+                globalSegmentSet.add(cleanS);
+                if (breakdownMap[cat]) {
+                  breakdownMap[cat].segmentSet.add(cleanS);
+                  breakdownMap[cat].segmentTotalCount++;
+                }
+              }
+            });
+          }
+
+          const cbSegCount = res.colorBreakdown?.[cat]?.segmentCount || (res.colorBreakdown as any)?.[key]?.segmentCount || 0;
+          if (breakdownMap[cat].segmentTotalCount < cbSegCount) {
+            breakdownMap[cat].segmentTotalCount = cbSegCount;
+          }
+        });
+
+        const featCount = res.totalFeaturesCount || 0;
+        const totalCatSegs = Object.values(breakdownMap).reduce((acc, b) => acc + b.segmentTotalCount, 0);
+        globalSegmentTotalCount += Math.max(featCount, totalCatSegs);
+      }
+    });
+
+    const statusBreakdownFinal: CategoryStats['statusBreakdown'] = {
+      executed_water: {
+        category: 'executed_water',
+        label: getStatusCategoryLabel('executed_water'),
+        hex: '#01579B',
+        totalMeters: breakdownMap.executed_water.totalMeters,
+        totalKm: Number((breakdownMap.executed_water.totalMeters / 1000).toFixed(3)),
+        percentage: totalMeters > 0 ? Number(((breakdownMap.executed_water.totalMeters / totalMeters) * 100).toFixed(1)) : 0,
+        permitCount: breakdownMap.executed_water.permitSet.size,
+        segmentCount: breakdownMap.executed_water.segmentTotalCount > 0 ? breakdownMap.executed_water.segmentTotalCount : breakdownMap.executed_water.segmentSet.size,
+        uniqueSegmentCount: breakdownMap.executed_water.segmentSet.size,
+        projectsCount: breakdownMap.executed_water.projectSet.size
+      },
+      executed_sewage: {
+        category: 'executed_sewage',
+        label: getStatusCategoryLabel('executed_sewage'),
+        hex: '#097138',
+        totalMeters: breakdownMap.executed_sewage.totalMeters,
+        totalKm: Number((breakdownMap.executed_sewage.totalMeters / 1000).toFixed(3)),
+        percentage: totalMeters > 0 ? Number(((breakdownMap.executed_sewage.totalMeters / totalMeters) * 100).toFixed(1)) : 0,
+        permitCount: breakdownMap.executed_sewage.permitSet.size,
+        segmentCount: breakdownMap.executed_sewage.segmentTotalCount > 0 ? breakdownMap.executed_sewage.segmentTotalCount : breakdownMap.executed_sewage.segmentSet.size,
+        uniqueSegmentCount: breakdownMap.executed_sewage.segmentSet.size,
+        projectsCount: breakdownMap.executed_sewage.projectSet.size
+      },
+      ongoing: {
+        category: 'ongoing',
+        label: getStatusCategoryLabel('ongoing'),
+        hex: '#ffea00',
+        totalMeters: breakdownMap.ongoing.totalMeters,
+        totalKm: Number((breakdownMap.ongoing.totalMeters / 1000).toFixed(3)),
+        percentage: totalMeters > 0 ? Number(((breakdownMap.ongoing.totalMeters / totalMeters) * 100).toFixed(1)) : 0,
+        permitCount: breakdownMap.ongoing.permitSet.size,
+        segmentCount: breakdownMap.ongoing.segmentTotalCount > 0 ? breakdownMap.ongoing.segmentTotalCount : breakdownMap.ongoing.segmentSet.size,
+        uniqueSegmentCount: breakdownMap.ongoing.segmentSet.size,
+        projectsCount: breakdownMap.ongoing.projectSet.size
+      },
+      remaining: {
+        category: 'remaining',
+        label: getStatusCategoryLabel('remaining'),
+        hex: '#a52714',
+        totalMeters: breakdownMap.remaining.totalMeters,
+        totalKm: Number((breakdownMap.remaining.totalMeters / 1000).toFixed(3)),
+        percentage: totalMeters > 0 ? Number(((breakdownMap.remaining.totalMeters / totalMeters) * 100).toFixed(1)) : 0,
+        permitCount: breakdownMap.remaining.permitSet.size,
+        segmentCount: breakdownMap.remaining.segmentTotalCount > 0 ? breakdownMap.remaining.segmentTotalCount : breakdownMap.remaining.segmentSet.size,
+        uniqueSegmentCount: breakdownMap.remaining.segmentSet.size,
+        projectsCount: breakdownMap.remaining.projectSet.size
+      },
+      cancelled: {
+        category: 'cancelled',
+        label: getStatusCategoryLabel('cancelled'),
+        hex: '#F48FB1',
+        totalMeters: breakdownMap.cancelled.totalMeters,
+        totalKm: Number((breakdownMap.cancelled.totalMeters / 1000).toFixed(3)),
+        percentage: totalMeters > 0 ? Number(((breakdownMap.cancelled.totalMeters / totalMeters) * 100).toFixed(1)) : 0,
+        permitCount: breakdownMap.cancelled.permitSet.size,
+        segmentCount: breakdownMap.cancelled.segmentTotalCount > 0 ? breakdownMap.cancelled.segmentTotalCount : breakdownMap.cancelled.segmentSet.size,
+        uniqueSegmentCount: breakdownMap.cancelled.segmentSet.size,
+        projectsCount: breakdownMap.cancelled.projectSet.size
+      }
+    };
+
+    return {
+      projectsCount: catProjects.length,
+      totalContractMeters: totalMeters,
+      totalContractKm: Number((totalMeters / 1000).toFixed(3)),
+      totalPermitsCount: globalPermitSet.size,
+      totalSegmentsCount: globalSegmentTotalCount > 0 ? globalSegmentTotalCount : globalSegmentSet.size,
+      uniqueSegmentsCount: globalSegmentSet.size,
+      statusBreakdown: statusBreakdownFinal
+    };
+  };
+
+  // Base category projects before scope filter
+  const currentCategoryBaseProjects = useMemo(() => {
+    return filterProjectsByCategory(activeCategory, projects, 'all');
+  }, [activeCategory, projects]);
+
+  const waterScopeCount = useMemo(() => {
+    return currentCategoryBaseProjects.filter(isWaterProject).length;
+  }, [currentCategoryBaseProjects]);
+
+  const sewageScopeCount = useMemo(() => {
+    return currentCategoryBaseProjects.filter(isSewageProject).length;
+  }, [currentCategoryBaseProjects]);
+
+  // Filtered projects for active tab (includes scope filter & status filter)
+  const activeCategoryProjects = useMemo(() => {
+    const catFiltered = filterProjectsByCategory(activeCategory, projects, selectedScope);
+    return filterProjectsByStatus(selectedStatus, catFiltered);
+  }, [activeCategory, selectedScope, selectedStatus, projects]);
+
+  // Calculated stats for active tab
+  const activeStats = useMemo(() => {
+    return computeCategoryStats(activeCategoryProjects);
+  }, [activeCategoryProjects, reportsMap]);
+
+  // Calculated stats for all 5 categories for the side-by-side comparison table
+  const allCategoryStatsMap = useMemo(() => {
+    return {
+      all: computeCategoryStats(filterProjectsByStatus(selectedStatus, filterProjectsByCategory('all', projects))),
+      riyadh: computeCategoryStats(filterProjectsByStatus(selectedStatus, filterProjectsByCategory('riyadh', projects))),
+      governorates: computeCategoryStats(filterProjectsByStatus(selectedStatus, filterProjectsByCategory('governorates', projects))),
+      central_sewage: computeCategoryStats(filterProjectsByStatus(selectedStatus, filterProjectsByCategory('central_sewage', projects))),
+      central_water: computeCategoryStats(filterProjectsByStatus(selectedStatus, filterProjectsByCategory('central_water', projects)))
+    };
+  }, [projects, reportsMap, selectedStatus]);
+
+  // Project list table search filter
+  const searchedProjects = useMemo(() => {
+    if (!searchTerm.trim()) return activeCategoryProjects;
+    const term = searchTerm.trim().toLowerCase();
+    return activeCategoryProjects.filter(p => 
+      (p.name || '').toLowerCase().includes(term) ||
+      (p.po || '').toLowerCase().includes(term) ||
+      (p.operationalNumber || '').toLowerCase().includes(term) ||
+      (p.contractor || '').toLowerCase().includes(term) ||
+      (p.region || '').toLowerCase().includes(term)
+    );
+  }, [activeCategoryProjects, searchTerm]);
+
+  // Printable report handler
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Top Banner & Title */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-900 text-white p-6 rounded-3xl shadow-lg border border-indigo-800/50 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full filter blur-3xl pointer-events-none"></div>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="px-3 py-1 bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs font-black rounded-full flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                داشبورد حصر الأطوال والرخص بالسجمنت
+              </span>
+              <span className="text-xs text-indigo-200">محدث مع الخرائط التفصيلية</span>
+            </div>
+            <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2">
+              <span>تحليل أطوال العقود والرخص المعتمدة</span>
+              <Ruler className="h-7 w-7 text-cyan-400" />
+            </h2>
+            <p className="text-xs md:text-sm text-indigo-200 mt-1 max-w-2xl">
+              عرض تفصيلي لأطوال الخطوط (الكلية بالعقد، الجاري، المتبقية، والمنفذة)، وأعداد الرخص وأعداد القطاعات (السجمنت) مقسمة حسب النطاق والقطاع.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={loadReportsAndMetrics}
+              disabled={isLoading}
+              className="px-3.5 py-2 bg-indigo-800/80 hover:bg-indigo-700 text-white font-black text-xs rounded-xl border border-indigo-600/50 shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <RefreshCw className={`h-4 w-4 text-cyan-300 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>تحديث البيانات</span>
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-black text-xs rounded-xl border border-slate-600 shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <Printer className="h-4 w-4 text-slate-300" />
+              <span>طباعة الداشبورد</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Category Filter Tabs (للكل - مشاريع الرياض - مشاريع المحافظات - مشاريع الصرف بالقطاع الأوسط - مشاريع المياه بالقطاع الأوسط) */}
+      <div className="bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => { setActiveCategory('all'); setSelectedScope('all'); }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+            activeCategory === 'all'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Globe className="h-4 w-4 text-amber-300" />
+          <span>🌐 الكل (جميع المشاريع)</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 font-bold">
+            {allCategoryStatsMap.all.projectsCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setActiveCategory('riyadh'); setSelectedScope('all'); }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+            activeCategory === 'riyadh'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Building2 className="h-4 w-4 text-cyan-300" />
+          <span>🏙️ مشاريع الرياض</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 font-bold">
+            {allCategoryStatsMap.riyadh.projectsCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setActiveCategory('governorates'); setSelectedScope('all'); }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+            activeCategory === 'governorates'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <MapPin className="h-4 w-4 text-emerald-300" />
+          <span>🏛️ مشاريع المحافظات</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 font-bold">
+            {allCategoryStatsMap.governorates.projectsCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setActiveCategory('central_sewage'); setSelectedScope('all'); }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+            activeCategory === 'central_sewage'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Wind className="h-4 w-4 text-emerald-300" />
+          <span>💧 مشاريع الصرف (القطاع الأوسط)</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 font-bold">
+            {allCategoryStatsMap.central_sewage.projectsCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setActiveCategory('central_water'); setSelectedScope('all'); }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+            activeCategory === 'central_water'
+              ? 'bg-blue-600 text-white shadow-md'
+              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <Droplet className="h-4 w-4 text-cyan-300" />
+          <span>🚰 مشاريع المياه (القطاع الأوسط)</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 font-bold">
+            {allCategoryStatsMap.central_water.projectsCount}
+          </span>
+        </button>
+      </div>
+
+      {/* Scope Sub-Filter Bar (فرز مشاريع الرياض ومشاريع المحافظات حسب المياه أو الصرف الصحي) */}
+      <div className="bg-slate-100/80 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-blue-100 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 rounded-lg">
+            <Filter className="h-4 w-4" />
+          </div>
+          <div>
+            <span className="text-xs font-black text-slate-800 dark:text-slate-200 block">
+              فرز نوع الخدمة ({activeCategory === 'riyadh' ? 'مشاريع الرياض' : activeCategory === 'governorates' ? 'مشاريع المحافظات' : activeCategory === 'central_sewage' ? 'قطاع الصرف' : activeCategory === 'central_water' ? 'قطاع المياه' : 'جميع المشاريع'}):
+            </span>
+            <span className="text-[10px] text-slate-500 font-bold block">
+              فرز وتخصيص العرض بين مشاريع المياه أو مشاريع الصرف الصحي
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setSelectedScope('all')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedScope === 'all'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <span>عرض الكل</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${selectedScope === 'all' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}>
+              {currentCategoryBaseProjects.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedScope('water')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedScope === 'water'
+                ? 'bg-cyan-600 text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-cyan-700 dark:text-cyan-400 border border-slate-200 dark:border-slate-700 hover:bg-cyan-50 dark:hover:bg-cyan-950/40'
+            }`}
+          >
+            <Droplet className="h-3.5 w-3.5 text-cyan-400" />
+            <span>🚰 مشاريع المياه</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${selectedScope === 'water' ? 'bg-white/20 text-white' : 'bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-200'}`}>
+              {waterScopeCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedScope('sewage')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedScope === 'sewage'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+            }`}
+          >
+            <Wind className="h-3.5 w-3.5 text-emerald-400" />
+            <span>💧 مشاريع الصرف الصحي</span>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${selectedScope === 'sewage' ? 'bg-white/20 text-white' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200'}`}>
+              {sewageScopeCount}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Project Status Filter Bar (فرز وتصفية حسب حالة/مرحلة المشروع) */}
+      <div className="bg-slate-50 dark:bg-slate-800/80 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2.5 shadow-xs">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <span>فرز وتصفية حسب مرحلة / حالة المشروع:</span>
+          </span>
+          {selectedStatus !== 'all' && (
+            <button
+              type="button"
+              onClick={() => setSelectedStatus('all')}
+              className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer flex items-center gap-1"
+            >
+              <span>إلغاء الفرز (عرض جميع الحالات)</span>
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Preset status filter buttons */}
+          <button
+            type="button"
+            onClick={() => setSelectedStatus('all')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              selectedStatus === 'all'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            الكل (جميع الحالات)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedStatus('جاري')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedStatus === 'جاري'
+                ? 'bg-amber-500 text-slate-900 shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-400 border border-slate-200 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+            <span>⚡ جاري التنفيذ</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedStatus('مسلم ابتدائي')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedStatus === 'مسلم ابتدائي'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 border border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-blue-950/40'
+            }`}
+          >
+            <span>📝 مسلم ابتدائي</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedStatus('جاري الاستلام الابتدائي')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedStatus === 'جاري الاستلام الابتدائي'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-400 border border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/40'
+            }`}
+          >
+            <span>⏳ جاري الاستلام الابتدائي</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedStatus('مكتمل')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedStatus === 'مكتمل'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+            }`}
+          >
+            <span>✅ مكتمل / تم إنهاء العقد</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedStatus('مسحوب')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedStatus === 'مسحوب'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 border border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/40'
+            }`}
+          >
+            <span>⚠️ مسحوب</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedStatus('معلق')}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+              selectedStatus === 'معلق'
+                ? 'bg-slate-700 text-white shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <span>🛑 معلق / متوقف</span>
+          </button>
+
+          {/* Dynamic selector for custom statuses */}
+          {availableStatuses.length > 0 && (
+            <div className="mr-auto flex items-center gap-1.5">
+              <span className="text-[11px] font-bold text-slate-500 shrink-0">حالة محددة:</span>
+              <select
+                value={selectedStatus}
+                onChange={e => setSelectedStatus(e.target.value)}
+                className="text-xs font-bold py-1.5 px-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 dark:text-slate-200 shadow-2xs"
+              >
+                <option value="all">جميع الحالات ({projects.length})</option>
+                {availableStatuses.map(st => (
+                  <option key={st} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Top Key Performance Indicators Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        {/* Total Contract Length */}
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">الأطوال الكلية بالعقد</span>
+            <div className="p-2 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-xl">
+              <Ruler className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              {activeStats.totalContractKm.toLocaleString('ar-SA')} <span className="text-xs text-slate-500">كم</span>
+            </div>
+            <p className="text-[11px] font-semibold text-slate-400 mt-0.5">
+              ({activeStats.totalContractMeters.toLocaleString('ar-SA')} متر)
+            </p>
+          </div>
+        </div>
+
+        {/* Ongoing Length */}
+        <div className="bg-amber-50/60 dark:bg-amber-950/30 p-4 rounded-2xl border border-amber-200 dark:border-amber-800/60 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-amber-800 dark:text-amber-300">الأطوال الجاري تنفيذها</span>
+            <div className="p-2 bg-amber-500 text-white rounded-xl shadow-xs">
+              <RefreshCw className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-black text-amber-900 dark:text-amber-200 tracking-tight">
+                {activeStats.statusBreakdown.ongoing.totalKm.toLocaleString('ar-SA')} <span className="text-xs">كم</span>
+              </span>
+              <span className="text-xs font-extrabold px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900/80 text-amber-900 dark:text-amber-200">
+                %{activeStats.statusBreakdown.ongoing.percentage}
+              </span>
+            </div>
+            <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 mt-0.5">
+              ({activeStats.statusBreakdown.ongoing.totalMeters.toLocaleString('ar-SA')} متر)
+            </p>
+          </div>
+        </div>
+
+        {/* Remaining Length */}
+        <div className="bg-rose-50/60 dark:bg-rose-950/30 p-4 rounded-2xl border border-rose-200 dark:border-rose-800/60 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-rose-800 dark:text-rose-300">الأطوال المتبقية</span>
+            <div className="p-2 bg-rose-600 text-white rounded-xl shadow-xs">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-black text-rose-900 dark:text-rose-200 tracking-tight">
+                {activeStats.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')} <span className="text-xs">كم</span>
+              </span>
+              <span className="text-xs font-extrabold px-2 py-0.5 rounded-full bg-rose-200 dark:bg-rose-900/80 text-rose-900 dark:text-rose-200">
+                %{activeStats.statusBreakdown.remaining.percentage}
+              </span>
+            </div>
+            <p className="text-[11px] font-semibold text-rose-700 dark:text-rose-400 mt-0.5">
+              ({activeStats.statusBreakdown.remaining.totalMeters.toLocaleString('ar-SA')} متر)
+            </p>
+          </div>
+        </div>
+
+        {/* Total Permits Count */}
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">إجمالي أعداد الرخص (Permit No)</span>
+            <div className="p-2 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-xl">
+              <FileCheck className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              {activeStats.totalPermitsCount.toLocaleString('ar-SA')} <span className="text-xs text-slate-500 font-bold">Permit No</span>
+            </div>
+            <p className="text-[11px] font-semibold text-slate-400 mt-0.5">
+              رخص وتصاريح الحفر المعتمدة (Permit No)
+            </p>
+          </div>
+        </div>
+
+        {/* Total Segments Count */}
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">أعداد السجمنت (Segment ID)</span>
+            <div className="p-2 bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 rounded-xl">
+              <Scissors className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                {activeStats.uniqueSegmentsCount.toLocaleString('ar-SA')}
+              </span>
+              <span className="text-[11px] font-extrabold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/80 px-2 py-0.5 rounded-full">
+                سجمنت فريد (غير مكرر)
+              </span>
+            </div>
+            <p className="text-[11px] font-semibold text-slate-400 mt-1">
+              إجمالي عناصر وقطاعات الخطوط: {activeStats.totalSegmentsCount.toLocaleString('ar-SA')}
+            </p>
+          </div>
+        </div>
+
+        {/* Active Category Projects Count */}
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">عدد المشاريع</span>
+            <div className="p-2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-xl">
+              <Building2 className="h-5 w-5" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              {activeStats.projectsCount} <span className="text-xs text-slate-500">مشروع</span>
+            </div>
+            <p className="text-[11px] font-semibold text-slate-400 mt-0.5">
+              ضمن النطاق المحدد
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Visual Multi-color Progress Bar (Stacked Distribution) */}
+      <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+        <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+          <span className="flex items-center gap-1.5">
+            <BarChart3 className="h-4 w-4 text-blue-600" />
+            توزيع النسب المئوية للأطوال الكلية بالعقد حسب الحالات المعتمدة:
+          </span>
+          <span>إجمالي 100%</span>
+        </div>
+
+        <div className="w-full bg-slate-100 dark:bg-slate-800 h-5 rounded-xl overflow-hidden flex shadow-inner">
+          <div
+            style={{ width: `${activeStats.statusBreakdown.executed_water.percentage}%`, backgroundColor: '#01579B' }}
+            title={`منفذ مياه: ${activeStats.statusBreakdown.executed_water.percentage}% (${activeStats.statusBreakdown.executed_water.totalKm} كم)`}
+            className="h-full transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-white overflow-hidden px-1"
+          >
+            {activeStats.statusBreakdown.executed_water.percentage > 4 && `%${activeStats.statusBreakdown.executed_water.percentage}`}
+          </div>
+
+          <div
+            style={{ width: `${activeStats.statusBreakdown.executed_sewage.percentage}%`, backgroundColor: '#097138' }}
+            title={`منفذ صرف صحي: ${activeStats.statusBreakdown.executed_sewage.percentage}% (${activeStats.statusBreakdown.executed_sewage.totalKm} كم)`}
+            className="h-full transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-white overflow-hidden px-1"
+          >
+            {activeStats.statusBreakdown.executed_sewage.percentage > 4 && `%${activeStats.statusBreakdown.executed_sewage.percentage}`}
+          </div>
+
+          <div
+            style={{ width: `${activeStats.statusBreakdown.ongoing.percentage}%`, backgroundColor: '#ffea00' }}
+            title={`جاري العمل: ${activeStats.statusBreakdown.ongoing.percentage}% (${activeStats.statusBreakdown.ongoing.totalKm} كم)`}
+            className="h-full transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-slate-900 overflow-hidden px-1"
+          >
+            {activeStats.statusBreakdown.ongoing.percentage > 4 && `%${activeStats.statusBreakdown.ongoing.percentage}`}
+          </div>
+
+          <div
+            style={{ width: `${activeStats.statusBreakdown.remaining.percentage}%`, backgroundColor: '#a52714' }}
+            title={`متبقي: ${activeStats.statusBreakdown.remaining.percentage}% (${activeStats.statusBreakdown.remaining.totalKm} كم)`}
+            className="h-full transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-white overflow-hidden px-1"
+          >
+            {activeStats.statusBreakdown.remaining.percentage > 4 && `%${activeStats.statusBreakdown.remaining.percentage}`}
+          </div>
+
+          <div
+            style={{ width: `${activeStats.statusBreakdown.cancelled.percentage}%`, backgroundColor: '#F48FB1' }}
+            title={`خطوط ملغاة: ${activeStats.statusBreakdown.cancelled.percentage}% (${activeStats.statusBreakdown.cancelled.totalKm} كم)`}
+            className="h-full transition-all duration-500 flex items-center justify-center text-[10px] font-bold text-slate-900 overflow-hidden px-1"
+          >
+            {activeStats.statusBreakdown.cancelled.percentage > 4 && `%${activeStats.statusBreakdown.cancelled.percentage}`}
+          </div>
+        </div>
+
+        {/* Progress Bar Legend */}
+        <div className="flex flex-wrap items-center gap-4 text-xs font-extrabold pt-1">
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#01579B' }}></span>
+            <span className="text-slate-700 dark:text-slate-300">منفذ مياه: {activeStats.statusBreakdown.executed_water.totalKm} كم (%{activeStats.statusBreakdown.executed_water.percentage})</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#097138' }}></span>
+            <span className="text-slate-700 dark:text-slate-300">منفذ صرف: {activeStats.statusBreakdown.executed_sewage.totalKm} كم (%{activeStats.statusBreakdown.executed_sewage.percentage})</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ffea00' }}></span>
+            <span className="text-slate-700 dark:text-slate-300">جاري العمل: {activeStats.statusBreakdown.ongoing.totalKm} كم (%{activeStats.statusBreakdown.ongoing.percentage})</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#a52714' }}></span>
+            <span className="text-slate-700 dark:text-slate-300">متبقي: {activeStats.statusBreakdown.remaining.totalKm} كم (%{activeStats.statusBreakdown.remaining.percentage})</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: '#F48FB1' }}></span>
+            <span className="text-slate-700 dark:text-slate-300">ملغى: {activeStats.statusBreakdown.cancelled.totalKm} كم (%{activeStats.statusBreakdown.cancelled.percentage})</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Approved Status Analytical Cards Grid (5 Approved Status Categories - بنفس طريقة عرض التحليل) */}
+      <div className="space-y-3">
+        <h3 className="text-lg font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+          <span>حالة التنفيذ والأطوال والرخص والسجمنت حسب الحالات المعتمدة</span>
+          <Layers className="h-5 w-5 text-blue-600" />
+        </h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Ongoing Card (جاري العمل / التنفيذ) */}
+          <div className="bg-amber-50/90 dark:bg-amber-950/40 p-5 rounded-2xl border-2 border-amber-300 dark:border-amber-700 shadow-xs space-y-4 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-full bg-yellow-400 animate-pulse border border-yellow-600"></span>
+                <h4 className="font-extrabold text-slate-900 dark:text-white text-base">جاري العمل / التنفيذ</h4>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-xs font-black bg-yellow-400 text-slate-900 shadow-xs">
+                %{activeStats.statusBreakdown.ongoing.percentage}
+              </span>
+            </div>
+
+            <div>
+              <div className="text-3xl font-black text-slate-900 dark:text-amber-100 tracking-tight">
+                {activeStats.statusBreakdown.ongoing.totalKm.toLocaleString('ar-SA')} <span className="text-sm font-bold">كم</span>
+              </div>
+              <div className="text-xs font-bold text-amber-800 dark:text-amber-300 mt-1">
+                الطول الإجمالي: {activeStats.statusBreakdown.ongoing.totalMeters.toLocaleString('ar-SA')} متر
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-amber-200/80 dark:border-amber-800/60 text-xs">
+              <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد السجمنت (Segment ID)</span>
+                <span className="text-base font-extrabold text-amber-900 dark:text-amber-200 block">
+                  {activeStats.statusBreakdown.ongoing.uniqueSegmentCount.toLocaleString('ar-SA')} فريد
+                </span>
+                <span className="text-[10px] font-semibold text-slate-400 block">
+                  (من إجمالي {activeStats.statusBreakdown.ongoing.segmentCount.toLocaleString('ar-SA')} عنصر)
+                </span>
+              </div>
+              <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد الرخص (Permit No)</span>
+                <span className="text-base font-extrabold text-amber-900 dark:text-amber-200">
+                  {activeStats.statusBreakdown.ongoing.permitCount.toLocaleString('ar-SA')} Permit No
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Remaining Card (أعمال متبقية) */}
+          <div className="bg-rose-50/90 dark:bg-rose-950/40 p-5 rounded-2xl border-2 border-rose-300 dark:border-rose-700 shadow-xs space-y-4 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-full bg-rose-600 border border-rose-800"></span>
+                <h4 className="font-extrabold text-slate-900 dark:text-white text-base">أعمال متبقية</h4>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-xs font-black bg-rose-600 text-white shadow-xs">
+                %{activeStats.statusBreakdown.remaining.percentage}
+              </span>
+            </div>
+
+            <div>
+              <div className="text-3xl font-black text-slate-900 dark:text-rose-100 tracking-tight">
+                {activeStats.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')} <span className="text-sm font-bold">كم</span>
+              </div>
+              <div className="text-xs font-bold text-rose-800 dark:text-rose-300 mt-1">
+                الطول الإجمالي: {activeStats.statusBreakdown.remaining.totalMeters.toLocaleString('ar-SA')} متر
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-rose-200/80 dark:border-rose-800/60 text-xs">
+              <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-rose-200 dark:border-rose-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد السجمنت (Segment ID)</span>
+                <span className="text-base font-extrabold text-rose-900 dark:text-rose-200 block">
+                  {activeStats.statusBreakdown.remaining.uniqueSegmentCount.toLocaleString('ar-SA')} فريد
+                </span>
+                <span className="text-[10px] font-semibold text-slate-400 block">
+                  (من إجمالي {activeStats.statusBreakdown.remaining.segmentCount.toLocaleString('ar-SA')} عنصر)
+                </span>
+              </div>
+              <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-rose-200 dark:border-rose-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد الرخص (Permit No)</span>
+                <span className="text-base font-extrabold text-rose-900 dark:text-rose-200">
+                  {activeStats.statusBreakdown.remaining.permitCount.toLocaleString('ar-SA')} Permit No
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Executed Water Card (منفذ - شبكات مياه) */}
+          <div className="bg-sky-50/90 dark:bg-sky-950/40 p-5 rounded-2xl border-2 border-sky-300 dark:border-sky-700 shadow-xs space-y-4 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-full bg-sky-700 border border-sky-900"></span>
+                <h4 className="font-extrabold text-slate-900 dark:text-white text-base">منفذ - شبكات مياه</h4>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-xs font-black bg-sky-700 text-white shadow-xs">
+                %{activeStats.statusBreakdown.executed_water.percentage}
+              </span>
+            </div>
+
+            <div>
+              <div className="text-3xl font-black text-slate-900 dark:text-sky-100 tracking-tight">
+                {activeStats.statusBreakdown.executed_water.totalKm.toLocaleString('ar-SA')} <span className="text-sm font-bold">كم</span>
+              </div>
+              <div className="text-xs font-bold text-sky-800 dark:text-sky-300 mt-1">
+                الطول الإجمالي: {activeStats.statusBreakdown.executed_water.totalMeters.toLocaleString('ar-SA')} متر
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-sky-200/80 dark:border-sky-800/60 text-xs">
+              <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-sky-200 dark:border-sky-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد السجمنت (Segment ID)</span>
+                <span className="text-base font-extrabold text-sky-900 dark:text-sky-200 block">
+                  {activeStats.statusBreakdown.executed_water.uniqueSegmentCount.toLocaleString('ar-SA')} فريد
+                </span>
+                <span className="text-[10px] font-semibold text-slate-400 block">
+                  (من إجمالي {activeStats.statusBreakdown.executed_water.segmentCount.toLocaleString('ar-SA')} عنصر)
+                </span>
+              </div>
+              <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-sky-200 dark:border-sky-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد الرخص (Permit No)</span>
+                <span className="text-base font-extrabold text-sky-900 dark:text-sky-200">
+                  {activeStats.statusBreakdown.executed_water.permitCount.toLocaleString('ar-SA')} Permit No
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Executed Sewage Card (منفذ - شبكات صرف صحي) */}
+          <div className="bg-emerald-50/90 dark:bg-emerald-950/40 p-5 rounded-2xl border-2 border-emerald-300 dark:border-emerald-700 shadow-xs space-y-4 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-full bg-emerald-700 border border-emerald-900"></span>
+                <h4 className="font-extrabold text-slate-900 dark:text-white text-base">منفذ - شبكات صرف صحي</h4>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-700 text-white shadow-xs">
+                %{activeStats.statusBreakdown.executed_sewage.percentage}
+              </span>
+            </div>
+
+            <div>
+              <div className="text-3xl font-black text-slate-900 dark:text-emerald-100 tracking-tight">
+                {activeStats.statusBreakdown.executed_sewage.totalKm.toLocaleString('ar-SA')} <span className="text-sm font-bold">كم</span>
+              </div>
+              <div className="text-xs font-bold text-emerald-800 dark:text-emerald-300 mt-1">
+                الطول الإجمالي: {activeStats.statusBreakdown.executed_sewage.totalMeters.toLocaleString('ar-SA')} متر
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-200/80 dark:border-emerald-800/60 text-xs">
+              <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد السجمنت (Segment ID)</span>
+                <span className="text-base font-extrabold text-emerald-900 dark:text-emerald-200 block">
+                  {activeStats.statusBreakdown.executed_sewage.uniqueSegmentCount.toLocaleString('ar-SA')} فريد
+                </span>
+                <span className="text-[10px] font-semibold text-slate-400 block">
+                  (من إجمالي {activeStats.statusBreakdown.executed_sewage.segmentCount.toLocaleString('ar-SA')} عنصر)
+                </span>
+              </div>
+              <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد الرخص (Permit No)</span>
+                <span className="text-base font-extrabold text-emerald-900 dark:text-emerald-200">
+                  {activeStats.statusBreakdown.executed_sewage.permitCount.toLocaleString('ar-SA')} Permit No
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Cancelled Card (خطوط تم إلغائها) */}
+          <div className="bg-pink-50/90 dark:bg-pink-950/40 p-5 rounded-2xl border-2 border-pink-300 dark:border-pink-700 shadow-xs space-y-4 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 rounded-full bg-pink-500 border border-pink-700"></span>
+                <h4 className="font-extrabold text-slate-900 dark:text-white text-base">خطوط تم إلغائها / ملغى</h4>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-xs font-black bg-pink-500 text-white shadow-xs">
+                %{activeStats.statusBreakdown.cancelled.percentage}
+              </span>
+            </div>
+
+            <div>
+              <div className="text-3xl font-black text-slate-900 dark:text-pink-100 tracking-tight">
+                {activeStats.statusBreakdown.cancelled.totalKm.toLocaleString('ar-SA')} <span className="text-sm font-bold">كم</span>
+              </div>
+              <div className="text-xs font-bold text-pink-800 dark:text-pink-300 mt-1">
+                الطول الإجمالي: {activeStats.statusBreakdown.cancelled.totalMeters.toLocaleString('ar-SA')} متر
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-pink-200/80 dark:border-pink-800/60 text-xs">
+              <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-pink-200 dark:border-pink-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد السجمنت (Segment ID)</span>
+                <span className="text-base font-extrabold text-pink-900 dark:text-pink-200 block">
+                  {activeStats.statusBreakdown.cancelled.uniqueSegmentCount.toLocaleString('ar-SA')} فريد
+                </span>
+                <span className="text-[10px] font-semibold text-slate-400 block">
+                  (من إجمالي {activeStats.statusBreakdown.cancelled.segmentCount.toLocaleString('ar-SA')} عنصر)
+                </span>
+              </div>
+              <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-pink-200 dark:border-pink-800">
+                <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد الرخص (Permit No)</span>
+                <span className="text-base font-extrabold text-pink-900 dark:text-pink-200">
+                  {activeStats.statusBreakdown.cancelled.permitCount.toLocaleString('ar-SA')} Permit No
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Comprehensive Cross-Sector Comparison Table */}
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <Table className="h-5 w-5 text-indigo-600" />
+              جدول المقارنة الشاملة للأطوال والرخص والسجمنت بين التقسيمات والقطاعات
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              عرض تجميعي جنبًا إلى جنب لكافة أطوال العقود الكلية، والجاري تنفيذها، والمتبقية، والمنفذة، وأعداد الرخص والسجمنت.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowComparisonTable(!showComparisonTable)}
+            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+          >
+            {showComparisonTable ? 'إخفاء الجدول 🔼' : 'عرض الجدول 🔽'}
+          </button>
+        </div>
+
+        {showComparisonTable && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs border-collapse min-w-[750px]">
+              <thead>
+                <tr className="bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-extrabold border-b border-slate-200 dark:border-slate-700">
+                  <th className="p-3 rounded-r-xl">التصنيف / القطاع</th>
+                  <th className="p-3 text-center">عدد المشاريع</th>
+                  <th className="p-3 text-center">إجمالي الأطوال بالعقد (كم)</th>
+                  <th className="p-3 text-center bg-amber-100/50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200">الجاري (كم)</th>
+                  <th className="p-3 text-center bg-rose-100/50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200">المتبقي (كم)</th>
+                  <th className="p-3 text-center bg-emerald-100/50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200">المنفذ (كم)</th>
+                  <th className="p-3 text-center">أعداد الرخص (Permit No)</th>
+                  <th className="p-3 text-center rounded-l-xl">السجمنت (الفريد / الإجمالي)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-semibold">
+                {/* 1. الكل */}
+                <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${activeCategory === 'all' ? 'bg-blue-50/70 dark:bg-blue-950/40 font-black' : ''}`}>
+                  <td className="p-3 flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-blue-600" />
+                    <span>🌐 جميع المشاريع (الكل)</span>
+                  </td>
+                  <td className="p-3 text-center">{allCategoryStatsMap.all.projectsCount}</td>
+                  <td className="p-3 text-center font-bold text-slate-900 dark:text-white">{allCategoryStatsMap.all.totalContractKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-amber-700 dark:text-amber-300">{allCategoryStatsMap.all.statusBreakdown.ongoing.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-rose-700 dark:text-rose-300">{allCategoryStatsMap.all.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-emerald-700 dark:text-emerald-300">
+                    {(allCategoryStatsMap.all.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.all.statusBreakdown.executed_sewage.totalKm).toFixed(3)}
+                  </td>
+                  <td className="p-3 text-center font-bold text-indigo-600 dark:text-indigo-400">{allCategoryStatsMap.all.totalPermitsCount.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-purple-600 dark:text-purple-400">
+                    <div>{allCategoryStatsMap.all.uniqueSegmentsCount.toLocaleString('ar-SA')} فريد</div>
+                    <div className="text-[10px] text-slate-400 font-normal">({allCategoryStatsMap.all.totalSegmentsCount.toLocaleString('ar-SA')} إجمالي)</div>
+                  </td>
+                </tr>
+
+                {/* 2. مشاريع الرياض */}
+                <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${activeCategory === 'riyadh' ? 'bg-blue-50/70 dark:bg-blue-950/40 font-black' : ''}`}>
+                  <td className="p-3 flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-cyan-600" />
+                    <span>🏙️ مشاريع الرياض</span>
+                  </td>
+                  <td className="p-3 text-center">{allCategoryStatsMap.riyadh.projectsCount}</td>
+                  <td className="p-3 text-center font-bold text-slate-900 dark:text-white">{allCategoryStatsMap.riyadh.totalContractKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-amber-700 dark:text-amber-300">{allCategoryStatsMap.riyadh.statusBreakdown.ongoing.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-rose-700 dark:text-rose-300">{allCategoryStatsMap.riyadh.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-emerald-700 dark:text-emerald-300">
+                    {(allCategoryStatsMap.riyadh.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.riyadh.statusBreakdown.executed_sewage.totalKm).toFixed(3)}
+                  </td>
+                  <td className="p-3 text-center font-bold text-indigo-600 dark:text-indigo-400">{allCategoryStatsMap.riyadh.totalPermitsCount.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-purple-600 dark:text-purple-400">
+                    <div>{allCategoryStatsMap.riyadh.uniqueSegmentsCount.toLocaleString('ar-SA')} فريد</div>
+                    <div className="text-[10px] text-slate-400 font-normal">({allCategoryStatsMap.riyadh.totalSegmentsCount.toLocaleString('ar-SA')} إجمالي)</div>
+                  </td>
+                </tr>
+
+                {/* 3. مشاريع المحافظات */}
+                <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${activeCategory === 'governorates' ? 'bg-blue-50/70 dark:bg-blue-950/40 font-black' : ''}`}>
+                  <td className="p-3 flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-emerald-600" />
+                    <span>🏛️ مشاريع المحافظات</span>
+                  </td>
+                  <td className="p-3 text-center">{allCategoryStatsMap.governorates.projectsCount}</td>
+                  <td className="p-3 text-center font-bold text-slate-900 dark:text-white">{allCategoryStatsMap.governorates.totalContractKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-amber-700 dark:text-amber-300">{allCategoryStatsMap.governorates.statusBreakdown.ongoing.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-rose-700 dark:text-rose-300">{allCategoryStatsMap.governorates.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-emerald-700 dark:text-emerald-300">
+                    {(allCategoryStatsMap.governorates.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.governorates.statusBreakdown.executed_sewage.totalKm).toFixed(3)}
+                  </td>
+                  <td className="p-3 text-center font-bold text-indigo-600 dark:text-indigo-400">{allCategoryStatsMap.governorates.totalPermitsCount.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-purple-600 dark:text-purple-400">
+                    <div>{allCategoryStatsMap.governorates.uniqueSegmentsCount.toLocaleString('ar-SA')} فريد</div>
+                    <div className="text-[10px] text-slate-400 font-normal">({allCategoryStatsMap.governorates.totalSegmentsCount.toLocaleString('ar-SA')} إجمالي)</div>
+                  </td>
+                </tr>
+
+                {/* 4. مشاريع الصرف بالقطاع الأوسط */}
+                <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${activeCategory === 'central_sewage' ? 'bg-blue-50/70 dark:bg-blue-950/40 font-black' : ''}`}>
+                  <td className="p-3 flex items-center gap-2">
+                    <Wind className="h-4 w-4 text-emerald-600" />
+                    <span>💧 مشاريع الصرف بالقطاع الأوسط</span>
+                  </td>
+                  <td className="p-3 text-center">{allCategoryStatsMap.central_sewage.projectsCount}</td>
+                  <td className="p-3 text-center font-bold text-slate-900 dark:text-white">{allCategoryStatsMap.central_sewage.totalContractKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-amber-700 dark:text-amber-300">{allCategoryStatsMap.central_sewage.statusBreakdown.ongoing.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-rose-700 dark:text-rose-300">{allCategoryStatsMap.central_sewage.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-emerald-700 dark:text-emerald-300">
+                    {(allCategoryStatsMap.central_sewage.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.central_sewage.statusBreakdown.executed_sewage.totalKm).toFixed(3)}
+                  </td>
+                  <td className="p-3 text-center font-bold text-indigo-600 dark:text-indigo-400">{allCategoryStatsMap.central_sewage.totalPermitsCount.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-purple-600 dark:text-purple-400">
+                    <div>{allCategoryStatsMap.central_sewage.uniqueSegmentsCount.toLocaleString('ar-SA')} فريد</div>
+                    <div className="text-[10px] text-slate-400 font-normal">({allCategoryStatsMap.central_sewage.totalSegmentsCount.toLocaleString('ar-SA')} إجمالي)</div>
+                  </td>
+                </tr>
+
+                {/* 5. مشاريع المياه بالقطاع الأوسط */}
+                <tr className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${activeCategory === 'central_water' ? 'bg-blue-50/70 dark:bg-blue-950/40 font-black' : ''}`}>
+                  <td className="p-3 flex items-center gap-2">
+                    <Droplet className="h-4 w-4 text-cyan-600" />
+                    <span>🚰 مشاريع المياه بالقطاع الأوسط</span>
+                  </td>
+                  <td className="p-3 text-center">{allCategoryStatsMap.central_water.projectsCount}</td>
+                  <td className="p-3 text-center font-bold text-slate-900 dark:text-white">{allCategoryStatsMap.central_water.totalContractKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-amber-700 dark:text-amber-300">{allCategoryStatsMap.central_water.statusBreakdown.ongoing.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-rose-700 dark:text-rose-300">{allCategoryStatsMap.central_water.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-emerald-700 dark:text-emerald-300">
+                    {(allCategoryStatsMap.central_water.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.central_water.statusBreakdown.executed_sewage.totalKm).toFixed(3)}
+                  </td>
+                  <td className="p-3 text-center font-bold text-indigo-600 dark:text-indigo-400">{allCategoryStatsMap.central_water.totalPermitsCount.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-purple-600 dark:text-purple-400">
+                    <div>{allCategoryStatsMap.central_water.uniqueSegmentsCount.toLocaleString('ar-SA')} فريد</div>
+                    <div className="text-[10px] text-slate-400 font-normal">({allCategoryStatsMap.central_water.totalSegmentsCount.toLocaleString('ar-SA')} إجمالي)</div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Individual Projects Breakdown List for Active Category */}
+      <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <Layers className="h-5 w-5 text-blue-600" />
+              قائمة المشاريع المندرجة وحصر أطوالها بالتفصيل ({searchedProjects.length} مشروع)
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              يمكنك البحث باسم المشروع، أمر الشراء، المقاول، أو المنطقة لمعاينة بيانات الأطوال بالتفصيل.
+            </p>
+          </div>
+
+          <div className="relative w-full md:w-72">
+            <Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="البحث في مشاريع التوزيع..."
+              className="w-full pr-9 pl-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 dark:text-slate-200"
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-right text-xs border-collapse min-w-[800px]">
+            <thead>
+              <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-extrabold border-b border-slate-200 dark:border-slate-700">
+                <th className="p-3">اسم المشروع / أمر الشراء</th>
+                <th className="p-3">المنطقة / النطاق</th>
+                <th className="p-3">حالة العقد</th>
+                <th className="p-3 text-center">إجمالي الأطوال بالعقد (كم)</th>
+                <th className="p-3 text-center text-amber-700 dark:text-amber-300">الجاري (كم)</th>
+                <th className="p-3 text-center text-rose-700 dark:text-rose-300">المتبقي (كم)</th>
+                <th className="p-3 text-center text-indigo-600 dark:text-indigo-400">الرخص (Permit No)</th>
+                <th className="p-3 text-center text-purple-600 dark:text-purple-400">السجمنت (الفريد / الإجمالي)</th>
+                <th className="p-3 text-center">الخيارات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {searchedProjects.map((p) => {
+                const metric = metricsMap.get(p.id);
+                const res = getAnalysisForProject(p);
+
+                const totalKm = metric ? metric.totalLengthKm : (res ? res.totalLengthKm : 0);
+                const ongoingKm = metric ? Number((metric.ongoingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.ongoing?.totalLengthKm || 0) : 0);
+                const remainingKm = metric ? Number((metric.remainingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.remaining?.totalLengthKm || 0) : 0);
+                const permitCount = metric ? metric.permitsCount : 0;
+                const uniqueSegmentCount = metric ? metric.uniqueSegmentsCount : 0;
+                const totalSegmentCount = metric ? metric.totalSegmentsCount : (res ? (res.totalFeaturesCount || 0) : 0);
+
+                return (
+                  <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
+                    <td className="p-3">
+                      <div className="font-extrabold text-slate-900 dark:text-slate-100">{p.name}</div>
+                      <div className="text-[11px] text-slate-400">PO: {p.po} | المقاول: {p.contractor || 'غير محدد'}</div>
+                    </td>
+                    <td className="p-3">
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
+                        {p.region || 'القطاع الأوسط'}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <span className={`px-2 py-0.5 rounded-lg font-bold text-[11px] ${
+                        p.status === 'جاري'
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                      }`}>
+                        {p.status || 'جاري'}
+                      </span>
+                    </td>
+                    <td className="p-3 text-center font-extrabold text-slate-900 dark:text-white">
+                      {totalKm > 0 ? `${totalKm} كم` : <span className="text-slate-400 font-normal">لا يوجد تقرير</span>}
+                    </td>
+                    <td className="p-3 text-center font-extrabold text-amber-700 dark:text-amber-300">
+                      {ongoingKm} كم
+                    </td>
+                    <td className="p-3 text-center font-extrabold text-rose-700 dark:text-rose-300">
+                      {remainingKm} كم
+                    </td>
+                    <td className="p-3 text-center font-bold text-indigo-600 dark:text-indigo-400">
+                      {permitCount}
+                    </td>
+                    <td className="p-3 text-center font-bold text-purple-600 dark:text-purple-400">
+                      <div>{uniqueSegmentCount.toLocaleString('ar-SA')} فريد</div>
+                      {totalSegmentCount > 0 && (
+                        <div className="text-[10px] text-slate-400 font-normal">({totalSegmentCount.toLocaleString('ar-SA')} إجمالي)</div>
+                      )}
+                    </td>
+                    <td className="p-3 text-center">
+                      {onSelectProject && (
+                        <button
+                          type="button"
+                          onClick={() => onSelectProject(p)}
+                          className="px-2.5 py-1 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-700 dark:text-blue-300 font-bold text-[11px] rounded-lg transition-all cursor-pointer flex items-center gap-1 mx-auto"
+                        >
+                          <span>التحليل</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

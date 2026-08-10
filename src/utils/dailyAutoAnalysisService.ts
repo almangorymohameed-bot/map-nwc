@@ -89,7 +89,7 @@ function notifyListeners() {
 export async function runSequentialDailyAutoAnalysis(
   projects: Project[],
   options: { forceRun?: boolean; onNotificationCreated?: (notif: any) => void } = {}
-): Promise<{ processed: number; changesFound: number }> {
+): Promise<{ processed: number; changesFound: number; wasCancelled?: boolean }> {
   // If not forced by Admin click, check if auto analysis is explicitly enabled
   if (!options.forceRun) {
     const config = getScheduleAutoAnalysisConfig();

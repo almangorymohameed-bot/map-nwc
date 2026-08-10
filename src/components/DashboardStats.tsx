@@ -5,8 +5,9 @@
 
 import React, { useState } from 'react';
 import { Project } from '../types';
-import { Droplet, Wind, RefreshCw, CheckCircle2, AlertTriangle, Building2, MapPin, Layers, BarChart3, Globe, Sparkles } from 'lucide-react';
+import { Droplet, Wind, RefreshCw, CheckCircle2, AlertTriangle, Building2, MapPin, Layers, BarChart3, Globe, Sparkles, Ruler, SlidersHorizontal } from 'lucide-react';
 import { MyMapsAnalysisPanel } from './MyMapsAnalysisPanel';
+import { ProjectLengthsDashboard } from './ProjectLengthsDashboard';
 
 interface DashboardStatsProps {
   projects: Project[];
@@ -16,12 +17,38 @@ interface DashboardStatsProps {
 }
 
 export function DashboardStats({ projects, selectedProject, onSelectProject, isAdmin }: DashboardStatsProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'general' | 'mymaps'>('general');
+  const [activeSubTab, setActiveSubTab] = useState<'lengths' | 'general' | 'mymaps'>('lengths');
+  const [selectedGeneralStatus, setSelectedGeneralStatus] = useState<string>('all');
 
-  // Calculations based on the input projects
-  const total = projects.length;
+  // Filter projects by general status if selected
+  const filteredProjects = projects.filter(p => {
+    if (selectedGeneralStatus === 'all') return true;
+    const s = (p.status || '').trim();
+    if (selectedGeneralStatus === 'جاري') {
+      return (s.includes('جاري') && !s.includes('استلام')) || s.includes('تنفيذ');
+    }
+    if (selectedGeneralStatus === 'مسلم ابتدائي') {
+      return s.includes('مسلم ابتدائي');
+    }
+    if (selectedGeneralStatus === 'جاري الاستلام الابتدائي') {
+      return s.includes('جاري الاستلام') || s.includes('استلام ابتدائي');
+    }
+    if (selectedGeneralStatus === 'مكتمل') {
+      return s.includes('مكتمل') || s.includes('انهاء العقد') || s.includes('إنهاء العقد');
+    }
+    if (selectedGeneralStatus === 'مسحوب') {
+      return s.includes('مسحوب');
+    }
+    if (selectedGeneralStatus === 'معلق') {
+      return s.includes('معلق') || s.includes('متوقف');
+    }
+    return s === selectedGeneralStatus || s.includes(selectedGeneralStatus);
+  });
+
+  // Calculations based on filtered projects
+  const total = filteredProjects.length;
   
-  const sewageCount = projects.filter(p => {
+  const sewageCount = filteredProjects.filter(p => {
     const scopeStr = Array.isArray(p.scope) ? p.scope.join(' ') : (p.scope || '');
     const nameStr = p.name || '';
     const classStr = p.classification || '';
@@ -29,7 +56,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
            nameStr.includes('الرفع') || nameStr.includes('صرف') || classStr.includes('الرفع') || classStr.includes('صرف');
   }).length;
 
-  const waterCount = projects.filter(p => {
+  const waterCount = filteredProjects.filter(p => {
     const scopeStr = Array.isArray(p.scope) ? p.scope.join(' ') : (p.scope || '');
     const nameStr = p.name || '';
     const classStr = p.classification || '';
@@ -38,22 +65,22 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
 
   const otherScopeCount = total - sewageCount - waterCount;
 
-  const currentCount = projects.filter(p => {
+  const currentCount = filteredProjects.filter(p => {
     const statusStr = p.status || '';
     return (statusStr.includes('جاري') || statusStr.includes('تنفيذ') || statusStr.includes('التنفيذ') || statusStr.includes('مستأنف')) && !statusStr.includes('الاستلام');
   }).length;
-  const initialHandoverCount = projects.filter(p => {
+  const initialHandoverCount = filteredProjects.filter(p => {
     const statusStr = p.status || '';
     return statusStr.includes('مسلم') || statusStr.includes('الاستلام') || statusStr.includes('مكتمل');
   }).length;
-  const withdrawnCount = projects.filter(p => {
+  const withdrawnCount = filteredProjects.filter(p => {
     const statusStr = p.status || '';
     return statusStr.includes('مسحوب') || statusStr.includes('معلق') || statusStr.includes('متوقف');
   }).length;
   
   // Contractors breakdown
   const contractorsMap: Record<string, number> = {};
-  projects.forEach(p => {
+  filteredProjects.forEach(p => {
     if (p.contractor) {
       contractorsMap[p.contractor] = (contractorsMap[p.contractor] || 0) + 1;
     }
@@ -64,7 +91,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
 
   // Region breakdown
   const regionsMap: Record<string, number> = {};
-  projects.forEach(p => {
+  filteredProjects.forEach(p => {
     if (p.region) {
       regionsMap[p.region] = (regionsMap[p.region] || 0) + 1;
     }
@@ -74,7 +101,34 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
     <div className="space-y-6">
       {/* Sub-tabs header */}
       <div className="bg-white dark:bg-slate-900 p-2 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('lengths')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 relative ${
+              activeSubTab === 'lengths'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Ruler className="h-4 w-4 text-amber-300" />
+            <span>حصر الأطوال والرخص بالسجمنت 📏</span>
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('mymaps')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 relative ${
+              activeSubTab === 'mymaps'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Globe className="h-4 w-4 text-cyan-400" />
+            <span>تحليل الخرائط الجغرافية (My Maps) 📊</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setActiveSubTab('general')}
@@ -87,31 +141,15 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
             <BarChart3 className="h-4 w-4" />
             <span>إحصائيات المشاريع العامة 📈</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('mymaps')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 relative ${
-              activeSubTab === 'mymaps'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Globe className="h-4 w-4 text-amber-400" />
-            <span>تحليل الخرائط وحصر الأطوال (Google My Maps) 📊</span>
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-          </button>
         </div>
-
-        {/* Hidden from UI display per user request - preserved in code
-        <div className="text-xs text-slate-500 dark:text-slate-400 font-bold px-3 py-1 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 hidden sm:flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
-          <span>استخراج أطوال الخطوط، Segment ID، أرقام التصاريح والألوان</span>
-        </div>
-        */}
       </div>
 
-      {activeSubTab === 'mymaps' ? (
+      {activeSubTab === 'lengths' ? (
+        <ProjectLengthsDashboard
+          projects={projects}
+          onSelectProject={onSelectProject}
+        />
+      ) : activeSubTab === 'mymaps' ? (
         <MyMapsAnalysisPanel
           projects={projects}
           selectedProject={selectedProject}
@@ -120,6 +158,111 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
         />
       ) : (
         <>
+          {/* Status Filter Bar for General Stats */}
+          <div className="bg-slate-50 dark:bg-slate-800/80 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2 shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <span>فرز وتصفية الإحصائيات العامة حسب حالة/مرحلة المشروع:</span>
+              </span>
+              {selectedGeneralStatus !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedGeneralStatus('all')}
+                  className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                >
+                  عرض جميع الحالات
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedGeneralStatus('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  selectedGeneralStatus === 'all'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                الكل ({projects.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedGeneralStatus('جاري')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  selectedGeneralStatus === 'جاري'
+                    ? 'bg-amber-500 text-slate-900 shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-400 border border-slate-200 dark:border-slate-700 hover:bg-amber-50'
+                }`}
+              >
+                ⚡ جاري التنفيذ
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedGeneralStatus('مسلم ابتدائي')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  selectedGeneralStatus === 'مسلم ابتدائي'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 border border-slate-200 dark:border-slate-700 hover:bg-blue-50'
+                }`}
+              >
+                📝 مسلم ابتدائي
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedGeneralStatus('جاري الاستلام الابتدائي')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  selectedGeneralStatus === 'جاري الاستلام الابتدائي'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-400 border border-slate-200 dark:border-slate-700 hover:bg-indigo-50'
+                }`}
+              >
+                ⏳ جاري الاستلام الابتدائي
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedGeneralStatus('مكتمل')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  selectedGeneralStatus === 'مكتمل'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 hover:bg-emerald-50'
+                }`}
+              >
+                ✅ مكتمل
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedGeneralStatus('مسحوب')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  selectedGeneralStatus === 'مسحوب'
+                    ? 'bg-rose-600 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 border border-slate-200 dark:border-slate-700 hover:bg-rose-50'
+                }`}
+              >
+                ⚠️ مسحوب
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedGeneralStatus('معلق')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  selectedGeneralStatus === 'معلق'
+                    ? 'bg-slate-700 text-white shadow-xs'
+                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                🛑 معلق / متوقف
+              </button>
+            </div>
+          </div>
+
           {/* Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Projects */}

@@ -20,13 +20,15 @@ import {
   RefreshCw,
   Crown,
   Send,
-  Database
+  Database,
+  StopCircle
 } from 'lucide-react';
 import {
   ScheduleAutoAnalysisConfig,
   getScheduleAutoAnalysisConfig,
   saveScheduleAutoAnalysisConfig,
   runSequentialDailyAutoAnalysis,
+  stopDailyAutoAnalysis,
   getSaudiCurrentHourAndDate,
   subscribeAutoAnalysisProgress,
   AutoAnalysisProgress
@@ -105,7 +107,11 @@ export function NotificationSettingsPage({
     if (autoProgress.isRunning) return;
     runSequentialDailyAutoAnalysis(projects, { forceRun: true }).then(res => {
       if (onShowNotification) {
-        onShowNotification(`📊 اكتمل الفحص الشامل للمشاريع (تحت بند جاري): تم معالجة ${res.processed} مشروع ورصد ${res.changesFound} تغييرات.`);
+        if (res.wasCancelled) {
+          onShowNotification(`🛑 تم إيقاف الفحص بطلب منك بعد معالجة ${res.processed} مشروع.`);
+        } else {
+          onShowNotification(`📊 اكتمل الفحص الشامل للمشاريع (تحت بند جاري): تم معالجة ${res.processed} مشروع ورصد ${res.changesFound} تغييرات.`);
+        }
       }
     });
   };
@@ -460,15 +466,29 @@ export function NotificationSettingsPage({
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleManualBatchTrigger}
-              disabled={autoProgress.isRunning}
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 text-cyan-300 ${autoProgress.isRunning ? 'animate-spin' : ''}`} />
-              <span>{autoProgress.isRunning ? 'جاري الفحص الآن...' : 'تحليل المشاريع (تحت بند جاري) 🚀'}</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleManualBatchTrigger}
+                disabled={autoProgress.isRunning}
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 text-cyan-300 ${autoProgress.isRunning ? 'animate-spin' : ''}`} />
+                <span>{autoProgress.isRunning ? 'جاري الفحص الآن...' : 'تحليل المشاريع (تحت بند جاري) 🚀'}</span>
+              </button>
+
+              {autoProgress.isRunning && (
+                <button
+                  type="button"
+                  onClick={stopDailyAutoAnalysis}
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 animate-pulse"
+                  title="إيقاف التقرير والفحص اليومي"
+                >
+                  <StopCircle className="h-3.5 w-3.5 text-white" />
+                  <span>إيقاف الفحص 🛑</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

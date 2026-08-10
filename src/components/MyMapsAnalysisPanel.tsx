@@ -19,6 +19,7 @@ import { ReportHistoryStore, getSupabaseClient } from '../utils/supabaseSetup';
 import { ProjectDiffModal } from './ProjectDiffModal';
 import { 
   runSequentialDailyAutoAnalysis, 
+  stopDailyAutoAnalysis,
   subscribeAutoAnalysisProgress, 
   AutoAnalysisProgress 
 } from '../utils/dailyAutoAnalysisService';
@@ -51,7 +52,8 @@ import {
   HardHat,
   Bell,
   MapPin,
-  Navigation
+  Navigation,
+  StopCircle
 } from 'lucide-react';
 
 interface MyMapsAnalysisPanelProps {
@@ -162,7 +164,9 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
     }
     showToast(`🚀 جاري بدء الفحص والتحليل التتابعي لـ (${ongoingCount}) مشروع مصنف تحت بند (جاري)...`);
     const result = await runSequentialDailyAutoAnalysis(projects, { forceRun: true });
-    if (result.changesFound > 0) {
+    if (result.wasCancelled) {
+      showToast(`🛑 تم إيقاف عملية الفحص بطلب منك. تم فحص ${result.processed} مشروع من أصل ${ongoingCount}.`);
+    } else if (result.changesFound > 0) {
       showToast(`✨ اكتمل التحليل التتابعي: تم رصد وتوثيق تغيرات في ${result.changesFound} مشروع (جاري) بقاعدة البيانات!`);
     } else {
       showToast(`✨ اكتمل التحليل التتابعي لـ ${result.processed} مشروع (جاري) وتم حفظ جميع التقارير اليومية بنجاح!`);
@@ -708,16 +712,30 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 </button>
 
                 {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={handleRunBatchDailyAutoAnalysis}
-                    disabled={autoProgress.isRunning}
-                    className="px-3.5 py-1.5 bg-gradient-to-r from-blue-700 to-indigo-800 hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50 text-white font-black text-[11px] rounded-xl border border-blue-500/40 shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                    title="تشغيل التحليل الجغرافي والتقرير اليومي لجميع المشاريع بالتتالي وتوثيق النتائج بقاعدة البيانات (خاص بمدير النظام)"
-                  >
-                    <RefreshCw className={`h-3.5 w-3.5 text-cyan-300 ${autoProgress.isRunning ? 'animate-spin' : ''}`} />
-                    <span>{autoProgress.isRunning ? 'جاري التحليل التتابعي...' : 'تشغيل التقرير اليومي الشامل (مدير النظام) 🔄'}</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleRunBatchDailyAutoAnalysis}
+                      disabled={autoProgress.isRunning}
+                      className="px-3.5 py-1.5 bg-gradient-to-r from-blue-700 to-indigo-800 hover:from-blue-600 hover:to-indigo-700 disabled:opacity-50 text-white font-black text-[11px] rounded-xl border border-blue-500/40 shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                      title="تشغيل التحليل الجغرافي والتقرير اليومي للمشاريع المصنفة تحت بند (جاري) وتوثيق النتائج بقاعدة البيانات (خاص بمدير النظام)"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 text-cyan-300 ${autoProgress.isRunning ? 'animate-spin' : ''}`} />
+                      <span>{autoProgress.isRunning ? 'جاري التحليل التتابعي...' : 'تشغيل التقرير اليومي الشامل (مدير النظام) 🔄'}</span>
+                    </button>
+
+                    {autoProgress.isRunning && (
+                      <button
+                        type="button"
+                        onClick={stopDailyAutoAnalysis}
+                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-[11px] rounded-xl border border-rose-400/40 shadow-xs transition-all cursor-pointer flex items-center gap-1.5 animate-pulse"
+                        title="إيقاف عملية الفحص والتحليل التلقائي الحالية"
+                      >
+                        <StopCircle className="h-3.5 w-3.5 text-white" />
+                        <span>إيقاف الفحص 🛑</span>
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

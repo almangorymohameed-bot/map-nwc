@@ -527,9 +527,14 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
       if (m && m[1] && m[1].trim() !== '-') kmlProjectId = m[1].trim();
     }
 
-    // Default fallbacks for clean presentation
+    // Default fallbacks for clean presentation with project-unique hash to prevent global collisions
     if (!segmentId) {
-      segmentId = `SEG-${1000 + idx + 1}`;
+      let pHash = 0;
+      for (let c = 0; c < projectName.length; c++) {
+        pHash = (pHash * 31 + projectName.charCodeAt(c)) % 10000;
+      }
+      pHash = Math.abs(pHash) || 101;
+      segmentId = `SEG-${pHash * 100 + idx + 1}`;
     }
 
     // Determine hex color with maximum fallback coverage
@@ -694,7 +699,13 @@ export function generateSyntheticProjectKMLData(
   mapUrl: string,
   projectScope?: string
 ): KMLAnalysisResult {
-  const seed = (projectName.length * 17) % 50;
+  let projHash = 0;
+  for (let c = 0; c < projectName.length; c++) {
+    projHash = (projHash * 31 + projectName.charCodeAt(c)) % 10000;
+  }
+  projHash = Math.abs(projHash) || 101;
+
+  const seed = (projHash * 17) % 50;
   const itemsCount = 18 + (seed % 12); // 18 to 30 line segments
 
   const categories: StatusCategory[] = [
@@ -720,12 +731,12 @@ export function generateSyntheticProjectKMLData(
 
     const config = COLOR_CONFIG[cat];
     const statusLabel = getStatusCategoryLabel(cat, projectName, projectScope);
-    const segNum = 1010 + i * 3;
-    const permNum = 2025001 + (i * 11) % 400;
+    const segNum = (projHash * 100) + (i + 1);
+    const permNum = 20250000 + (projHash * 10) + ((i * 7) % 80) + 1;
 
     const segmentId = `SEG-${segNum}`;
     // Intentionally leave permitNo empty for some ongoing elements to test missing permit notice
-    const permitNo = (cat === 'ongoing' && i % 3 === 0) ? '' : `PERM-${permNum}`;
+    const permitNo = (cat === 'ongoing' && i % 4 === 0) ? '' : `PERM-${permNum}`;
 
     const lengthMeters = 180 + ((i * 127) % 850);
     const itemStage = cat === 'ongoing' ? sampleStages[i % sampleStages.length] : undefined;

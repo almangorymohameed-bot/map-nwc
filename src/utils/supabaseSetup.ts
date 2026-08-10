@@ -110,12 +110,34 @@ CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(
 CREATE INDEX IF NOT EXISTS idx_notifications_proj_id ON public.notifications(project_id);
 
 -- ==========================================
--- 4. تفعيل سياسات الأمان Row Level Security (RLS)
+-- 5. جدول بيانات الداشبورد والمؤشرات المحسوبة لكل مشروع (dashboard_project_metrics)
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.dashboard_project_metrics (
+  project_id INT PRIMARY KEY,
+  project_name TEXT NOT NULL,
+  total_length_meters NUMERIC NOT NULL DEFAULT 0,
+  total_length_km NUMERIC NOT NULL DEFAULT 0,
+  executed_water_meters NUMERIC NOT NULL DEFAULT 0,
+  executed_sewage_meters NUMERIC NOT NULL DEFAULT 0,
+  ongoing_meters NUMERIC NOT NULL DEFAULT 0,
+  remaining_meters NUMERIC NOT NULL DEFAULT 0,
+  cancelled_meters NUMERIC NOT NULL DEFAULT 0,
+  permits_count INT NOT NULL DEFAULT 0,
+  unique_segments_count INT NOT NULL DEFAULT 0,
+  total_segments_count INT NOT NULL DEFAULT 0,
+  permits_list JSONB DEFAULT '[]'::jsonb,
+  segments_list JSONB DEFAULT '[]'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ==========================================
+-- 6. تفعيل سياسات الأمان Row Level Security (RLS)
 -- ==========================================
 ALTER TABLE public.project_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.archived_project_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.project_changelogs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.dashboard_project_metrics ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow read access for all authenticated users" ON public.project_reports;
 DROP POLICY IF EXISTS "Allow insert access for all authenticated users" ON public.project_reports;
@@ -154,6 +176,10 @@ ON public.notifications FOR SELECT USING (true);
 
 CREATE POLICY "Allow insert access for notifications" 
 ON public.notifications FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access for dashboard metrics" ON public.dashboard_project_metrics;
+CREATE POLICY "Allow all access for dashboard metrics" 
+ON public.dashboard_project_metrics FOR ALL USING (true);
 `;
 
 /**
@@ -374,6 +400,36 @@ function isReportMatchingProject(rowProjId: number, rowProjName: string, targetI
 }
 
 export const ReportHistoryStore = {
+  async getAllLatestReportsMap(): Promise<Map<number, HistoricalReport>> {
+    const map = new Map<number, HistoricalReport>();
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { data, error } = await (supabase.from('project_reports') as any)
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!error && data && data.length > 0) {
+          for (const row of data) {
+            const report = mapRowToHistoricalReport(row);
+            const pId = Number(report.projectId);
+            if (pId > 0 && !map.has(pId)) {
+              map.set(pId, report);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Supabase getAllLatestReportsMap exception:', err);
+      }
+    }
+    for (const mem of memoryReports) {
+      const pId = Number(mem.projectId);
+      if (pId > 0 && !map.has(pId)) {
+        map.set(pId, mem);
+      }
+    }
+    return map;
+  },
+
   async getHistoricalReports(projectId: number, projectName?: string): Promise<HistoricalReport[]> {
     const supabase = getSupabaseClient();
     const cleanName = (projectName || '').trim();
@@ -599,6 +655,14 @@ export const ReportHistoryStore = {
 
     // أرشفة تلقائية للتقارير القديمة بحيث يتم الاحتفاظ بآخر 5 تقارير فقط
     await this.archiveOldReports(projectId, projectName);
+
+    // تحديث جدول بيانات الداشبورد والمؤشرات تلقائياً عند حفظ أي تحليل جديد
+    try {
+      const { DashboardMetricsStore } = await import('./dashboardMetricsStore');
+      await DashboardMetricsStore.saveProjectMetric(projectId, projectName, analysisResult);
+    } catch (metricErr) {
+      console.warn('⚠️ Could not update dashboard project metric:', metricErr);
+    }
 
     return resultReport;
   },
