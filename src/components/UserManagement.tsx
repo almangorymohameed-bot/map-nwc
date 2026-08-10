@@ -64,6 +64,12 @@ const LAYER_OPTIONS = [
   { id: 'materials', label: 'طبقة مواد التشوين 📦' }
 ];
 
+const STATS_SUBTAB_OPTIONS = [
+  { id: 'lengths', label: 'حصر الأطوال والرخص بالسجمنت 📏' },
+  { id: 'mymaps', label: 'تحليل الخرائط الجغرافية (My Maps) 📊' },
+  { id: 'general', label: 'إحصائيات المشاريع العامة 📈' }
+];
+
 export function UserManagement({ 
   users, 
   currentUser, 
@@ -138,6 +144,7 @@ export function UserManagement({
       allowedScopes: ['الكل'],
       allowedTabs: ['maps', 'stats', 'layers'],
       allowedLayers: ['water', 'sewage', 'materials'],
+      allowedStatsSubTabs: ['lengths', 'mymaps', 'general'],
       canOpenExternalLinks: true,
       canFilter: true,
       canInsert: true,
@@ -160,6 +167,7 @@ export function UserManagement({
       username: displayedUsername,
       allowedTabs: selectedUser.allowedTabs || ['maps', 'stats', 'layers'],
       allowedLayers: selectedUser.allowedLayers || ['water', 'sewage', 'materials'],
+      allowedStatsSubTabs: selectedUser.allowedStatsSubTabs || ['lengths', 'mymaps', 'general'],
       canOpenExternalLinks: selectedUser.canOpenExternalLinks !== false,
       canFilter: selectedUser.canFilter !== false,
       canInsert: selectedUser.canInsert !== false,
@@ -704,6 +712,53 @@ export function UserManagement({
                     })}
                   </div>
                 </div>
+
+                {/* B5. Statistics Sub-Tabs Permissions */}
+                <div className="space-y-2 col-span-1 md:col-span-2 border-t border-slate-200/60 pt-3 mt-1">
+                  <label className="text-xs font-bold text-slate-700 block">صلاحيات تفاصيل تبويبات الإحصائيات (الأقسام الفرعية للإحصائيات):</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {STATS_SUBTAB_OPTIONS.map(subtab => {
+                      const list = formData.allowedStatsSubTabs || ['lengths', 'mymaps', 'general'];
+                      const isAllowed = list.includes(subtab.id) || list.includes('الكل');
+                      return (
+                        <button
+                          type="button"
+                          key={subtab.id}
+                          onClick={() => {
+                            let baseList = list.includes('الكل') 
+                              ? ['lengths', 'mymaps', 'general'] 
+                              : list.filter(s => s !== 'الكل');
+                            let newStats: string[];
+                            if (baseList.includes(subtab.id)) {
+                              newStats = baseList.filter(s => s !== subtab.id);
+                            } else {
+                              newStats = [...baseList, subtab.id];
+                            }
+                            if (newStats.length === 0) {
+                              newStats = ['lengths', 'mymaps', 'general'];
+                            }
+                            setFormData({
+                              ...formData,
+                              allowedStatsSubTabs: newStats
+                            });
+                          }}
+                          className={`flex items-center justify-between p-2.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
+                            isAllowed
+                              ? 'bg-blue-50/70 border-blue-300 text-blue-900 shadow-xs'
+                              : 'bg-white/50 border-slate-200 text-slate-400'
+                          }`}
+                        >
+                          <span>{subtab.label}</span>
+                          {isAllowed ? (
+                            <CheckSquare className="h-4 w-4 text-blue-600 shrink-0" />
+                          ) : (
+                            <Square className="h-4 w-4 text-slate-300 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1042,12 +1097,24 @@ export function UserManagement({
                   </div>
 
                   {/* Layers allowed */}
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-100 md:col-span-2">
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-100 md:col-span-1">
                     <span className="text-[10px] text-slate-400 font-bold block mb-1">طبقات المشاريع المسموح برؤيتها:</span>
                     <div className="flex flex-wrap gap-1.5">
                       {((selectedUser.allowedLayers && selectedUser.allowedLayers.length > 0) ? selectedUser.allowedLayers : ['water', 'sewage', 'materials']).map(l => (
                         <span key={l} className="px-2 py-0.5 bg-amber-50 text-amber-900 border border-amber-200/60 rounded text-[10px] font-bold">
                           {l === 'water' ? '💧 المياه' : l === 'sewage' ? '🌿 الصرف الصحي' : l === 'materials' ? '📦 مواد التشوين' : l}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Stats Sub-tabs allowed */}
+                  <div className="bg-white p-2.5 rounded-lg border border-slate-100 md:col-span-1">
+                    <span className="text-[10px] text-slate-400 font-bold block mb-1">أقسام الإحصائيات المسموح برؤيتها:</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {((selectedUser.allowedStatsSubTabs && selectedUser.allowedStatsSubTabs.length > 0) ? selectedUser.allowedStatsSubTabs : ['lengths', 'mymaps', 'general']).map(s => (
+                        <span key={s} className="px-2 py-0.5 bg-blue-50 text-blue-900 border border-blue-200/60 rounded text-[10px] font-bold">
+                          {s === 'lengths' ? '📏 حصر الأطوال والرخص' : s === 'mymaps' ? '📊 تحليل My Maps' : s === 'general' ? '📈 الإحصائيات العامة' : s}
                         </span>
                       ))}
                     </div>

@@ -571,7 +571,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
             </p>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
             <button
               type="button"
               onClick={loadReportsAndMetrics}
@@ -579,7 +579,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
               className="px-3.5 py-2 bg-indigo-800/80 hover:bg-indigo-700 text-white font-black text-xs rounded-xl border border-indigo-600/50 shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
             >
               <RefreshCw className={`h-4 w-4 text-cyan-300 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>تحديث البيانات</span>
+              <span>تحديث وتزامن Supabase ({metricsMap.size} مشروع)</span>
             </button>
             <button
               type="button"

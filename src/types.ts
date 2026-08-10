@@ -49,6 +49,9 @@ export interface User {
 
   // صلاحية طبقات المشاريع المفصلة
   allowedLayers?: string[]; // المعرفات المسموحة: ["water", "sewage", "materials"]
+
+  // صلاحيات أقسام الإحصائيات التفصيلية
+  allowedStatsSubTabs?: string[]; // المعرفات المسموحة: ["lengths", "mymaps", "general"]
 }
 
 export interface AppNotification {

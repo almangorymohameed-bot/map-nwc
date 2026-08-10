@@ -1825,6 +1825,7 @@ export default function App() {
               selectedProject={selectedProject}
               onSelectProject={(proj) => setSelectedProjectId(proj.id)}
               isAdmin={currentUser.role === 'admin'}
+              currentUser={currentUser}
             />
           )}
           {activeTab === 'layers' && <ProjectLayersViewer currentUser={currentUser} />}

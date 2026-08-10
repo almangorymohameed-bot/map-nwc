@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { Project } from '../types';
-import { Droplet, Wind, RefreshCw, CheckCircle2, AlertTriangle, Building2, MapPin, Layers, BarChart3, Globe, Sparkles, Ruler, SlidersHorizontal } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Project, User } from '../types';
+import { Droplet, Wind, RefreshCw, CheckCircle2, AlertTriangle, Building2, MapPin, Layers, BarChart3, Globe, Sparkles, Ruler, SlidersHorizontal, Lock } from 'lucide-react';
 import { MyMapsAnalysisPanel } from './MyMapsAnalysisPanel';
 import { ProjectLengthsDashboard } from './ProjectLengthsDashboard';
 
@@ -14,10 +14,35 @@ interface DashboardStatsProps {
   selectedProject?: Project | null;
   onSelectProject?: (project: Project) => void;
   isAdmin?: boolean;
+  currentUser?: User;
 }
 
-export function DashboardStats({ projects, selectedProject, onSelectProject, isAdmin }: DashboardStatsProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'lengths' | 'general' | 'mymaps'>('lengths');
+export function DashboardStats({ projects, selectedProject, onSelectProject, isAdmin, currentUser }: DashboardStatsProps) {
+  // Compute allowed sub-tabs based on currentUser permissions
+  const allowedSubTabs = useMemo(() => {
+    if (!currentUser) return ['lengths', 'mymaps', 'general'];
+    if (currentUser.role === 'admin') return ['lengths', 'mymaps', 'general'];
+    const list = currentUser.allowedStatsSubTabs;
+    if (!list || list.length === 0 || list.includes('الكل')) {
+      return ['lengths', 'mymaps', 'general'];
+    }
+    return list;
+  }, [currentUser]);
+
+  const [activeSubTab, setActiveSubTab] = useState<'lengths' | 'general' | 'mymaps'>(() => {
+    if (allowedSubTabs.includes('lengths')) return 'lengths';
+    if (allowedSubTabs.includes('mymaps')) return 'mymaps';
+    if (allowedSubTabs.includes('general')) return 'general';
+    return 'lengths';
+  });
+
+  useEffect(() => {
+    if (!allowedSubTabs.includes(activeSubTab)) {
+      if (allowedSubTabs.includes('lengths')) setActiveSubTab('lengths');
+      else if (allowedSubTabs.includes('mymaps')) setActiveSubTab('mymaps');
+      else if (allowedSubTabs.includes('general')) setActiveSubTab('general');
+    }
+  }, [allowedSubTabs, activeSubTab]);
   const [selectedGeneralStatus, setSelectedGeneralStatus] = useState<string>('all');
 
   // Filter projects by general status if selected
@@ -97,50 +122,72 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
     }
   });
 
+  if (allowedSubTabs.length === 0) {
+    return (
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-8 border border-slate-200 dark:border-slate-800 text-center space-y-3">
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-full w-fit mx-auto">
+          <Lock className="h-6 w-6" />
+        </div>
+        <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
+          عفواً، لا تملك صلاحية الوصول إلى أقسام الإحصائيات
+        </h3>
+        <p className="text-xs text-slate-500 max-w-md mx-auto">
+          تم تقييد الوصول إلى كافة الأقسام الفرعية لوحة الإحصائيات لحسابك الحالي. يرجى التواصل مع مسؤول النظام لمنحك الصلاحيات المناسبة.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Sub-tabs header */}
       <div className="bg-white dark:bg-slate-900 p-2 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('lengths')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 relative ${
-              activeSubTab === 'lengths'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Ruler className="h-4 w-4 text-amber-300" />
-            <span>حصر الأطوال والرخص بالسجمنت 📏</span>
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-          </button>
+          {allowedSubTabs.includes('lengths') && (
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('lengths')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 relative ${
+                activeSubTab === 'lengths'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Ruler className="h-4 w-4 text-amber-300" />
+              <span>حصر الأطوال والرخص بالسجمنت 📏</span>
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('mymaps')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 relative ${
-              activeSubTab === 'mymaps'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Globe className="h-4 w-4 text-cyan-400" />
-            <span>تحليل الخرائط الجغرافية (My Maps) 📊</span>
-          </button>
+          {allowedSubTabs.includes('mymaps') && (
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('mymaps')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 relative ${
+                activeSubTab === 'mymaps'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Globe className="h-4 w-4 text-cyan-400" />
+              <span>تحليل الخرائط الجغرافية (My Maps) 📊</span>
+            </button>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setActiveSubTab('general')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
-              activeSubTab === 'general'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <BarChart3 className="h-4 w-4" />
-            <span>إحصائيات المشاريع العامة 📈</span>
-          </button>
+          {allowedSubTabs.includes('general') && (
+            <button
+              type="button"
+              onClick={() => setActiveSubTab('general')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-2 ${
+                activeSubTab === 'general'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span>إحصائيات المشاريع العامة 📈</span>
+            </button>
+          )}
         </div>
       </div>
 

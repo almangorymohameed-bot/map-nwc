@@ -311,6 +311,41 @@ export const DashboardMetricsStore = {
       saveLocalStorageMetrics(updatedMap);
     }
 
+    // Bulk upsert all metrics into Supabase table if connected
+    const supabase = getSupabaseClient();
+    if (supabase && updatedMap.size > 0) {
+      try {
+        const rowsToUpsert = Array.from(updatedMap.values()).map(metric => ({
+          project_id: metric.projectId,
+          project_name: metric.projectName,
+          total_length_meters: metric.totalLengthMeters,
+          total_length_km: metric.totalLengthKm,
+          executed_water_meters: metric.executedWaterMeters,
+          executed_sewage_meters: metric.executedSewageMeters,
+          ongoing_meters: metric.ongoingMeters,
+          remaining_meters: metric.remainingMeters,
+          cancelled_meters: metric.cancelledMeters,
+          permits_count: metric.permitsCount,
+          unique_segments_count: metric.uniqueSegmentsCount,
+          total_segments_count: metric.totalSegmentsCount,
+          permits_list: metric.permitsList,
+          segments_list: metric.segmentsList,
+          updated_at: metric.updatedAt || new Date().toISOString()
+        }));
+
+        const { error } = await (supabase.from('dashboard_project_metrics') as any)
+          .upsert(rowsToUpsert, { onConflict: 'project_id' });
+
+        if (error) {
+          console.warn('Error bulk upserting dashboard_project_metrics to Supabase:', error.message);
+        } else {
+          console.log(`✅ Automatically populated ${rowsToUpsert.length} rows into Supabase dashboard_project_metrics table.`);
+        }
+      } catch (err) {
+        console.error('Exception bulk upserting dashboard metrics:', err);
+      }
+    }
+
     return updatedMap;
   }
 };
