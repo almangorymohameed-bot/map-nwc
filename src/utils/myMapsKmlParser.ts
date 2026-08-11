@@ -4,6 +4,7 @@
  */
 
 import { KMLAnalysisResult, KMLFeatureItem, ColorStatsSummary, StatusCategory } from '../types';
+import { extractSegmentIdFromData, extractPermitNoFromText, processGeometricalSegmentationAndVault, processSpatialPermitOverlay } from './segmentPermitEngine';
 import length from '@turf/length';
 import { lineString } from '@turf/helpers';
 
@@ -557,12 +558,10 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     const descText = description.replace(/<[^>]+>/g, ' ');
 
     if (!isValidIdentifier(segmentId)) {
-      const segMatch = descText.match(/(?:Segment\s*ID|Segment|قطاع|مقطع|معرف)\s*[:=]?\s*([A-Za-z0-9_-]+)/i) || name.match(/(?:SEG|SEGMENT|SEC|SEC-)\s*([0-9_-]+)/i);
-      if (segMatch && isValidIdentifier(segMatch[0])) segmentId = segMatch[0].trim();
+      segmentId = extractSegmentIdFromData({}, '', descText, name);
     }
     if (!isValidIdentifier(permitNo)) {
-      const permMatch = descText.match(/(?:Permit\s*No|Permit|تصريح|رقم التصريح)\s*[:=]?\s*([A-Za-z0-9_-]+)/i) || name.match(/(?:PERM|P-)\s*([0-9_-]+)/i);
-      if (permMatch && isValidIdentifier(permMatch[0])) permitNo = permMatch[0].trim();
+      permitNo = extractPermitNoFromText({}, descText, name, '');
     }
     if (!extractedStage) {
       const stageMatch = descText.match(/(?:Stage|مرحلة|وضع الحفرية|حالة الحفرية)\s*[:=]?\s*([^\n\r<,]+)/i);
@@ -885,11 +884,17 @@ export function generateSyntheticProjectKMLData(
  * Helper to consolidate items into final KMLAnalysisResult
  */
 function generateFinalAnalysisResult(
-  items: KMLFeatureItem[], 
+  rawItems: KMLFeatureItem[], 
   projectName: string, 
   mapUrl: string,
   projectScope?: string
 ): KMLAnalysisResult {
+  // Step 1: Process Spatial Permit Overlay (Geofencing)
+  const { items: step1Items } = processSpatialPermitOverlay(rawItems);
+
+  // Step 2: Process Geometrical Classification & Segment Vault System (Assigns SEG-[diameter]-[type]-[seq] if missing)
+  const { items } = processGeometricalSegmentationAndVault(step1Items, 2.0);
+
   let totalMeters = 0;
   items.forEach(it => totalMeters += it.lengthMeters);
 

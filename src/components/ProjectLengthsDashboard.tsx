@@ -31,7 +31,8 @@ import {
   SlidersHorizontal,
   Info,
   Filter,
-  FileSpreadsheet
+  FileSpreadsheet,
+  FileText
 } from 'lucide-react';
 
 interface ProjectLengthsDashboardProps {
@@ -289,6 +290,8 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
 
     catProjects.forEach(p => {
       const metric = getValidMetricForProject(p);
+      const res = getAnalysisForProject(p);
+
       if (metric) {
         totalMeters += metric.totalLengthMeters;
 
@@ -312,125 +315,120 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
           breakdownMap.cancelled.totalMeters += metric.cancelledMeters;
           breakdownMap.cancelled.projectSet.add(p.id);
         }
-
-        metric.permitsList.forEach(pNo => {
-          globalPermitSet.add(pNo);
-          breakdownMap.ongoing.permitSet.add(pNo);
-        });
-
-        metric.segmentsList.forEach(sId => {
-          globalSegmentSet.add(sId);
-          breakdownMap.ongoing.segmentSet.add(sId);
-        });
-
-        globalSegmentTotalCount += metric.totalSegmentsCount;
-        breakdownMap.ongoing.segmentTotalCount += metric.totalSegmentsCount;
-        return;
-      }
-
-      const res = getAnalysisForProject(p);
-      if (!res) return;
-
-      let projTotalMeters = res.totalLengthMeters || 0;
-      if (projTotalMeters === 0 && res.items && res.items.length > 0) {
-        projTotalMeters = res.items.reduce((sum, item) => sum + (item.lengthMeters || 0), 0);
-      }
-
-      totalMeters += projTotalMeters;
-
-      const catKeyMap: Record<StatusCategory, 'executedWater' | 'executedSewage' | 'ongoing' | 'remaining' | 'cancelled'> = {
-        'executed_water': 'executedWater',
-        'executed_sewage': 'executedSewage',
-        'ongoing': 'ongoing',
-        'remaining': 'remaining',
-        'cancelled': 'cancelled'
-      };
-
-      categories.forEach(cat => {
-        const altKey = catKeyMap[cat];
-        let catMeters = res.colorBreakdown?.[cat]?.totalLengthMeters || (res.colorBreakdown as any)?.[altKey]?.totalLengthMeters || 0;
-        if (catMeters === 0 && res.items && res.items.length > 0) {
-          catMeters = res.items
-            .filter(it => it.statusCategory === cat)
-            .reduce((sum, item) => sum + (item.lengthMeters || 0), 0);
+      } else if (res) {
+        let projTotalMeters = res.totalLengthMeters || 0;
+        if (projTotalMeters === 0 && res.items && res.items.length > 0) {
+          projTotalMeters = res.items.reduce((sum, item) => sum + (item.lengthMeters || 0), 0);
         }
 
-        if (catMeters > 0) {
-          breakdownMap[cat].totalMeters += catMeters;
-          breakdownMap[cat].projectSet.add(p.id);
-        }
-      });
+        totalMeters += projTotalMeters;
 
-      // Aggregate Permit No and segment id values from permitNosByStatus, segmentIdsByStatus, and items
-      const pNosByCat = (res.colorBreakdown as any)?.permitNosByStatus || res.permitNosByStatus;
-      const sIdsByCat = (res.colorBreakdown as any)?.segmentIdsByStatus || res.segmentIdsByStatus;
+        const catKeyMap: Record<StatusCategory, 'executedWater' | 'executedSewage' | 'ongoing' | 'remaining' | 'cancelled'> = {
+          'executed_water': 'executedWater',
+          'executed_sewage': 'executedSewage',
+          'ongoing': 'ongoing',
+          'remaining': 'remaining',
+          'cancelled': 'cancelled'
+        };
 
-      if (res.items && Array.isArray(res.items) && res.items.length > 0) {
-        res.items.forEach(item => {
-          const cat = item.statusCategory || 'ongoing';
-          // Permit No -> Unique permits per project / globally
-          const pNo = item.permitNo || (item as any)['permitNo'] || (item as any)['Permit No'] || (item as any)['permit_no'];
-          if (isValidIdentifier(pNo)) {
-            const cleanP = String(pNo).trim();
-            globalPermitSet.add(cleanP);
-            if (breakdownMap[cat]) {
-              breakdownMap[cat].permitSet.add(cleanP);
-            }
-          }
-
-          // Segment ID / Feature element -> total segment elements distributed across sectors
-          const sId = item.segmentId || (item as any)['segmentId'] || (item as any)['Segment ID'] || (item as any)['segment_id'];
-          if (isValidIdentifier(sId)) {
-            const cleanS = String(sId).trim();
-            globalSegmentSet.add(cleanS);
-            if (breakdownMap[cat]) {
-              breakdownMap[cat].segmentSet.add(cleanS);
-            }
-          }
-          globalSegmentTotalCount++;
-          if (breakdownMap[cat]) {
-            breakdownMap[cat].segmentTotalCount++;
-          }
-        });
-      } else {
         categories.forEach(cat => {
-          const key = catKeyMap[cat];
-          const pList = pNosByCat ? (pNosByCat[key] || pNosByCat[cat]) : null;
-          if (Array.isArray(pList)) {
-            pList.forEach((pNo: any) => {
-              if (isValidIdentifier(pNo)) {
-                const cleanP = String(pNo).trim();
-                globalPermitSet.add(cleanP);
-                if (breakdownMap[cat]) {
-                  breakdownMap[cat].permitSet.add(cleanP);
-                }
-              }
-            });
+          const altKey = catKeyMap[cat];
+          let catMeters = res.colorBreakdown?.[cat]?.totalLengthMeters || (res.colorBreakdown as any)?.[altKey]?.totalLengthMeters || 0;
+          if (catMeters === 0 && res.items && res.items.length > 0) {
+            catMeters = res.items
+              .filter(it => it.statusCategory === cat)
+              .reduce((sum, item) => sum + (item.lengthMeters || 0), 0);
           }
 
-          const sList = sIdsByCat ? (sIdsByCat[key] || sIdsByCat[cat]) : null;
-          if (Array.isArray(sList)) {
-            sList.forEach((sId: any) => {
-              if (isValidIdentifier(sId)) {
-                const cleanS = String(sId).trim();
-                globalSegmentSet.add(cleanS);
-                if (breakdownMap[cat]) {
-                  breakdownMap[cat].segmentSet.add(cleanS);
-                  breakdownMap[cat].segmentTotalCount++;
-                }
-              }
-            });
-          }
-
-          const cbSegCount = res.colorBreakdown?.[cat]?.segmentCount || (res.colorBreakdown as any)?.[key]?.segmentCount || 0;
-          if (breakdownMap[cat].segmentTotalCount < cbSegCount) {
-            breakdownMap[cat].segmentTotalCount = cbSegCount;
+          if (catMeters > 0) {
+            breakdownMap[cat].totalMeters += catMeters;
+            breakdownMap[cat].projectSet.add(p.id);
           }
         });
+      }
 
-        const featCount = res.totalFeaturesCount || 0;
-        const totalCatSegs = Object.values(breakdownMap).reduce((acc, b) => acc + b.segmentTotalCount, 0);
-        globalSegmentTotalCount += Math.max(featCount, totalCatSegs);
+      // Aggregate Permit No and Segment ID values broken down by category from res (or fallback to metric lists)
+      if (res) {
+        const catKeyMap: Record<StatusCategory, 'executedWater' | 'executedSewage' | 'ongoing' | 'remaining' | 'cancelled'> = {
+          'executed_water': 'executedWater',
+          'executed_sewage': 'executedSewage',
+          'ongoing': 'ongoing',
+          'remaining': 'remaining',
+          'cancelled': 'cancelled'
+        };
+
+        const pNosByCat = (res.colorBreakdown as any)?.permitNosByStatus || res.permitNosByStatus;
+        const sIdsByCat = (res.colorBreakdown as any)?.segmentIdsByStatus || res.segmentIdsByStatus;
+
+        if (res.items && Array.isArray(res.items) && res.items.length > 0) {
+          res.items.forEach(item => {
+            const cat = item.statusCategory || 'ongoing';
+            const pNo = item.permitNo || (item as any)['permitNo'] || (item as any)['Permit No'] || (item as any)['permit_no'];
+            if (isValidIdentifier(pNo)) {
+              const cleanP = String(pNo).trim();
+              globalPermitSet.add(cleanP);
+              if (breakdownMap[cat]) {
+                breakdownMap[cat].permitSet.add(cleanP);
+              }
+            }
+
+            const sId = item.segmentId || (item as any)['segmentId'] || (item as any)['Segment ID'] || (item as any)['segment_id'];
+            if (isValidIdentifier(sId)) {
+              const cleanS = String(sId).trim();
+              globalSegmentSet.add(cleanS);
+              if (breakdownMap[cat]) {
+                breakdownMap[cat].segmentSet.add(cleanS);
+              }
+            }
+            globalSegmentTotalCount++;
+            if (breakdownMap[cat]) {
+              breakdownMap[cat].segmentTotalCount++;
+            }
+          });
+        } else {
+          categories.forEach(cat => {
+            const key = catKeyMap[cat];
+            const pList = pNosByCat ? (pNosByCat[key] || pNosByCat[cat]) : null;
+            if (Array.isArray(pList)) {
+              pList.forEach((pNo: any) => {
+                if (isValidIdentifier(pNo)) {
+                  const cleanP = String(pNo).trim();
+                  globalPermitSet.add(cleanP);
+                  if (breakdownMap[cat]) {
+                    breakdownMap[cat].permitSet.add(cleanP);
+                  }
+                }
+              });
+            }
+
+            const sList = sIdsByCat ? (sIdsByCat[key] || sIdsByCat[cat]) : null;
+            if (Array.isArray(sList)) {
+              sList.forEach((sId: any) => {
+                if (isValidIdentifier(sId)) {
+                  const cleanS = String(sId).trim();
+                  globalSegmentSet.add(cleanS);
+                  if (breakdownMap[cat]) {
+                    breakdownMap[cat].segmentSet.add(cleanS);
+                    breakdownMap[cat].segmentTotalCount++;
+                  }
+                }
+              });
+            }
+
+            const cbSegCount = res.colorBreakdown?.[cat]?.segmentCount || (res.colorBreakdown as any)?.[key]?.segmentCount || 0;
+            if (breakdownMap[cat].segmentTotalCount < cbSegCount) {
+              breakdownMap[cat].segmentTotalCount = cbSegCount;
+            }
+          });
+
+          const featCount = res.totalFeaturesCount || 0;
+          const totalCatSegs = Object.values(breakdownMap).reduce((acc, b) => acc + b.segmentTotalCount, 0);
+          globalSegmentTotalCount += Math.max(featCount, totalCatSegs);
+        }
+      } else if (metric) {
+        metric.permitsList.forEach(pNo => globalPermitSet.add(pNo));
+        metric.segmentsList.forEach(sId => globalSegmentSet.add(sId));
+        globalSegmentTotalCount += metric.totalSegmentsCount;
       }
     });
 
@@ -1639,27 +1637,27 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs border-collapse min-w-[1000px]">
+          <table className="w-full text-right text-xs border-collapse min-w-[1150px]">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-extrabold border-b border-slate-200 dark:border-slate-700">
                 <th className="p-3">اسم المشروع / أمر الشراء</th>
                 <th className="p-3">المقاول</th>
                 <th className="p-3">تصنيف المشروع</th>
                 <th className="p-3">البرنامج / القطاع</th>
-                <th className="p-3">المنطقة / النطاق</th>
                 <th className="p-3">حالة العقد</th>
                 <th className="p-3 text-center">إجمالي الأطوال بالعقد (كم)</th>
                 <th className="p-3 text-center text-amber-700 dark:text-amber-300">الجاري (كم)</th>
                 <th className="p-3 text-center text-rose-700 dark:text-rose-300">المتبقي (كم)</th>
                 <th className="p-3 text-center text-indigo-600 dark:text-indigo-400">الرخص (Permit No)</th>
                 <th className="p-3 text-center text-purple-600 dark:text-purple-400">السجمنت (الفريد / الإجمالي)</th>
-                <th className="p-3 text-center">الخيارات</th>
+                <th className="p-3 text-center text-blue-700 dark:text-blue-300 whitespace-nowrap min-w-[150px]">آخر تقرير تم تحليله</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {searchedProjects.map((p) => {
                 const metric = getValidMetricForProject(p);
                 const res = getAnalysisForProject(p);
+                const savedReport = reportsMap.get(p.id);
 
                 const totalKm = metric ? metric.totalLengthKm : (res ? res.totalLengthKm : 0);
                 const ongoingKm = metric ? Number((metric.ongoingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.ongoing?.totalLengthKm || 0) : 0);
@@ -1667,6 +1665,19 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
                 const permitCount = metric ? metric.permitsCount : (res && res.permitNosByStatus ? new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier)).size : 0);
                 const uniqueSegmentCount = metric ? metric.uniqueSegmentsCount : (res && res.segmentIdsByStatus ? new Set(Object.values(res.segmentIdsByStatus).flat().filter(isValidIdentifier)).size : 0);
                 const totalSegmentCount = metric ? metric.totalSegmentsCount : (res ? (res.totalFeaturesCount || 0) : 0);
+
+                const reportDateRaw = savedReport?.createdAt || savedReport?.parsedAt || metric?.updatedAt;
+                let reportDateFormatted = '';
+                if (reportDateRaw) {
+                  try {
+                    const d = new Date(reportDateRaw);
+                    if (!isNaN(d.getTime())) {
+                      reportDateFormatted = d.toLocaleDateString('ar-SA', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                    }
+                  } catch (e) {
+                    reportDateFormatted = '';
+                  }
+                }
 
                 return (
                   <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
@@ -1687,11 +1698,6 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
                     <td className="p-3">
                       <span className="px-2 py-0.5 rounded-lg bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 font-bold text-[11px] whitespace-nowrap">
                         {p.subProgram || p.scope || 'غير محدد'}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold whitespace-nowrap">
-                        {p.region || 'القطاع الأوسط'}
                       </span>
                     </td>
                     <td className="p-3">
@@ -1721,15 +1727,17 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
                         <div className="text-[10px] text-slate-400 font-normal">({totalSegmentCount.toLocaleString('ar-SA')} إجمالي)</div>
                       )}
                     </td>
-                    <td className="p-3 text-center">
+                    <td className="p-3 text-center whitespace-nowrap min-w-[150px]">
                       {onSelectProject && (
                         <button
                           type="button"
                           onClick={() => onSelectProject(p)}
-                          className="px-2.5 py-1 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 text-blue-700 dark:text-blue-300 font-bold text-[11px] rounded-lg transition-all cursor-pointer flex items-center gap-1 mx-auto"
+                          className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 font-extrabold text-[11px] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 mx-auto border border-blue-200 dark:border-blue-800/80 shadow-3xs whitespace-nowrap shrink-0"
+                          title="تصفح وفتح آخر تقرير تم تحليله للمشروع"
                         >
-                          <span>التحليل</span>
-                          <ExternalLink className="h-3 w-3" />
+                          <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                          <span className="whitespace-nowrap">{savedReport ? `تقرير ${reportDateFormatted || 'المعتمد'}` : (reportDateFormatted ? `تقرير ${reportDateFormatted}` : 'آخر تقرير مُحلل')}</span>
+                          <ExternalLink className="h-3 w-3 opacity-70 shrink-0" />
                         </button>
                       )}
                     </td>
