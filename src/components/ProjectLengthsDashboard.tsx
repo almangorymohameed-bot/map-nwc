@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, StatusCategory, KMLAnalysisResult, HistoricalReport } from '../types';
-import { ReportHistoryStore } from '../utils/supabaseSetup';
+import { ReportHistoryStore, extractPoDigits, isReportMatchingProject } from '../utils/supabaseSetup';
 import { DashboardMetricsStore, DashboardProjectMetric } from '../utils/dashboardMetricsStore';
 import { generateSyntheticProjectKMLData, getStatusCategoryLabel, isValidIdentifier } from '../utils/myMapsKmlParser';
 import * as XLSX from 'xlsx';
@@ -32,12 +32,14 @@ import {
   Info,
   Filter,
   FileSpreadsheet,
-  FileText
+  FileText,
+  X
 } from 'lucide-react';
 
 interface ProjectLengthsDashboardProps {
   projects: Project[];
   onSelectProject?: (project: Project) => void;
+  onOpenMyMaps?: (project: Project) => void;
 }
 
 type CategoryType = 'all' | 'riyadh' | 'governorates' | 'central_sewage' | 'central_water';
@@ -63,7 +65,7 @@ interface CategoryStats {
   }>;
 }
 
-export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLengthsDashboardProps) {
+export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMaps }: ProjectLengthsDashboardProps) {
   const [activeCategory, setActiveCategory] = useState<CategoryType>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedScope, setSelectedScope] = useState<'all' | 'water' | 'sewage'>('all');
@@ -72,6 +74,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [showComparisonTable, setShowComparisonTable] = useState<boolean>(true);
+  const [selectedReportModalProject, setSelectedReportModalProject] = useState<Project | null>(null);
 
   // Dynamically compute list of available statuses from projects
   const availableStatuses = useMemo(() => {
@@ -84,11 +87,28 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
     return Array.from(set);
   }, [projects]);
 
+  // Helper to find a saved report strictly matching the project by ID, PO number, or project name
+  const findReportForProject = (p: Project, map: Map<number, HistoricalReport>): HistoricalReport | undefined => {
+    if (!p) return undefined;
+    const repById = map.get(p.id);
+    if (repById && isReportMatchingProject(repById.projectId, repById.projectName, p.id, p.name, p.po)) {
+      return repById;
+    }
+
+    for (const rep of map.values()) {
+      if (isReportMatchingProject(rep.projectId, rep.projectName, p.id, p.name, p.po)) {
+        return rep;
+      }
+    }
+
+    return undefined;
+  };
+
   // Load latest reports and dashboard metrics for all projects from Supabase / dedicated store
   const loadReportsAndMetrics = async () => {
     setIsLoading(true);
     try {
-      const map = await ReportHistoryStore.getAllLatestReportsMap();
+      const map = await ReportHistoryStore.getAllLatestReportsMap(projects);
       setReportsMap(map);
 
       // Sync and load dedicated dashboard metrics table
@@ -224,6 +244,13 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
     const metric = metricsMap.get(p.id);
     if (!metric) return undefined;
     if (metric.projectId !== p.id) return undefined;
+
+    const pPo = extractPoDigits(p.po) || extractPoDigits(p.name);
+    const mPo = extractPoDigits(metric.projectName);
+    if (pPo && mPo && pPo !== mPo) {
+      return undefined;
+    }
+
     if (metric.projectName && p.name && metric.projectName.trim() !== p.name.trim()) {
       const getOp = (str: string) => {
         const m = str.match(/\[(.*?)\]/);
@@ -238,26 +265,13 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
     return metric;
   };
 
-  // Helper to get KML analysis result for a project strictly from stored reports in database or generate scope-specific analysis
+  // Helper to get KML analysis result for a project strictly from stored reports in database
   const getAnalysisForProject = (p: Project): KMLAnalysisResult | null => {
-    const saved = reportsMap.get(p.id);
+    const saved = findReportForProject(p, reportsMap);
     if (saved && saved.analysisResult && saved.analysisResult.totalLengthMeters > 0) {
-      if (Number(saved.projectId) === p.id) {
-        if (saved.projectName && p.name && saved.projectName.trim() !== p.name.trim()) {
-          const getOp = (str: string) => {
-            const m = str.match(/\[(.*?)\]/);
-            return m ? m[1].trim() : '';
-          };
-          const opP = getOp(p.name);
-          const opR = getOp(saved.projectName);
-          if (opP && opR && opP !== opR) {
-            return generateSyntheticProjectKMLData(p.name, p.mapUrl || '', p.scope);
-          }
-        }
-        return saved.analysisResult;
-      }
+      return saved.analysisResult;
     }
-    return generateSyntheticProjectKMLData(p.name, p.mapUrl || '', p.scope);
+    return null;
   };
 
   // Calculate detailed statistics for a subset of projects strictly from database stored reports or detailed line data
@@ -1655,16 +1669,29 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {searchedProjects.map((p) => {
+                const savedReport = findReportForProject(p, reportsMap);
                 const metric = getValidMetricForProject(p);
-                const res = getAnalysisForProject(p);
-                const savedReport = reportsMap.get(p.id);
+                const res = savedReport?.analysisResult || getAnalysisForProject(p);
 
-                const totalKm = metric ? metric.totalLengthKm : (res ? res.totalLengthKm : 0);
-                const ongoingKm = metric ? Number((metric.ongoingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.ongoing?.totalLengthKm || 0) : 0);
-                const remainingKm = metric ? Number((metric.remainingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.remaining?.totalLengthKm || 0) : 0);
-                const permitCount = metric ? metric.permitsCount : (res && res.permitNosByStatus ? new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier)).size : 0);
-                const uniqueSegmentCount = metric ? metric.uniqueSegmentsCount : (res && res.segmentIdsByStatus ? new Set(Object.values(res.segmentIdsByStatus).flat().filter(isValidIdentifier)).size : 0);
-                const totalSegmentCount = metric ? metric.totalSegmentsCount : (res ? (res.totalFeaturesCount || 0) : 0);
+                const totalKm = savedReport?.analysisResult?.totalLengthKm
+                  ?? (metric ? metric.totalLengthKm : (res ? res.totalLengthKm : 0));
+
+                const ongoingKm = savedReport?.analysisResult?.colorBreakdown?.ongoing?.totalLengthKm
+                  ?? (metric ? Number((metric.ongoingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.ongoing?.totalLengthKm || 0) : 0));
+
+                const remainingKm = savedReport?.analysisResult?.colorBreakdown?.remaining?.totalLengthKm
+                  ?? (metric ? Number((metric.remainingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.remaining?.totalLengthKm || 0) : 0));
+
+                const permitCount = savedReport?.analysisResult?.permitNosByStatus
+                  ? new Set(Object.values(savedReport.analysisResult.permitNosByStatus).flat().filter(isValidIdentifier)).size
+                  : (metric ? metric.permitsCount : (res && res.permitNosByStatus ? new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier)).size : 0));
+
+                const uniqueSegmentCount = savedReport?.analysisResult?.segmentIdsByStatus
+                  ? new Set(Object.values(savedReport.analysisResult.segmentIdsByStatus).flat().filter(isValidIdentifier)).size
+                  : (metric ? metric.uniqueSegmentsCount : (res && res.segmentIdsByStatus ? new Set(Object.values(res.segmentIdsByStatus).flat().filter(isValidIdentifier)).size : 0));
+
+                const totalSegmentCount = savedReport?.analysisResult?.totalFeaturesCount
+                  ?? (metric ? metric.totalSegmentsCount : (res ? (res.totalFeaturesCount || 0) : 0));
 
                 const reportDateRaw = savedReport?.createdAt || savedReport?.parsedAt || metric?.updatedAt;
                 let reportDateFormatted = '';
@@ -1728,18 +1755,19 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
                       )}
                     </td>
                     <td className="p-3 text-center whitespace-nowrap min-w-[150px]">
-                      {onSelectProject && (
-                        <button
-                          type="button"
-                          onClick={() => onSelectProject(p)}
-                          className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 font-extrabold text-[11px] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 mx-auto border border-blue-200 dark:border-blue-800/80 shadow-3xs whitespace-nowrap shrink-0"
-                          title="تصفح وفتح آخر تقرير تم تحليله للمشروع"
-                        >
-                          <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                          <span className="whitespace-nowrap">{savedReport ? `تقرير ${reportDateFormatted || 'المعتمد'}` : (reportDateFormatted ? `تقرير ${reportDateFormatted}` : 'آخر تقرير مُحلل')}</span>
-                          <ExternalLink className="h-3 w-3 opacity-70 shrink-0" />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedReportModalProject(p);
+                          if (onSelectProject) onSelectProject(p);
+                        }}
+                        className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 font-extrabold text-[11px] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 mx-auto border border-blue-200 dark:border-blue-800/80 shadow-3xs whitespace-nowrap shrink-0"
+                        title="تصفح وفتح آخر تقرير تم تحليله للمشروع"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <span className="whitespace-nowrap">{savedReport ? `تقرير ${reportDateFormatted || 'المعتمد'}` : (reportDateFormatted ? `تقرير ${reportDateFormatted}` : 'آخر تقرير مُحلل')}</span>
+                        <ExternalLink className="h-3 w-3 opacity-70 shrink-0" />
+                      </button>
                     </td>
                   </tr>
                 );
@@ -1748,6 +1776,231 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
           </table>
         </div>
       </div>
+
+      {/* Detailed Report Modal */}
+      {selectedReportModalProject && (() => {
+        const p = selectedReportModalProject;
+        const savedReport = findReportForProject(p, reportsMap);
+        const metric = getValidMetricForProject(p);
+        const res = savedReport?.analysisResult || getAnalysisForProject(p);
+
+        const reportDateRaw = savedReport?.createdAt || savedReport?.parsedAt || metric?.updatedAt;
+        let reportDateFormatted = '';
+        if (reportDateRaw) {
+          try {
+            const d = new Date(reportDateRaw);
+            if (!isNaN(d.getTime())) {
+              reportDateFormatted = d.toLocaleDateString('ar-SA', { year: 'numeric', month: '2-digit', day: '2-digit' });
+            }
+          } catch (e) {
+            reportDateFormatted = '';
+          }
+        }
+
+        const totalKm = savedReport?.analysisResult?.totalLengthKm
+          ?? (metric ? metric.totalLengthKm : (res ? res.totalLengthKm : 0));
+
+        const totalMeters = savedReport?.analysisResult?.totalLengthMeters
+          ?? (metric ? metric.totalLengthMeters : (res ? res.totalLengthMeters : 0));
+
+        const ongoingKm = savedReport?.analysisResult?.colorBreakdown?.ongoing?.totalLengthKm
+          ?? (metric ? Number((metric.ongoingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.ongoing?.totalLengthKm || 0) : 0));
+
+        const remainingKm = savedReport?.analysisResult?.colorBreakdown?.remaining?.totalLengthKm
+          ?? (metric ? Number((metric.remainingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.remaining?.totalLengthKm || 0) : 0));
+
+        const executedWaterKm = savedReport?.analysisResult?.colorBreakdown?.executed_water?.totalLengthKm
+          ?? (savedReport?.analysisResult?.colorBreakdown as any)?.executedWater?.totalLengthKm
+          ?? (metric ? Number((metric.executedWaterMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.executed_water?.totalLengthKm || 0) : 0));
+
+        const executedSewageKm = savedReport?.analysisResult?.colorBreakdown?.executed_sewage?.totalLengthKm
+          ?? (savedReport?.analysisResult?.colorBreakdown as any)?.executedSewage?.totalLengthKm
+          ?? (metric ? Number((metric.executedSewageMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.executed_sewage?.totalLengthKm || 0) : 0));
+
+        const cancelledKm = savedReport?.analysisResult?.colorBreakdown?.cancelled?.totalLengthKm
+          ?? (metric ? Number((metric.cancelledMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.cancelled?.totalLengthKm || 0) : 0));
+
+        const permitsList: string[] = savedReport?.analysisResult?.permitNosByStatus
+          ? Array.from(new Set(Object.values(savedReport.analysisResult.permitNosByStatus).flat().filter(isValidIdentifier)))
+          : (metric && metric.permitsList && metric.permitsList.length > 0
+            ? metric.permitsList
+            : (res && res.permitNosByStatus ? Array.from(new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier))) : []));
+
+        const segmentsList: string[] = savedReport?.analysisResult?.segmentIdsByStatus
+          ? Array.from(new Set(Object.values(savedReport.analysisResult.segmentIdsByStatus).flat().filter(isValidIdentifier)))
+          : (metric && metric.segmentsList && metric.segmentsList.length > 0
+            ? metric.segmentsList
+            : (res && res.segmentIdsByStatus ? Array.from(new Set(Object.values(res.segmentIdsByStatus).flat().filter(isValidIdentifier))) : []));
+
+        return (
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md overflow-y-auto">
+            <div dir="rtl" className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+              {/* Header */}
+              <div className="p-5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-blue-600 text-white rounded-2xl shadow-sm shrink-0">
+                    <FileText className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base font-black text-slate-900 dark:text-white">
+                        آخر تقرير تم تحليله للمشروع
+                      </h3>
+                      {reportDateFormatted && (
+                        <span className="px-2.5 py-0.5 bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 font-bold text-xs rounded-full">
+                          تاريخ: {reportDateFormatted}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-0.5">
+                      {p.name} {p.po ? (p.po.includes('PO') ? `(${p.po})` : `(PO: ${p.po})`) : ''}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReportModalProject(null)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-5 flex-1">
+                {/* Meta Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
+                  <div>
+                    <span className="text-slate-400 font-bold block">المقاول</span>
+                    <span className="font-extrabold text-slate-800 dark:text-slate-200">{p.contractor || 'غير محدد'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-bold block">تصنيف / قطاع المشروع</span>
+                    <span className="font-extrabold text-indigo-600 dark:text-indigo-400">{p.scope || p.classification || 'مياه/صرف'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-bold block">حالة العقد</span>
+                    <span className="font-extrabold text-emerald-600 dark:text-emerald-400">{p.status || 'جاري'}</span>
+                  </div>
+                </div>
+
+                {/* Length Breakdown Grid */}
+                <div>
+                  <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 mb-2.5 flex items-center gap-1.5">
+                    <Ruler className="h-4 w-4 text-blue-600" />
+                    <span>ملخص حصر أطوال التقرير المعتمد</span>
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="p-3 bg-blue-50/70 dark:bg-blue-950/40 rounded-2xl border border-blue-100 dark:border-blue-900">
+                      <span className="text-[11px] font-bold text-blue-800 dark:text-blue-300 block">إجمالي طول العقد</span>
+                      <span className="text-lg font-black text-blue-950 dark:text-blue-100">{totalKm.toLocaleString('ar-SA')} <span className="text-xs font-bold">كم</span></span>
+                      {totalMeters > 0 && (
+                        <span className="text-[10px] text-blue-600 dark:text-blue-400 block mt-0.5">({totalMeters.toLocaleString('ar-SA')} متر)</span>
+                      )}
+                    </div>
+
+                    <div className="p-3 bg-sky-50/70 dark:bg-sky-950/40 rounded-2xl border border-sky-200 dark:border-sky-900/80">
+                      <span className="text-[11px] font-bold text-sky-800 dark:text-sky-300 block">منفذ - شبكات مياه</span>
+                      <span className="text-lg font-black text-sky-950 dark:text-sky-100">{executedWaterKm.toLocaleString('ar-SA')} <span className="text-xs font-bold">كم</span></span>
+                    </div>
+
+                    <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-900/80">
+                      <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 block">منفذ - شبكات صرف صحي</span>
+                      <span className="text-lg font-black text-emerald-950 dark:text-emerald-100">{executedSewageKm.toLocaleString('ar-SA')} <span className="text-xs font-bold">كم</span></span>
+                    </div>
+
+                    <div className="p-3 bg-amber-50/70 dark:bg-amber-950/40 rounded-2xl border border-amber-200 dark:border-amber-900">
+                      <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 block">جاري تنفيذه</span>
+                      <span className="text-lg font-black text-amber-950 dark:text-amber-100">{ongoingKm.toLocaleString('ar-SA')} <span className="text-xs font-bold">كم</span></span>
+                    </div>
+
+                    <div className="p-3 bg-rose-50/70 dark:bg-rose-950/40 rounded-2xl border border-rose-200 dark:border-rose-900">
+                      <span className="text-[11px] font-bold text-rose-800 dark:text-rose-300 block">أعمال متبقية</span>
+                      <span className="text-lg font-black text-rose-950 dark:text-rose-100">{remainingKm.toLocaleString('ar-SA')} <span className="text-xs font-bold">كم</span></span>
+                    </div>
+
+                    <div className="p-3 bg-slate-100/70 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700">
+                      <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">خطوط ملغاة</span>
+                      <span className="text-lg font-black text-slate-900 dark:text-slate-100">{cancelledKm.toLocaleString('ar-SA')} <span className="text-xs font-bold">كم</span></span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Permits and Segments Lists */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-indigo-700 dark:text-indigo-300">رخص الحفر (Permit No)</span>
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-300 font-extrabold text-[11px]">
+                        {permitsList.length.toLocaleString('ar-SA')} رخصة
+                      </span>
+                    </div>
+                    <div className="max-h-28 overflow-y-auto p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 flex flex-wrap gap-1.5 text-[11px] font-bold">
+                      {permitsList.length > 0 ? (
+                        permitsList.map((pNo, idx) => (
+                          <span key={idx} className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded-md border border-indigo-100 dark:border-indigo-900/60">
+                            {pNo}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-slate-400 font-normal text-xs">لا توجد رخص مسجلة لهذا التقرير</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-purple-700 dark:text-purple-300">السجمنت / القطاعات (Segment ID)</span>
+                      <span className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 font-extrabold text-[11px]">
+                        {segmentsList.length.toLocaleString('ar-SA')} سجمنت
+                      </span>
+                    </div>
+                    <div className="max-h-28 overflow-y-auto p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 flex flex-wrap gap-1.5 text-[11px] font-bold">
+                      {segmentsList.length > 0 ? (
+                        segmentsList.map((sId, idx) => (
+                          <span key={idx} className="px-2 py-0.5 bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 rounded-md border border-purple-100 dark:border-purple-900/60">
+                            {sId}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-slate-400 font-normal text-xs">لا توجد قطاعات سجمنت مسجلة لهذا التقرير</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+                {onOpenMyMaps ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const proj = p;
+                      setSelectedReportModalProject(null);
+                      onOpenMyMaps(proj);
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+                  >
+                    <Globe className="h-4 w-4 text-cyan-300" />
+                    <span>فتح خريطة التحليل الجغرافي التفصيلية (My Maps) 🌐</span>
+                  </button>
+                ) : (
+                  <div></div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedReportModalProject(null)}
+                  className="px-5 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  إغلاق
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

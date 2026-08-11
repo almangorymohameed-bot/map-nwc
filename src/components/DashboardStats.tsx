@@ -195,6 +195,10 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
         <ProjectLengthsDashboard
           projects={projects}
           onSelectProject={onSelectProject}
+          onOpenMyMaps={(proj) => {
+            if (onSelectProject) onSelectProject(proj);
+            setActiveSubTab('mymaps');
+          }}
         />
       ) : activeSubTab === 'mymaps' ? (
         <MyMapsAnalysisPanel

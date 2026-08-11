@@ -179,7 +179,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   useEffect(() => {
     if (activeProject) {
       setIsLoadingProjectHistory(true);
-      ReportHistoryStore.getHistoricalReports(activeProject.id, activeProject.name)
+      ReportHistoryStore.getHistoricalReports(activeProject.id, activeProject.name, activeProject.po)
         .then(reports => {
           setProjectHistoryReports(reports || []);
           setIsLoadingProjectHistory(false);
@@ -260,7 +260,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   };
 
   const processAndSaveAnalysis = async (newResult: KMLAnalysisResult, proj: Project) => {
-    const previousReport = await ReportHistoryStore.getLatestReport(proj.id, proj.name);
+    const previousReport = await ReportHistoryStore.getLatestReport(proj.id, proj.name, proj.po);
     const diff = compareKMLAnalyses(
       previousReport ? previousReport.analysisResult : null,
       newResult,
@@ -277,7 +277,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
     setIsDiffModalOpen(true);
 
     // Refresh history list for active project
-    const updatedHistory = await ReportHistoryStore.getHistoricalReports(proj.id, proj.name);
+    const updatedHistory = await ReportHistoryStore.getHistoricalReports(proj.id, proj.name, proj.po);
     setProjectHistoryReports(updatedHistory || []);
 
     if (diff.hasChanges) {
@@ -758,7 +758,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                   onClick={async () => {
                     if (activeProject) {
                       setIsLoading(true);
-                      const reports = await ReportHistoryStore.getHistoricalReports(activeProject.id, activeProject.name);
+                      const reports = await ReportHistoryStore.getHistoricalReports(activeProject.id, activeProject.name, activeProject.po);
                       setIsLoading(false);
 
                       const currentAnalysis = analysisResult || (reports.length > 0 ? reports[0].analysisResult : null);
@@ -1860,7 +1860,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
               type="button"
               onClick={() => {
                 setIsLoadingProjectHistory(true);
-                ReportHistoryStore.getHistoricalReports(activeProject.id, activeProject.name)
+                ReportHistoryStore.getHistoricalReports(activeProject.id, activeProject.name, activeProject.po)
                   .then(reports => {
                     setProjectHistoryReports(reports || []);
                     setIsLoadingProjectHistory(false);

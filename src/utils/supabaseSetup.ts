@@ -364,34 +364,60 @@ function sanitizeItemsForStorage(items: any[]): any[] {
   });
 }
 
-function isReportMatchingProject(rowProjId: number, rowProjName: string, targetId: number, targetName: string): boolean {
-  if (!targetName && (isNaN(targetId) || targetId <= 0)) return false;
+export function extractPoDigits(text?: string | null): string {
+  if (!text) return '';
+  const match = String(text).match(/\b\d{6,12}\b/);
+  return match ? match[0] : '';
+}
 
-  const numTargetId = Number(targetId);
-  const numRowId = Number(rowProjId);
-  const cleanTargetName = (targetName || '').trim();
-  const cleanRowName = (rowProjName || '').trim();
+export function isReportMatchingProject(rowProjId: number, rowProjName: string, targetId: number, targetName: string, targetPo?: string): boolean {
+  if (!targetName && (isNaN(targetId) || targetId <= 0) && !targetPo) return false;
 
-  // Strict Audit Rule 1: If both project IDs are positive numbers, they MUST match strictly.
-  // This prevents project A's data or reports from ever being assigned to project B in database queries or stores.
-  if (!isNaN(numTargetId) && numTargetId > 0 && !isNaN(numRowId) && numRowId > 0) {
-    if (numTargetId !== numRowId) {
-      return false; // Rejects mismatched project IDs strictly
+  const targetPoDigits = extractPoDigits(targetPo) || extractPoDigits(targetName);
+  const rowPoDigits = extractPoDigits(rowProjName);
+
+  // 1. PO Number matching (Highest priority & accuracy across database records)
+  if (targetPoDigits && rowPoDigits) {
+    if (targetPoDigits === rowPoDigits) {
+      return true;
     }
-    return true;
+    // CRITICAL FIX: If PO numbers exist on both sides and do NOT match, this report CANNOT belong to this project
+    return false;
   }
 
-  // Strict Audit Rule 2: If one ID is missing or 0 (legacy unassigned record):
-  // Match ONLY if exact project names are identical.
-  if (cleanTargetName && cleanRowName && cleanTargetName === cleanRowName) {
-    return true;
+  // 2. Exact project name matching
+  const cleanTargetName = (targetName || '').trim();
+  const cleanRowName = (rowProjName || '').trim();
+  if (cleanTargetName && cleanRowName) {
+    if (cleanTargetName === cleanRowName) {
+      return true;
+    }
+  }
+
+  // 3. Operational number matching if both contain [OP]
+  const targetOp = (cleanTargetName.match(/\[(.*?)\]/) || [])[1];
+  const rowOp = (cleanRowName.match(/\[(.*?)\]/) || [])[1];
+  if (targetOp && rowOp) {
+    if (targetOp.trim() === rowOp.trim()) return true;
+    return false;
+  }
+
+  // 4. ID matching ONLY if project names/POs don't contradict
+  const numTargetId = Number(targetId);
+  const numRowId = Number(rowProjId);
+  if (!isNaN(numTargetId) && numTargetId > 0 && !isNaN(numRowId) && numRowId > 0) {
+    if (numTargetId === numRowId) {
+      if (!cleanTargetName || !cleanRowName) {
+        return true;
+      }
+    }
   }
 
   return false;
 }
 
 export const ReportHistoryStore = {
-  async getAllLatestReportsMap(): Promise<Map<number, HistoricalReport>> {
+  async getAllLatestReportsMap(projects?: any[]): Promise<Map<number, HistoricalReport>> {
     const map = new Map<number, HistoricalReport>();
     const supabase = getSupabaseClient();
     if (supabase) {
@@ -402,9 +428,17 @@ export const ReportHistoryStore = {
         if (!error && data && data.length > 0) {
           for (const row of data) {
             const report = mapRowToHistoricalReport(row);
-            const pId = Number(report.projectId);
-            if (pId > 0 && !map.has(pId)) {
-              map.set(pId, report);
+            if (projects && Array.isArray(projects) && projects.length > 0) {
+              for (const proj of projects) {
+                if (!map.has(proj.id) && isReportMatchingProject(report.projectId, report.projectName, proj.id, proj.name, proj.po)) {
+                  map.set(proj.id, report);
+                }
+              }
+            } else {
+              const pId = Number(report.projectId);
+              if (pId > 0 && !map.has(pId)) {
+                map.set(pId, report);
+              }
             }
           }
         }
@@ -413,18 +447,27 @@ export const ReportHistoryStore = {
       }
     }
     for (const mem of memoryReports) {
-      const pId = Number(mem.projectId);
-      if (pId > 0 && !map.has(pId)) {
-        map.set(pId, mem);
+      if (projects && Array.isArray(projects) && projects.length > 0) {
+        for (const proj of projects) {
+          if (!map.has(proj.id) && isReportMatchingProject(mem.projectId, mem.projectName, proj.id, proj.name, proj.po)) {
+            map.set(proj.id, mem);
+          }
+        }
+      } else {
+        const pId = Number(mem.projectId);
+        if (pId > 0 && !map.has(pId)) {
+          map.set(pId, mem);
+        }
       }
     }
     return map;
   },
 
-  async getHistoricalReports(projectId: number, projectName?: string): Promise<HistoricalReport[]> {
+  async getHistoricalReports(projectId: number, projectName?: string, po?: string): Promise<HistoricalReport[]> {
     const supabase = getSupabaseClient();
     const cleanName = (projectName || '').trim();
     const numId = Number(projectId);
+    const poDigits = extractPoDigits(po) || extractPoDigits(cleanName);
 
     // Extract operational number if present
     const opNumMatch = cleanName.match(/\[(.*?)\]/);
@@ -434,7 +477,19 @@ export const ReportHistoryStore = {
       try {
         let allRows: any[] = [];
 
-        // 1. Fetch by project_id
+        // 1. Precise AND Query: Fetch by PO number AND order by created_at DESC for exact matching
+        if (poDigits) {
+          // Attempt query matching PO number in project_name with created_at: desc
+          const resPo = await (supabase.from('project_reports') as any)
+            .select('*')
+            .ilike('project_name', `%${poDigits}%`)
+            .order('created_at', { ascending: false });
+          if (!resPo.error && resPo.data) {
+            allRows.push(...resPo.data);
+          }
+        }
+
+        // 2. Combined AND Query: Fetch by project_id AND order by created_at DESC
         if (!isNaN(numId) && numId > 0) {
           const res1 = await (supabase.from('project_reports') as any)
             .select('*')
@@ -445,7 +500,7 @@ export const ReportHistoryStore = {
           }
         }
 
-        // 2. Fetch by operational number if available
+        // 3. Fetch by operational number if available AND order by created_at DESC
         if (opNum) {
           const res2 = await (supabase.from('project_reports') as any)
             .select('*')
@@ -456,7 +511,7 @@ export const ReportHistoryStore = {
           }
         }
 
-        // 3. Fetch by exact project_name
+        // 4. Fetch by exact project_name AND order by created_at DESC
         if (cleanName) {
           const res3 = await (supabase.from('project_reports') as any)
             .select('*')
@@ -479,10 +534,10 @@ export const ReportHistoryStore = {
 
         // Strictly filter candidateRows so only reports for THIS specific project remain
         const matchingRows = candidateRows.filter(row => 
-          isReportMatchingProject(row.project_id, row.project_name, numId, cleanName)
+          isReportMatchingProject(row.project_id, row.project_name, numId, cleanName, po)
         );
 
-        // Sort descending by created_at
+        // Sort descending by created_at (created_at: desc)
         matchingRows.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
 
         // Return max 5 latest reports for display in reports UI
@@ -493,7 +548,7 @@ export const ReportHistoryStore = {
     }
 
     return memoryReports
-      .filter((r) => isReportMatchingProject(r.projectId, r.projectName, numId, cleanName))
+      .filter((r) => isReportMatchingProject(r.projectId, r.projectName, numId, cleanName, po))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 5);
   },
@@ -580,8 +635,55 @@ export const ReportHistoryStore = {
     }
   },
 
-  async getLatestReport(projectId: number, projectName?: string): Promise<HistoricalReport | null> {
-    const reports = await this.getHistoricalReports(projectId, projectName);
+  async getLatestReport(projectId: number, projectName?: string, po?: string): Promise<HistoricalReport | null> {
+    const supabase = getSupabaseClient();
+    const cleanName = (projectName || '').trim();
+    const numId = Number(projectId);
+    const poDigits = extractPoDigits(po) || extractPoDigits(cleanName);
+
+    if (supabase) {
+      try {
+        let rows: any[] = [];
+
+        // Direct Supabase query linking PO filter AND created_at: desc sorting
+        if (poDigits) {
+          let query = (supabase.from('project_reports') as any)
+            .select('*')
+            .ilike('project_name', `%${poDigits}%`);
+
+          if (!isNaN(numId) && numId > 0) {
+            query = query.eq('project_id', numId);
+          }
+
+          const res = await query.order('created_at', { ascending: false }).limit(1);
+          if (!res.error && res.data && res.data.length > 0) {
+            rows = res.data;
+          }
+        }
+
+        if (rows.length === 0 && !isNaN(numId) && numId > 0) {
+          const res = await (supabase.from('project_reports') as any)
+            .select('*')
+            .eq('project_id', numId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+          if (!res.error && res.data && res.data.length > 0) {
+            rows = res.data;
+          }
+        }
+
+        if (rows.length > 0) {
+          const report = mapRowToHistoricalReport(rows[0]);
+          if (isReportMatchingProject(report.projectId, report.projectName, numId, cleanName, po)) {
+            return report;
+          }
+        }
+      } catch (err) {
+        console.error('Supabase getLatestReport exception:', err);
+      }
+    }
+
+    const reports = await this.getHistoricalReports(projectId, projectName, po);
     return reports.length > 0 ? reports[0] : null;
   },
 

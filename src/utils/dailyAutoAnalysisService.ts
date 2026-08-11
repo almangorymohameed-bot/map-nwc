@@ -144,7 +144,7 @@ export async function runSequentialDailyAutoAnalysis(
 
     try {
       // Check if a report for this project was already saved TODAY
-      const latestReport = await ReportHistoryStore.getLatestReport(proj.id, proj.name);
+      const latestReport = await ReportHistoryStore.getLatestReport(proj.id, proj.name, proj.po);
       
       let wasReportDoneToday = false;
       if (latestReport && latestReport.createdAt) {
