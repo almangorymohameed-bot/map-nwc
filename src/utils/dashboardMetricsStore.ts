@@ -5,7 +5,7 @@
 
 import { KMLAnalysisResult, Project, HistoricalReport } from '../types';
 import { getSupabaseClient } from './supabaseSetup';
-import { generateSyntheticProjectKMLData } from './myMapsKmlParser';
+import { generateSyntheticProjectKMLData, isValidIdentifier } from './myMapsKmlParser';
 
 export interface DashboardProjectMetric {
   projectId: number;
@@ -95,12 +95,12 @@ export function computeMetricFromAnalysis(
   if (analysis.items && Array.isArray(analysis.items) && analysis.items.length > 0) {
     analysis.items.forEach(item => {
       const pNo = item.permitNo || (item as any)['permitNo'] || (item as any)['Permit No'] || (item as any)['permit_no'];
-      if (pNo && pNo !== '-' && String(pNo).trim().length > 0) {
+      if (isValidIdentifier(pNo)) {
         permitSet.add(String(pNo).trim());
       }
 
       const sId = item.segmentId || (item as any)['segmentId'] || (item as any)['Segment ID'] || (item as any)['segment_id'];
-      if (sId && sId !== '-' && String(sId).trim().length > 0) {
+      if (isValidIdentifier(sId)) {
         segmentSet.add(String(sId).trim());
       }
       itemCount++;
@@ -113,7 +113,7 @@ export function computeMetricFromAnalysis(
     Object.values(pNosByStatus).forEach((arr: any) => {
       if (Array.isArray(arr)) {
         arr.forEach((pNo: any) => {
-          if (pNo && pNo !== '-' && String(pNo).trim().length > 0) {
+          if (isValidIdentifier(pNo)) {
             permitSet.add(String(pNo).trim());
           }
         });
@@ -126,7 +126,7 @@ export function computeMetricFromAnalysis(
     Object.values(sIdsByStatus).forEach((arr: any) => {
       if (Array.isArray(arr)) {
         arr.forEach((sId: any) => {
-          if (sId && sId !== '-' && String(sId).trim().length > 0) {
+          if (isValidIdentifier(sId)) {
             segmentSet.add(String(sId).trim());
           }
         });
@@ -262,7 +262,7 @@ export const DashboardMetricsStore = {
     reportsMap: Map<number, HistoricalReport>
   ): Promise<Map<number, DashboardProjectMetric>> {
     const existingMap = await this.getAllMetricsMap();
-    const updatedMap = new Map<number, DashboardProjectMetric>(existingMap);
+    const updatedMap = new Map<number, DashboardProjectMetric>();
 
     let needsSave = false;
 
@@ -270,33 +270,26 @@ export const DashboardMetricsStore = {
       const pId = Number(p.id);
       if (!pId) continue;
 
+      // STRICT AUDIT: Get report strictly by project ID
       let savedRep = reportsMap.get(pId);
-      if (!savedRep && p.name) {
-        const cleanName = p.name.trim();
-        const opMatch = cleanName.match(/\[(.*?)\]/);
-        const opNum = opMatch ? opMatch[1].trim() : '';
-
-        for (const rep of reportsMap.values()) {
-          const repName = rep.projectName ? rep.projectName.trim() : '';
-          const repOpMatch = repName.match(/\[(.*?)\]/);
-          const repOpNum = repOpMatch ? repOpMatch[1].trim() : '';
-
-          if (opNum && repOpNum && opNum === repOpNum) {
-            savedRep = rep;
-            break;
-          }
-          if (cleanName && repName && cleanName === repName) {
-            savedRep = rep;
-            break;
-          }
-        }
+      if (savedRep && Number(savedRep.projectId) !== pId) {
+        savedRep = undefined; // Reject mismatching project report
       }
 
       let analysis: KMLAnalysisResult | null = null;
       if (savedRep && savedRep.analysisResult) {
         analysis = savedRep.analysisResult;
-      } else if (!existingMap.has(pId)) {
-        analysis = generateSyntheticProjectKMLData(p.name, p.mapUrl || '', p.scope);
+      } else {
+        // Check if existing metric in database/memory matches this project ID AND project name strictly
+        const existingMetric = existingMap.get(pId);
+        if (existingMetric && existingMetric.projectId === pId && existingMetric.projectName === p.name) {
+          updatedMap.set(pId, existingMetric);
+          memoryMetricsMap.set(pId, existingMetric);
+          continue;
+        } else {
+          // Generate synthetic analysis strictly for THIS project
+          analysis = generateSyntheticProjectKMLData(p.name, p.mapUrl || '', p.scope);
+        }
       }
 
       if (analysis) {

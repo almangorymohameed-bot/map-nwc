@@ -350,6 +350,73 @@ export async function fetchMyMapsKML(link: string): Promise<string> {
 }
 
 /**
+ * Robustly parses KML coordinate string into array of [longitude, latitude] tuples.
+ * Handles:
+ * - "lng,lat,alt lng,lat,alt"
+ * - "lng, lat, alt \n lng, lat, alt"
+ * - "lng,lat,alt,lng,lat,alt"
+ * - "lng,lat lng,lat"
+ */
+export function parseKmlCoordinatesText(text: string): Array<[number, number]> {
+  if (!text) return [];
+  const points: Array<[number, number]> = [];
+
+  // Match numbers separated by commas (with optional whitespace)
+  const regex = /(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\s*,\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)(?:\s*,\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?))?/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    const lng = parseFloat(match[1]);
+    const lat = parseFloat(match[2]);
+    if (!isNaN(lng) && !isNaN(lat) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      if (points.length === 0 || (points[points.length - 1][0] !== lng || points[points.length - 1][1] !== lat)) {
+        points.push([lng, lat]);
+      }
+    }
+  }
+
+  // Fallback if space-delimited without commas
+  if (points.length < 2) {
+    const gxRegex = /(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)(?:\s+(-?\d+(?:\.\d+)?))?/g;
+    while ((match = gxRegex.exec(text)) !== null) {
+      const lng = parseFloat(match[1]);
+      const lat = parseFloat(match[2]);
+      if (!isNaN(lng) && !isNaN(lat) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+        if (points.length === 0 || (points[points.length - 1][0] !== lng || points[points.length - 1][1] !== lat)) {
+          points.push([lng, lat]);
+        }
+      }
+    }
+  }
+
+  return points;
+}
+
+/**
+ * Validates whether a Segment ID, Permit No, or text field contains a meaningful value.
+ * Returns false if the value is empty, null, undefined, or consists only of
+ * spaces, dashes (-), slashes (/), backslashes (\), underscores (_), or placeholders (e.g. N/A, none, بدون, - / -).
+ */
+export function isValidIdentifier(val: any): boolean {
+  if (val === null || val === undefined) return false;
+  const str = String(val).trim();
+  if (str.length === 0) return false;
+
+  // Check if string contains ONLY dashes, slashes, spaces, backslashes, dots, or underscores
+  if (/^[-\s\/\\_\.]*$/.test(str) || /^[-\s\/\\_\.]+$/.test(str)) return false;
+
+  const lower = str.toLowerCase();
+  const invalidKeywords = [
+    '-', '/', '--', '//', '-/-', '- / -', '-/', '/-', 'n/a', 'na', 'none', 'null', 
+    'undefined', 'بدون', 'لا يوجد', 'لايوجد', 'غير محدد', 'غير متوفر', 'فراغ', 'بدون تصريح', 'بدون فسح'
+  ];
+
+  if (invalidKeywords.includes(lower)) return false;
+
+  return true;
+}
+
+/**
  * Parse KML XML string into analytical dataset
  */
 export function parseKMLContent(xmlString: string, projectName: string = 'مشروع الخارطة التفاعلية', mapUrl: string = '', projectScope?: string): KMLAnalysisResult {
@@ -422,10 +489,17 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
   const items: KMLFeatureItem[] = [];
 
   placemarks.forEach((pm, idx) => {
-    // Strict Filter: Process ONLY LineString geometry features, ignoring standalone Points/Polygons/Markers
-    const lineStringNodes = pm.getElementsByTagName('LineString');
-    if (!lineStringNodes || lineStringNodes.length === 0) {
-      return; // Skip non-LineString placemarks
+    // Strict Filter: Process ONLY LineString/Line geometry features, ignoring standalone Points/Polygons/Markers
+    const allChildElements = Array.from(pm.getElementsByTagName('*'));
+    
+    // Find all line geometry nodes (LineString, Track, MultiLineString)
+    const lineStringNodes = allChildElements.filter(el => {
+      const name = (el.localName || el.tagName || '').toLowerCase();
+      return name === 'linestring' || name === 'track' || name === 'multilinestring';
+    });
+
+    if (lineStringNodes.length === 0) {
+      return; // Skip non-LineString placemarks (Points, Polygons, Markers)
     }
 
     const name = pm.getElementsByTagName('name')[0]?.textContent?.trim() || `قطاع خط ${idx + 1}`;
@@ -450,7 +524,7 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     dataElements.forEach(dataEl => {
       const nameAttr = (dataEl.getAttribute('name') || '').trim().toLowerCase();
       const val = dataEl.textContent?.trim() || '';
-      if (!val || val === '-') return;
+      if (!isValidIdentifier(val)) return;
 
       if (nameAttr.includes('segment') || nameAttr.includes('قطاع') || nameAttr.includes('seg_id') || nameAttr === 'id') {
         segmentId = val;
@@ -482,13 +556,13 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     // Fallback extraction from description text / HTML via Regex
     const descText = description.replace(/<[^>]+>/g, ' ');
 
-    if (!segmentId) {
+    if (!isValidIdentifier(segmentId)) {
       const segMatch = descText.match(/(?:Segment\s*ID|Segment|قطاع|مقطع|معرف)\s*[:=]?\s*([A-Za-z0-9_-]+)/i) || name.match(/(?:SEG|SEGMENT|SEC|SEC-)\s*([0-9_-]+)/i);
-      if (segMatch) segmentId = segMatch[0];
+      if (segMatch && isValidIdentifier(segMatch[0])) segmentId = segMatch[0].trim();
     }
-    if (!permitNo) {
+    if (!isValidIdentifier(permitNo)) {
       const permMatch = descText.match(/(?:Permit\s*No|Permit|تصريح|رقم التصريح)\s*[:=]?\s*([A-Za-z0-9_-]+)/i) || name.match(/(?:PERM|P-)\s*([0-9_-]+)/i);
-      if (permMatch) permitNo = permMatch[0];
+      if (permMatch && isValidIdentifier(permMatch[0])) permitNo = permMatch[0].trim();
     }
     if (!extractedStage) {
       const stageMatch = descText.match(/(?:Stage|مرحلة|وضع الحفرية|حالة الحفرية)\s*[:=]?\s*([^\n\r<,]+)/i);
@@ -496,45 +570,43 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     }
     if (!streetName) {
       const m = descText.match(/(?:STREETNAME|STREET_NAME|STREET|الشارع|اسم الشارع)\s*[:=]?\s*([^\r\n<,]+)/i) || descText.match(/([^\r\n<,]+)\s+STREETNAME/i);
-      if (m && m[1] && m[1].trim() !== '-') streetName = m[1].trim();
+      if (m && m[1] && isValidIdentifier(m[1])) streetName = m[1].trim();
     }
     if (!district) {
       const m = descText.match(/(?:DISTRICT|HAY|NEIGHBORHOOD|الحي|حي)\s*[:=]?\s*([^\r\n<,]+)/i) || descText.match(/([^\r\n<,]+)\s+DISTRICT/i);
-      if (m && m[1] && m[1].trim() !== '-') district = m[1].trim();
+      if (m && m[1] && isValidIdentifier(m[1])) district = m[1].trim();
     }
     if (!innerDiameter) {
       const m = descText.match(/(?:INNERDIAMETER|INNER_DIAMETER|DIAMETER|القطر الداخلي|القطر_الداخلي|القطر)\s*[:=]?\s*([0-9.,A-Za-z_-]+)/i) || descText.match(/([0-9.,A-Za-z_-]+)\s+INNERDIAMETER/i);
-      if (m && m[1] && m[1].trim() !== '-') innerDiameter = m[1].trim();
+      if (m && m[1] && isValidIdentifier(m[1])) innerDiameter = m[1].trim();
     }
     if (!zone) {
       const m = descText.match(/(?:ZONE|ZONE_NO|المنطقة|منطقة|زون)\s*[:=]?\s*([0-9.,A-Za-z_-]+)/i) || descText.match(/([0-9.,A-Za-z_-]+)\s+ZONE/i);
-      if (m && m[1] && m[1].trim() !== '-') zone = m[1].trim();
+      if (m && m[1] && isValidIdentifier(m[1])) zone = m[1].trim();
     }
     if (!drillingType) {
       const m = descText.match(/(?:Drilling\s*type|DRILLING_TYPE|DRILLINGTYPE|نوع\s*الحفر|طريقة\s*الحفر)\s*[:=]?\s*([^\r\n<,]+)/i) || descText.match(/([^\r\n<,]+)\s+Drilling\s*type/i);
-      if (m && m[1] && m[1].trim() !== '-') drillingType = m[1].trim();
+      if (m && m[1] && isValidIdentifier(m[1])) drillingType = m[1].trim();
     }
     if (!contractor) {
       const m = descText.match(/(?:CONTRACTOR|CONTRACTOR_NAME|المقاول|شركة\s*المقاولات|اسم\s*المقاول)\s*[:=]?\s*([^\r\n<,]+)/i) || descText.match(/([^\r\n<,]+)\s+CONTRACTOR/i);
-      if (m && m[1] && m[1].trim() !== '-') contractor = m[1].trim();
+      if (m && m[1] && isValidIdentifier(m[1])) contractor = m[1].trim();
     }
     if (!kmlProjectName) {
       const m = descText.match(/(?:PROJECTNAME|PROJECT_NAME|اسم\s*المشروع)\s*[:=]?\s*([^\r\n<,]+)/i) || descText.match(/([^\r\n<,]+)\s+PROJECTNAME/i);
-      if (m && m[1] && m[1].trim() !== '-') kmlProjectName = m[1].trim();
+      if (m && m[1] && isValidIdentifier(m[1])) kmlProjectName = m[1].trim();
     }
     if (!kmlProjectId) {
       const m = descText.match(/(?:PROJECTID|PROJECT_ID|رقم\s*المشروع|معرف\s*المشروع)\s*[:=]?\s*([0-9.,A-Za-z_-]+)/i) || descText.match(/([0-9.,A-Za-z_-]+)\s+PROJECTID/i);
-      if (m && m[1] && m[1].trim() !== '-') kmlProjectId = m[1].trim();
+      if (m && m[1] && isValidIdentifier(m[1])) kmlProjectId = m[1].trim();
     }
 
-    // Default fallbacks for clean presentation with project-unique hash to prevent global collisions
-    if (!segmentId) {
-      let pHash = 0;
-      for (let c = 0; c < projectName.length; c++) {
-        pHash = (pHash * 31 + projectName.charCodeAt(c)) % 10000;
-      }
-      pHash = Math.abs(pHash) || 101;
-      segmentId = `SEG-${pHash * 100 + idx + 1}`;
+    // Clean out invalid segmentId and permitNo (e.g. whitespace, '-', '/', 'N/A')
+    if (!isValidIdentifier(segmentId)) {
+      segmentId = '';
+    }
+    if (!isValidIdentifier(permitNo)) {
+      permitNo = '';
     }
 
     // Determine hex color with maximum fallback coverage
@@ -570,7 +642,7 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
       }
     }
 
-    // 1. Calculate actual geographic line length in meters strictly from LineString coordinates using @turf/length
+    // 1. Calculate actual geographic line length in meters strictly from LineString coordinates using parseKmlCoordinatesText
     let geoMeters = 0;
     let coordsCount = 0;
     const allCoordinates: Array<[number, number]> = [];
@@ -578,32 +650,38 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     let sumLng = 0;
     let validPtsCount = 0;
 
-    const lineStrings = Array.from(lineStringNodes);
-    lineStrings.forEach(ls => {
-      const coordsText = ls.getElementsByTagName('coordinates')[0]?.textContent || ls.textContent || '';
-      const rawTokens = coordsText.trim().split(/[\s\r\n]+/);
-      const pointsLngLat: Array<[number, number]> = [];
+    lineStringNodes.forEach(ls => {
+      let coordsText = '';
+      const coordsNode = Array.from(ls.getElementsByTagName('*')).find(el => (el.localName || el.tagName || '').toLowerCase() === 'coordinates');
+      if (coordsNode && coordsNode.textContent) {
+        coordsText = coordsNode.textContent;
+      } else {
+        coordsText = ls.textContent || '';
+      }
 
-      rawTokens.forEach(token => {
-        if (!token) return;
-        const parts = token.split(',');
-        if (parts.length >= 2) {
-          const lng = parseFloat(parts[0]);
-          const lat = parseFloat(parts[1]);
-          if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
-            pointsLngLat.push([lng, lat]); // Turf format: [longitude, latitude]
-            allCoordinates.push([lng, lat]);
-            sumLat += lat;
-            sumLng += lng;
-            validPtsCount++;
-          }
-        }
+      const pointsLngLat = parseKmlCoordinatesText(coordsText);
+
+      pointsLngLat.forEach(pt => {
+        allCoordinates.push(pt);
+        sumLng += pt[0];
+        sumLat += pt[1];
+        validPtsCount++;
       });
 
       coordsCount += pointsLngLat.length;
       if (pointsLngLat.length >= 2) {
         const turfLengthMeters = calculateTurfLineStringLength(pointsLngLat);
-        geoMeters += turfLengthMeters;
+        let haversineMeters = 0;
+        for (let p = 0; p < pointsLngLat.length - 1; p++) {
+          haversineMeters += getHaversineDistanceMeters(
+            pointsLngLat[p][1], pointsLngLat[p][0],
+            pointsLngLat[p + 1][1], pointsLngLat[p + 1][0]
+          );
+        }
+        const preciseLength = (turfLengthMeters > 0 && !isNaN(turfLengthMeters)) 
+          ? Math.max(turfLengthMeters, haversineMeters) 
+          : haversineMeters;
+        geoMeters += preciseLength;
       }
     });
 
@@ -844,8 +922,8 @@ function generateFinalAnalysisResult(
   items.forEach(it => {
     const cat = it.statusCategory;
     colorBreakdown[cat].totalLengthMeters += it.lengthMeters;
-    if (it.segmentId) segmentSetMap[cat].add(it.segmentId);
-    if (it.permitNo) permitSetMap[cat].add(it.permitNo);
+    if (isValidIdentifier(it.segmentId)) segmentSetMap[cat].add(it.segmentId.trim());
+    if (isValidIdentifier(it.permitNo)) permitSetMap[cat].add(it.permitNo.trim());
   });
 
   categories.forEach(cat => {

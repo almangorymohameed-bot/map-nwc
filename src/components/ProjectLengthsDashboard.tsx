@@ -7,7 +7,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Project, StatusCategory, KMLAnalysisResult, HistoricalReport } from '../types';
 import { ReportHistoryStore } from '../utils/supabaseSetup';
 import { DashboardMetricsStore, DashboardProjectMetric } from '../utils/dashboardMetricsStore';
-import { generateSyntheticProjectKMLData, getStatusCategoryLabel } from '../utils/myMapsKmlParser';
+import { generateSyntheticProjectKMLData, getStatusCategoryLabel, isValidIdentifier } from '../utils/myMapsKmlParser';
+import * as XLSX from 'xlsx';
 import {
   Ruler,
   FileCheck,
@@ -29,7 +30,8 @@ import {
   Table,
   SlidersHorizontal,
   Info,
-  Filter
+  Filter,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface ProjectLengthsDashboardProps {
@@ -217,31 +219,42 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
     });
   };
 
-  // Helper to get KML analysis result for a project strictly from stored reports in database or generate scope-specific analysis
-  const getAnalysisForProject = (p: Project): KMLAnalysisResult | null => {
-    let saved = reportsMap.get(p.id);
-    if (!saved && p.name) {
-      const cleanName = p.name.trim();
-      const opMatch = cleanName.match(/\[(.*?)\]/);
-      const opNum = opMatch ? opMatch[1].trim() : '';
-
-      for (const rep of reportsMap.values()) {
-        const repName = rep.projectName ? rep.projectName.trim() : '';
-        const repOpMatch = repName.match(/\[(.*?)\]/);
-        const repOpNum = repOpMatch ? repOpMatch[1].trim() : '';
-
-        if (opNum && repOpNum && opNum === repOpNum) {
-          saved = rep;
-          break;
-        }
-        if (cleanName && repName && cleanName === repName) {
-          saved = rep;
-          break;
-        }
+  const getValidMetricForProject = (p: Project): DashboardProjectMetric | undefined => {
+    const metric = metricsMap.get(p.id);
+    if (!metric) return undefined;
+    if (metric.projectId !== p.id) return undefined;
+    if (metric.projectName && p.name && metric.projectName.trim() !== p.name.trim()) {
+      const getOp = (str: string) => {
+        const m = str.match(/\[(.*?)\]/);
+        return m ? m[1].trim() : '';
+      };
+      const opP = getOp(p.name);
+      const opM = getOp(metric.projectName);
+      if (opP && opM && opP !== opM) {
+        return undefined; // Reject mismatching project metric
       }
     }
+    return metric;
+  };
+
+  // Helper to get KML analysis result for a project strictly from stored reports in database or generate scope-specific analysis
+  const getAnalysisForProject = (p: Project): KMLAnalysisResult | null => {
+    const saved = reportsMap.get(p.id);
     if (saved && saved.analysisResult && saved.analysisResult.totalLengthMeters > 0) {
-      return saved.analysisResult;
+      if (Number(saved.projectId) === p.id) {
+        if (saved.projectName && p.name && saved.projectName.trim() !== p.name.trim()) {
+          const getOp = (str: string) => {
+            const m = str.match(/\[(.*?)\]/);
+            return m ? m[1].trim() : '';
+          };
+          const opP = getOp(p.name);
+          const opR = getOp(saved.projectName);
+          if (opP && opR && opP !== opR) {
+            return generateSyntheticProjectKMLData(p.name, p.mapUrl || '', p.scope);
+          }
+        }
+        return saved.analysisResult;
+      }
     }
     return generateSyntheticProjectKMLData(p.name, p.mapUrl || '', p.scope);
   };
@@ -275,7 +288,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
     };
 
     catProjects.forEach(p => {
-      const metric = metricsMap.get(p.id);
+      const metric = getValidMetricForProject(p);
       if (metric) {
         totalMeters += metric.totalLengthMeters;
 
@@ -357,7 +370,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
           const cat = item.statusCategory || 'ongoing';
           // Permit No -> Unique permits per project / globally
           const pNo = item.permitNo || (item as any)['permitNo'] || (item as any)['Permit No'] || (item as any)['permit_no'];
-          if (pNo && pNo !== '-' && String(pNo).trim().length > 0) {
+          if (isValidIdentifier(pNo)) {
             const cleanP = String(pNo).trim();
             globalPermitSet.add(cleanP);
             if (breakdownMap[cat]) {
@@ -367,7 +380,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
 
           // Segment ID / Feature element -> total segment elements distributed across sectors
           const sId = item.segmentId || (item as any)['segmentId'] || (item as any)['Segment ID'] || (item as any)['segment_id'];
-          if (sId && sId !== '-' && String(sId).trim().length > 0) {
+          if (isValidIdentifier(sId)) {
             const cleanS = String(sId).trim();
             globalSegmentSet.add(cleanS);
             if (breakdownMap[cat]) {
@@ -385,7 +398,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
           const pList = pNosByCat ? (pNosByCat[key] || pNosByCat[cat]) : null;
           if (Array.isArray(pList)) {
             pList.forEach((pNo: any) => {
-              if (pNo && pNo !== '-' && String(pNo).trim().length > 0) {
+              if (isValidIdentifier(pNo)) {
                 const cleanP = String(pNo).trim();
                 globalPermitSet.add(cleanP);
                 if (breakdownMap[cat]) {
@@ -398,7 +411,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
           const sList = sIdsByCat ? (sIdsByCat[key] || sIdsByCat[cat]) : null;
           if (Array.isArray(sList)) {
             sList.forEach((sId: any) => {
-              if (sId && sId !== '-' && String(sId).trim().length > 0) {
+              if (isValidIdentifier(sId)) {
                 const cleanS = String(sId).trim();
                 globalSegmentSet.add(cleanS);
                 if (breakdownMap[cat]) {
@@ -546,6 +559,156 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
   // Printable report handler
   const handlePrint = () => {
     window.print();
+  };
+
+  // Excel Export Handler for Detailed Projects List
+  const handleExportProjectsToExcel = () => {
+    const exportRows = searchedProjects.map((p, idx) => {
+      const metric = getValidMetricForProject(p);
+      const res = getAnalysisForProject(p);
+
+      const totalKm = metric ? metric.totalLengthKm : (res ? res.totalLengthKm : 0);
+      const ongoingKm = metric ? Number((metric.ongoingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.ongoing?.totalLengthKm || 0) : 0);
+      const remainingKm = metric ? Number((metric.remainingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.remaining?.totalLengthKm || 0) : 0);
+      
+      const executedWaterKm = metric 
+        ? Number((metric.executedWaterMeters / 1000).toFixed(3)) 
+        : (res ? (res.colorBreakdown?.executed_water?.totalLengthKm || (res.colorBreakdown as any)?.executedWater?.totalLengthKm || 0) : 0);
+
+      const executedSewageKm = metric 
+        ? Number((metric.executedSewageMeters / 1000).toFixed(3)) 
+        : (res ? (res.colorBreakdown?.executed_sewage?.totalLengthKm || (res.colorBreakdown as any)?.executedSewage?.totalLengthKm || 0) : 0);
+
+      const cancelledKm = metric 
+        ? Number((metric.cancelledMeters / 1000).toFixed(3)) 
+        : (res ? (res.colorBreakdown?.cancelled?.totalLengthKm || 0) : 0);
+
+      const permitCount = metric 
+        ? metric.permitsCount 
+        : (res && res.permitNosByStatus 
+            ? new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier)).size 
+            : 0);
+
+      const uniqueSegmentCount = metric 
+        ? metric.uniqueSegmentsCount 
+        : (res && res.segmentIdsByStatus 
+            ? new Set(Object.values(res.segmentIdsByStatus).flat().filter(isValidIdentifier)).size 
+            : 0);
+
+      const totalSegmentCount = metric 
+        ? metric.totalSegmentsCount 
+        : (res ? (res.totalFeaturesCount || 0) : 0);
+
+      return {
+        'م': idx + 1,
+        'معرف المشروع': p.id,
+        'اسم المشروع / أمر الشراء': p.name || '-',
+        'رقم أمر الشراء (PO)': p.po || '-',
+        'الرقم التشغيلي / رقم العقد': p.operationalNumber || '-',
+        'المقاول': p.contractor || 'غير محدد',
+        'تصنيف المشروع': p.classification || 'غير محدد',
+        'البرنامج / القطاع التابع له': p.subProgram || p.scope || 'غير محدد',
+        'مجال العمل': p.scope || 'غير محدد',
+        'الاستشاري': p.consultant || 'غير محدد',
+        'المنطقة / النطاق': p.region || 'القطاع الأوسط',
+        'وحدة الأعمال': p.businessUnit || 'وحدة أعمال الرياض',
+        'حالة العقد': p.status || 'جاري',
+        'إجمالي الأطوال بالعقد (كم)': totalKm,
+        'الجاري تنفيذه (كم)': ongoingKm,
+        'المتبقي (كم)': remainingKm,
+        'المنفذ - شبكات مياه (كم)': executedWaterKm,
+        'المنفذ - شبكات صرف صحي (كم)': executedSewageKm,
+        'خطوط ملغاة (كم)': cancelledKm,
+        'أعداد الرخص (Permit No)': permitCount,
+        'أعداد السجمنت الفريد (Segment ID)': uniqueSegmentCount,
+        'إجمالي عناصر السجمنت': totalSegmentCount
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    worksheet['!views'] = [{ RTL: true }];
+
+    if (exportRows.length > 0) {
+      const keys = Object.keys(exportRows[0]);
+      worksheet['!cols'] = keys.map(key => ({
+        wch: Math.max(key.length * 2.2, 16)
+      }));
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'حصر أطوال المشاريع');
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `قائمة_المشاريع_وحصر_الأطوال_${dateStr}.xlsx`);
+  };
+
+  // Excel Export Handler for Sector Comparison Table
+  const handleExportComparisonToExcel = () => {
+    const rows = [
+      {
+        'التصنيف / القطاع': '🌐 جميع المشاريع (الكل)',
+        'عدد المشاريع': allCategoryStatsMap.all.projectsCount,
+        'إجمالي الأطوال بالعقد (كم)': allCategoryStatsMap.all.totalContractKm,
+        'الجاري (كم)': allCategoryStatsMap.all.statusBreakdown.ongoing.totalKm,
+        'المتبقي (كم)': allCategoryStatsMap.all.statusBreakdown.remaining.totalKm,
+        'المنفذ (كم)': Number((allCategoryStatsMap.all.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.all.statusBreakdown.executed_sewage.totalKm).toFixed(3)),
+        'أعداد الرخص (Permit No)': allCategoryStatsMap.all.totalPermitsCount,
+        'السجمنت الفريد': allCategoryStatsMap.all.uniqueSegmentsCount,
+        'إجمالي عناصر السجمنت': allCategoryStatsMap.all.totalSegmentsCount
+      },
+      {
+        'التصنيف / القطاع': '🏙️ مشاريع الرياض',
+        'عدد المشاريع': allCategoryStatsMap.riyadh.projectsCount,
+        'إجمالي الأطوال بالعقد (كم)': allCategoryStatsMap.riyadh.totalContractKm,
+        'الجاري (كم)': allCategoryStatsMap.riyadh.statusBreakdown.ongoing.totalKm,
+        'المتبقي (كم)': allCategoryStatsMap.riyadh.statusBreakdown.remaining.totalKm,
+        'المنفذ (كم)': Number((allCategoryStatsMap.riyadh.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.riyadh.statusBreakdown.executed_sewage.totalKm).toFixed(3)),
+        'أعداد الرخص (Permit No)': allCategoryStatsMap.riyadh.totalPermitsCount,
+        'السجمنت الفريد': allCategoryStatsMap.riyadh.uniqueSegmentsCount,
+        'إجمالي عناصر السجمنت': allCategoryStatsMap.riyadh.totalSegmentsCount
+      },
+      {
+        'التصنيف / القطاع': '🏛️ مشاريع المحافظات',
+        'عدد المشاريع': allCategoryStatsMap.governorates.projectsCount,
+        'إجمالي الأطوال بالعقد (كم)': allCategoryStatsMap.governorates.totalContractKm,
+        'الجاري (كم)': allCategoryStatsMap.governorates.statusBreakdown.ongoing.totalKm,
+        'المتبقي (كم)': allCategoryStatsMap.governorates.statusBreakdown.remaining.totalKm,
+        'المنفذ (كم)': Number((allCategoryStatsMap.governorates.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.governorates.statusBreakdown.executed_sewage.totalKm).toFixed(3)),
+        'أعداد الرخص (Permit No)': allCategoryStatsMap.governorates.totalPermitsCount,
+        'السجمنت الفريد': allCategoryStatsMap.governorates.uniqueSegmentsCount,
+        'إجمالي عناصر السجمنت': allCategoryStatsMap.governorates.totalSegmentsCount
+      },
+      {
+        'التصنيف / القطاع': '💧 مشاريع الصرف بالقطاع الأوسط',
+        'عدد المشاريع': allCategoryStatsMap.central_sewage.projectsCount,
+        'إجمالي الأطوال بالعقد (كم)': allCategoryStatsMap.central_sewage.totalContractKm,
+        'الجاري (كم)': allCategoryStatsMap.central_sewage.statusBreakdown.ongoing.totalKm,
+        'المتبقي (كم)': allCategoryStatsMap.central_sewage.statusBreakdown.remaining.totalKm,
+        'المنفذ (كم)': Number((allCategoryStatsMap.central_sewage.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.central_sewage.statusBreakdown.executed_sewage.totalKm).toFixed(3)),
+        'أعداد الرخص (Permit No)': allCategoryStatsMap.central_sewage.totalPermitsCount,
+        'السجمنت الفريد': allCategoryStatsMap.central_sewage.uniqueSegmentsCount,
+        'إجمالي عناصر السجمنت': allCategoryStatsMap.central_sewage.totalSegmentsCount
+      },
+      {
+        'التصنيف / القطاع': '🚰 مشاريع المياه بالقطاع الأوسط',
+        'عدد المشاريع': allCategoryStatsMap.central_water.projectsCount,
+        'إجمالي الأطوال بالعقد (كم)': allCategoryStatsMap.central_water.totalContractKm,
+        'الجاري (كم)': allCategoryStatsMap.central_water.statusBreakdown.ongoing.totalKm,
+        'المتبقي (كم)': allCategoryStatsMap.central_water.statusBreakdown.remaining.totalKm,
+        'المنفذ (كم)': Number((allCategoryStatsMap.central_water.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.central_water.statusBreakdown.executed_sewage.totalKm).toFixed(3)),
+        'أعداد الرخص (Permit No)': allCategoryStatsMap.central_water.totalPermitsCount,
+        'السجمنت الفريد': allCategoryStatsMap.central_water.uniqueSegmentsCount,
+        'إجمالي عناصر السجمنت': allCategoryStatsMap.central_water.totalSegmentsCount
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet['!views'] = [{ RTL: true }];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'مقارنة القطاعات');
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `مقارنة_قطاعات_الأطوال_${dateStr}.xlsx`);
   };
 
   return (
@@ -912,23 +1075,23 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
         </div>
 
         {/* Remaining Length */}
-        <div className="bg-rose-50/60 dark:bg-rose-950/30 p-4 rounded-2xl border border-rose-200 dark:border-rose-800/60 shadow-xs flex flex-col justify-between">
+        <div className="bg-rose-50/60 dark:bg-rose-950/30 p-4 rounded-2xl border border-rose-200 dark:border-rose-800/60 shadow-xs flex flex-col justify-between" style={{ backgroundColor: '#800404' }}>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-rose-800 dark:text-rose-300">الأطوال المتبقية</span>
+            <span className="text-xs font-bold text-rose-800 dark:text-rose-300" style={{ color: '#f7f1f3' }}>الأطوال المتبقية</span>
             <div className="p-2 bg-rose-600 text-white rounded-xl shadow-xs">
               <AlertTriangle className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-3">
             <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-black text-rose-900 dark:text-rose-200 tracking-tight">
+              <span className="text-2xl font-black text-rose-900 dark:text-rose-200 tracking-tight" style={{ color: '#e4c9d2' }}>
                 {activeStats.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')} <span className="text-xs">كم</span>
               </span>
               <span className="text-xs font-extrabold px-2 py-0.5 rounded-full bg-rose-200 dark:bg-rose-900/80 text-rose-900 dark:text-rose-200">
                 %{activeStats.statusBreakdown.remaining.percentage}
               </span>
             </div>
-            <p className="text-[11px] font-semibold text-rose-700 dark:text-rose-400 mt-0.5">
+            <p className="text-[11px] font-semibold text-rose-700 dark:text-rose-400 mt-0.5" style={{ color: '#fffefe' }}>
               ({activeStats.statusBreakdown.remaining.totalMeters.toLocaleString('ar-SA')} متر)
             </p>
           </div>
@@ -1124,11 +1287,11 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
           </div>
 
           {/* Remaining Card (أعمال متبقية) */}
-          <div className="bg-rose-50/90 dark:bg-rose-950/40 p-5 rounded-2xl border-2 border-rose-300 dark:border-rose-700 shadow-xs space-y-4 relative overflow-hidden">
+          <div className="bg-rose-50/90 dark:bg-rose-950/40 p-5 rounded-2xl border-2 border-rose-300 dark:border-rose-700 shadow-xs space-y-4 relative overflow-hidden" style={{ backgroundColor: '#91111c' }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-3.5 h-3.5 rounded-full bg-rose-600 border border-rose-800"></span>
-                <h4 className="font-extrabold text-slate-900 dark:text-white text-base">أعمال متبقية</h4>
+                <h4 className="font-extrabold text-slate-900 dark:text-white text-base" style={{ color: '#f1f3f8' }}>أعمال متبقية</h4>
               </div>
               <span className="px-2.5 py-1 rounded-full text-xs font-black bg-rose-600 text-white shadow-xs">
                 %{activeStats.statusBreakdown.remaining.percentage}
@@ -1136,10 +1299,10 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
             </div>
 
             <div>
-              <div className="text-3xl font-black text-slate-900 dark:text-rose-100 tracking-tight">
+              <div className="text-3xl font-black text-slate-900 dark:text-rose-100 tracking-tight" style={{ color: '#eef0f5' }}>
                 {activeStats.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')} <span className="text-sm font-bold">كم</span>
               </div>
-              <div className="text-xs font-bold text-rose-800 dark:text-rose-300 mt-1">
+              <div className="text-xs font-bold text-rose-800 dark:text-rose-300 mt-1" style={{ color: '#e7dee1' }}>
                 الطول الإجمالي: {activeStats.statusBreakdown.remaining.totalMeters.toLocaleString('ar-SA')} متر
               </div>
             </div>
@@ -1297,13 +1460,24 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
               عرض تجميعي جنبًا إلى جنب لكافة أطوال العقود الكلية، والجاري تنفيذها، والمتبقية، والمنفذة، وأعداد الرخص والسجمنت.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowComparisonTable(!showComparisonTable)}
-            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-          >
-            {showComparisonTable ? 'إخفاء الجدول 🔼' : 'عرض الجدول 🔽'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportComparisonToExcel}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+              title="تصدير جدول مقارنة القطاعات إلى إكسل"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+              <span>تصدير المقارنة لإكسل</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowComparisonTable(!showComparisonTable)}
+              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+            >
+              {showComparisonTable ? 'إخفاء الجدول 🔼' : 'عرض الجدول 🔽'}
+            </button>
+          </div>
         </div>
 
         {showComparisonTable && (
@@ -1440,23 +1614,38 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
             </p>
           </div>
 
-          <div className="relative w-full md:w-72">
-            <Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="البحث في مشاريع التوزيع..."
-              className="w-full pr-9 pl-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 dark:text-slate-200"
-            />
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
+            <button
+              type="button"
+              onClick={handleExportProjectsToExcel}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer whitespace-nowrap"
+              title="تصدير جدول المشاريع بجميع بيانات وأعمدة الجدول إلى إكسل"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              <span>تصدير إلى إكسل (Excel)</span>
+            </button>
+
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="البحث في مشاريع التوزيع..."
+                className="w-full pr-9 pl-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 dark:text-slate-200"
+              />
+            </div>
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs border-collapse min-w-[800px]">
+          <table className="w-full text-right text-xs border-collapse min-w-[1000px]">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-extrabold border-b border-slate-200 dark:border-slate-700">
                 <th className="p-3">اسم المشروع / أمر الشراء</th>
+                <th className="p-3">المقاول</th>
+                <th className="p-3">تصنيف المشروع</th>
+                <th className="p-3">البرنامج / القطاع</th>
                 <th className="p-3">المنطقة / النطاق</th>
                 <th className="p-3">حالة العقد</th>
                 <th className="p-3 text-center">إجمالي الأطوال بالعقد (كم)</th>
@@ -1469,29 +1658,44 @@ export function ProjectLengthsDashboard({ projects, onSelectProject }: ProjectLe
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {searchedProjects.map((p) => {
-                const metric = metricsMap.get(p.id);
+                const metric = getValidMetricForProject(p);
                 const res = getAnalysisForProject(p);
 
                 const totalKm = metric ? metric.totalLengthKm : (res ? res.totalLengthKm : 0);
                 const ongoingKm = metric ? Number((metric.ongoingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.ongoing?.totalLengthKm || 0) : 0);
                 const remainingKm = metric ? Number((metric.remainingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.remaining?.totalLengthKm || 0) : 0);
-                const permitCount = metric ? metric.permitsCount : 0;
-                const uniqueSegmentCount = metric ? metric.uniqueSegmentsCount : 0;
+                const permitCount = metric ? metric.permitsCount : (res && res.permitNosByStatus ? new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier)).size : 0);
+                const uniqueSegmentCount = metric ? metric.uniqueSegmentsCount : (res && res.segmentIdsByStatus ? new Set(Object.values(res.segmentIdsByStatus).flat().filter(isValidIdentifier)).size : 0);
                 const totalSegmentCount = metric ? metric.totalSegmentsCount : (res ? (res.totalFeaturesCount || 0) : 0);
 
                 return (
                   <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
                     <td className="p-3">
                       <div className="font-extrabold text-slate-900 dark:text-slate-100">{p.name}</div>
-                      <div className="text-[11px] text-slate-400">PO: {p.po} | المقاول: {p.contractor || 'غير محدد'}</div>
+                      <div className="text-[11px] text-slate-400">PO: {p.po || '-'}</div>
                     </td>
                     <td className="p-3">
-                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold">
+                      <div className="font-extrabold text-slate-800 dark:text-slate-200">
+                        {p.contractor || 'غير محدد'}
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <span className="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-bold text-[11px] whitespace-nowrap">
+                        {p.classification || 'غير محدد'}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <span className="px-2 py-0.5 rounded-lg bg-teal-50 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300 font-bold text-[11px] whitespace-nowrap">
+                        {p.subProgram || p.scope || 'غير محدد'}
+                      </span>
+                    </td>
+                    <td className="p-3">
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold whitespace-nowrap">
                         {p.region || 'القطاع الأوسط'}
                       </span>
                     </td>
                     <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded-lg font-bold text-[11px] ${
+                      <span className={`px-2 py-0.5 rounded-lg font-bold text-[11px] whitespace-nowrap ${
                         p.status === 'جاري'
                           ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
                           : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'

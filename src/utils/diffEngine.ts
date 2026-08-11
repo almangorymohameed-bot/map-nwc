@@ -12,7 +12,7 @@ import {
   ScopeChangeDetail,
   StatusCategory
 } from '../types';
-import { COLOR_CONFIG, getStatusCategoryLabel } from './myMapsKmlParser';
+import { COLOR_CONFIG, getStatusCategoryLabel, isValidIdentifier } from './myMapsKmlParser';
 
 export interface GroupedYellowLineChanges {
   permitNo: string; // empty string if no permit
@@ -126,12 +126,12 @@ export function compareKMLAnalyses(
     const set = new Set<string>();
     Object.values(res.permitNosByStatus || {}).forEach((arr) => {
       (arr || []).forEach((p) => {
-        if (p && p.trim() && p !== '-') set.add(p.trim());
+        if (isValidIdentifier(p)) set.add(p.trim());
       });
     });
     // Also scan items
     (res.items || []).forEach((item) => {
-      if (item.permitNo && item.permitNo.trim() && item.permitNo !== '-') set.add(item.permitNo.trim());
+      if (isValidIdentifier(item.permitNo)) set.add(item.permitNo.trim());
     });
     return set;
   };

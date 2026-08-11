@@ -6,6 +6,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { HistoricalReport, ProjectChangelogRecord, KMLAnalysisResult, ProjectDiffResult } from '../types';
 import { getSharedSupabaseClient } from '../supabase';
+import { isValidIdentifier } from './myMapsKmlParser';
 
 export function getSupabaseConfig() {
   const metaEnv = (import.meta as any).env || {};
@@ -303,14 +304,14 @@ function mapRowToHistoricalReport(row: any): HistoricalReport {
       };
       const key = catKeyMap[cat];
       if (key) {
-        if (item.permitNo && item.permitNo !== '-') {
-          if (!permitNosByStatus[key].includes(item.permitNo)) {
-            permitNosByStatus[key].push(item.permitNo);
+        if (isValidIdentifier(item.permitNo)) {
+          if (!permitNosByStatus[key].includes(item.permitNo.trim())) {
+            permitNosByStatus[key].push(item.permitNo.trim());
           }
         }
-        if (item.segmentId && item.segmentId !== '-') {
-          if (!segmentIdsByStatus[key].includes(item.segmentId)) {
-            segmentIdsByStatus[key].push(item.segmentId);
+        if (isValidIdentifier(item.segmentId)) {
+          if (!segmentIdsByStatus[key].includes(item.segmentId.trim())) {
+            segmentIdsByStatus[key].push(item.segmentId.trim());
           }
         }
       }
@@ -353,6 +354,16 @@ function mapRowToChangelogRecord(row: any): ProjectChangelogRecord {
   };
 }
 
+function sanitizeItemsForStorage(items: any[]): any[] {
+  if (!Array.isArray(items)) return [];
+  return items.map(item => {
+    if (!item || typeof item !== 'object') return item;
+    // Omit bulky coordinates array to keep payload lightweight and prevent Postgres statement timeout
+    const { coordinates, ...rest } = item;
+    return rest;
+  });
+}
+
 function isReportMatchingProject(rowProjId: number, rowProjName: string, targetId: number, targetName: string): boolean {
   if (!targetName && (isNaN(targetId) || targetId <= 0)) return false;
 
@@ -361,38 +372,18 @@ function isReportMatchingProject(rowProjId: number, rowProjName: string, targetI
   const cleanTargetName = (targetName || '').trim();
   const cleanRowName = (rowProjName || '').trim();
 
-  // Extract operational numbers inside brackets if present, e.g. "24/19/2/13/0043/1" from "[24/19/2/13/0043/1] ..."
-  const getOpNum = (str: string) => {
-    const match = str.match(/\[(.*?)\]/);
-    return match ? match[1].trim() : '';
-  };
-
-  const targetOpNum = getOpNum(cleanTargetName);
-  const rowOpNum = getOpNum(cleanRowName);
-
-  // If both have operational numbers, match them strictly
-  if (targetOpNum && rowOpNum) {
-    return targetOpNum === rowOpNum;
-  }
-
-  // Exact string match on project name
-  if (cleanTargetName && cleanRowName && cleanTargetName === cleanRowName) {
-    return true;
-  }
-
-  // Exact operational number present in the other string
-  if (targetOpNum && cleanRowName && cleanRowName.includes(targetOpNum)) {
-    return true;
-  }
-  if (rowOpNum && cleanTargetName && cleanTargetName.includes(rowOpNum)) {
-    return true;
-  }
-
-  // Exact project ID match (provided names don't conflict)
-  if (!isNaN(numTargetId) && numTargetId > 0 && numRowId === numTargetId) {
-    if (targetOpNum && rowOpNum && targetOpNum !== rowOpNum) {
-      return false;
+  // Strict Audit Rule 1: If both project IDs are positive numbers, they MUST match strictly.
+  // This prevents project A's data or reports from ever being assigned to project B in database queries or stores.
+  if (!isNaN(numTargetId) && numTargetId > 0 && !isNaN(numRowId) && numRowId > 0) {
+    if (numTargetId !== numRowId) {
+      return false; // Rejects mismatched project IDs strictly
     }
+    return true;
+  }
+
+  // Strict Audit Rule 2: If one ID is missing or 0 (legacy unassigned record):
+  // Match ONLY if exact project names are identical.
+  if (cleanTargetName && cleanRowName && cleanTargetName === cleanRowName) {
     return true;
   }
 
@@ -560,7 +551,7 @@ export const ReportHistoryStore = {
                 total_length_km: oldRow.total_length_km,
                 total_features_count: oldRow.total_features_count,
                 color_breakdown: oldRow.color_breakdown,
-                items: oldRow.items,
+                items: sanitizeItemsForStorage(oldRow.items),
                 parsed_at: oldRow.parsed_at,
                 original_created_at: oldRow.created_at,
                 archived_at: new Date().toISOString()
@@ -624,6 +615,7 @@ export const ReportHistoryStore = {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
+        const sanitizedItems = sanitizeItemsForStorage(analysisResult.items || []);
         const { data, error } = await (supabase.from('project_reports') as any)
           .insert([{
             project_id: projectId,
@@ -633,13 +625,17 @@ export const ReportHistoryStore = {
             total_length_km: analysisResult.totalLengthKm,
             total_features_count: analysisResult.totalFeaturesCount,
             color_breakdown: colorBreakdownPayload,
-            items: analysisResult.items || [],
+            items: sanitizedItems,
             parsed_at: analysisResult.parsedAt || new Date().toLocaleString('ar-SA')
           }])
           .select();
 
         if (error) {
-          console.error('❌ Supabase Report Insert Error:', error.message);
+          if (error.message && error.message.includes('timeout')) {
+            console.warn('⚠️ Supabase insert statement timeout. Report stored in active session memory fallback.');
+          } else {
+            console.error('❌ Supabase Report Insert Error:', error.message);
+          }
         } else if (data && data.length > 0) {
           console.log('✅ Successfully inserted report row to Supabase project_reports');
           const dbReport = mapRowToHistoricalReport(data[0]);
@@ -647,14 +643,16 @@ export const ReportHistoryStore = {
           resultReport = dbReport;
         }
       } catch (err: any) {
-        console.error('Supabase async exception:', err);
+        console.error('Supabase async exception during report insert:', err);
       }
     } else {
       console.warn('⚠️ Supabase config not provided. Saved report in temporary session memory.');
     }
 
-    // أرشفة تلقائية للتقارير القديمة بحيث يتم الاحتفاظ بآخر 5 تقارير فقط
-    await this.archiveOldReports(projectId, projectName);
+    // أرشفة غير معطلة للتقارير القديمة في الخلفية لضمان عدم تأخير الاستجابة
+    this.archiveOldReports(projectId, projectName).catch((archErr) => {
+      console.warn('Background archiveOldReports notice:', archErr);
+    });
 
     // تحديث جدول بيانات الداشبورد والمؤشرات تلقائياً عند حفظ أي تحليل جديد
     try {
