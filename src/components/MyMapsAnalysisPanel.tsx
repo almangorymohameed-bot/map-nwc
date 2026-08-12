@@ -28,6 +28,7 @@ import {
 } from '../utils/dailyAutoAnalysisService';
 import { ChangeReportModal } from './ChangeReportModal';
 import { FeatureDetailsModal, FeatureDetailData } from './FeatureDetailsModal';
+import { SegmentPermitRegionsModal } from './SegmentPermitRegionsModal';
 import * as XLSX from 'xlsx';
 import { 
   runAttributeFormatterPipeline, 
@@ -84,6 +85,17 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
+
+  // Segment & Permit Region Interactive Map Modal State
+  const [isRegionsMapModalOpen, setIsRegionsMapModalOpen] = useState<boolean>(false);
+  const [regionsMapModalMode, setRegionsMapModalMode] = useState<'segment' | 'permit'>('segment');
+  const [regionsMapModalFocusId, setRegionsMapModalFocusId] = useState<string>('');
+
+  const handleOpenRegionsMapModal = (mode: 'segment' | 'permit', focusId: string = '') => {
+    setRegionsMapModalMode(mode);
+    setRegionsMapModalFocusId(focusId);
+    setIsRegionsMapModalOpen(true);
+  };
 
   // Handlers for Attribute Formatter & Segment Vault Pipeline
   const handleRunPermitInspection = () => {
@@ -966,7 +978,27 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 <Ruler className="h-5 w-5 text-blue-600" />
                 <span>3- حالة التنفيذ للخطوط وحصر الأطوال (إجمالي المخطط: {analysisResult.totalLengthKm} كم / {analysisResult.totalLengthMeters.toLocaleString('ar-SA')} متر)</span>
               </h4>
-              <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => handleOpenRegionsMapModal('segment')}
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  title="عرض جميع مناطق واقتطاعات السجمنت (Segment ID) المسجلة على الخريطة التفاعلية"
+                >
+                  <Globe className="h-4 w-4" />
+                  <span>مناطق السجمنت 🗺️</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenRegionsMapModal('permit')}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  title="عرض جميع مناطق أرقام الفسوح والتراخيص (Permit No) المسجلة على الخريطة التفاعلية"
+                >
+                  <Globe className="h-4 w-4" />
+                  <span>مناطق الفسوح 📜</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={handleExportPDF}
@@ -1213,16 +1245,27 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => {
-                      const allSegs = Object.values(analysisResult.segmentIdsByStatus).flat().filter(isValidIdentifier).join(', ');
-                      copyToClipboard(allSegs, 'جميع معرفات Segment ID');
-                    }}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    <span>نسخ جميع Segment IDs</span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenRegionsMapModal('segment')}
+                      className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-lg transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                      <span>عرض جميع مناطق السجمنت على الخريطة 🗺️</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const allSegs = Object.values(analysisResult.segmentIdsByStatus).flat().filter(isValidIdentifier).join(', ');
+                        copyToClipboard(allSegs, 'جميع معرفات Segment ID');
+                      }}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      <span>نسخ جميع Segment IDs</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1387,16 +1430,27 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => {
-                      const allPerms = Object.values(analysisResult.permitNosByStatus).flat().filter(isValidIdentifier).join(', ');
-                      copyToClipboard(allPerms, 'جميع أرقام التصاريح Permit No');
-                    }}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    <span>نسخ جميع Permit Nos</span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenRegionsMapModal('permit')}
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-lg transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+                    >
+                      <Globe className="h-3.5 w-3.5" />
+                      <span>عرض جميع مناطق الفسوح والتراخيص على الخريطة 📜</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const allPerms = Object.values(analysisResult.permitNosByStatus).flat().filter(isValidIdentifier).join(', ');
+                        copyToClipboard(allPerms, 'جميع أرقام التصاريح Permit No');
+                      }}
+                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      <span>نسخ جميع Permit Nos</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2090,6 +2144,16 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
           isAdmin={isAdmin}
         />
       )}
+
+      {/* Segment & Permit Regions Map Modal */}
+      <SegmentPermitRegionsModal
+        isOpen={isRegionsMapModalOpen}
+        onClose={() => setIsRegionsMapModalOpen(false)}
+        analysisResult={analysisResult}
+        initialMode={regionsMapModalMode}
+        initialFocusId={regionsMapModalFocusId}
+        projectName={activeProject?.name}
+      />
     </div>
   );
 }
