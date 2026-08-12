@@ -27,10 +27,12 @@ import {
   Award,
   AlertTriangle,
   MapPin,
+  ExternalLink,
   Navigation
 } from 'lucide-react';
 import { FeatureDetailsModal, FeatureDetailData } from './FeatureDetailsModal';
 import { groupYellowLineChangesByPermit } from '../utils/diffEngine';
+import { cleanStage } from '../utils/myMapsKmlParser';
 import { 
   SUPABASE_SQL_SCHEMA, 
   SUPABASE_EDGE_FUNCTION_CODE, 
@@ -444,12 +446,12 @@ export function ProjectDiffModal({
                             <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-[11.5px] space-y-1">
                               <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
                                 <span>بيان Stage السابق:</span>
-                                <span className="line-through text-rose-500 font-bold">{yc.previousStage}</span>
+                                <span className="line-through text-rose-500 font-bold">{yc.previousStage === 'قطاع جديد' ? 'قطاع جديد' : cleanStage(yc.previousStage)}</span>
                               </div>
                               <div className="flex items-center justify-between text-slate-900 dark:text-slate-100 pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
                                 <span className="font-bold text-amber-800 dark:text-amber-300">بيان Stage الحالي:</span>
                                 <span className="font-black text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded border border-amber-300/60 dark:border-amber-800">
-                                  {yc.newStage}
+                                  {cleanStage(yc.newStage)}
                                 </span>
                               </div>
                             </div>
@@ -463,7 +465,7 @@ export function ProjectDiffModal({
                                   name: yc.featureName,
                                   segmentId: yc.segmentId,
                                   permitNo: yc.permitNo,
-                                  stage: yc.newStage,
+                                  stage: cleanStage(yc.newStage),
                                   lengthMeters: yc.lengthMeters,
                                   colorHex: yc.colorHex,
                                   streetName: yc.streetName,
@@ -521,28 +523,79 @@ export function ProjectDiffModal({
                         <th className="p-3">حالة الإضافة</th>
                         <th className="p-3">رمز القطاع (Segment ID)</th>
                         <th className="p-3">فئة التنفيذ</th>
+                        <th className="p-3 text-center">موقع الفسح على الخريطة</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {diffResult.addedPermits.map((ap, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                          <td className="p-3 font-mono text-slate-400">{idx + 1}</td>
-                          <td className="p-3 font-black font-mono text-emerald-600 dark:text-emerald-400">
-                            {ap.permitNo}
-                          </td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 rounded font-bold">
-                              تم إضافة فسح جديد ✨
-                            </span>
-                          </td>
-                          <td className="p-3 font-mono text-slate-700 dark:text-slate-300">
-                            {ap.segmentId || '-'}
-                          </td>
-                          <td className="p-3 text-slate-600 dark:text-slate-400">
-                            {ap.category || 'عام'}
-                          </td>
-                        </tr>
-                      ))}
+                      {diffResult.addedPermits.map((ap, idx) => {
+                        let mapUrl = ap.googleMapsUrl;
+                        if (!mapUrl && ap.centerLat !== undefined && ap.centerLng !== undefined) {
+                          mapUrl = `https://www.google.com/maps?q=${ap.centerLat},${ap.centerLng}`;
+                        }
+                        return (
+                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                            <td className="p-3 font-mono text-slate-400">{idx + 1}</td>
+                            <td className="p-3 font-black font-mono text-emerald-600 dark:text-emerald-400">
+                              {ap.permitNo}
+                            </td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 rounded font-bold">
+                                تم إضافة فسح جديد ✨
+                              </span>
+                            </td>
+                            <td className="p-3 font-mono text-slate-700 dark:text-slate-300">
+                              {ap.segmentId || '-'}
+                            </td>
+                            <td className="p-3 text-slate-600 dark:text-slate-400">
+                              {ap.category || 'عام'}
+                            </td>
+                            <td className="p-3 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => setSelectedFeatureForModal({
+                                    id: `permit-${idx}`,
+                                    name: ap.featureName || `رخصة/فسح رقم: ${ap.permitNo}`,
+                                    segmentId: ap.segmentId,
+                                    permitNo: ap.permitNo,
+                                    stage: ap.stage,
+                                    lengthMeters: ap.lengthMeters,
+                                    colorHex: ap.colorHex,
+                                    streetName: ap.streetName,
+                                    district: ap.district,
+                                    innerDiameter: ap.innerDiameter,
+                                    zone: ap.zone,
+                                    drillingType: ap.drillingType,
+                                    contractor: ap.contractor,
+                                    kmlProjectName: ap.kmlProjectName,
+                                    kmlProjectId: ap.kmlProjectId,
+                                    centerLat: ap.centerLat,
+                                    centerLng: ap.centerLng,
+                                    googleMapsUrl: mapUrl,
+                                    description: ap.description
+                                  })}
+                                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 text-[11px] font-bold rounded-lg border border-blue-200 dark:border-blue-800 transition-all flex items-center gap-1 cursor-pointer"
+                                  title="عرض التراخيص والتفاصيل في خريطة تفاعلية"
+                                >
+                                  <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                                  <span>📍 موقع الفسح</span>
+                                </button>
+                                {mapUrl && (
+                                  <a
+                                    href={mapUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold rounded-lg border border-emerald-200 dark:border-emerald-800 transition-all flex items-center gap-1 cursor-pointer"
+                                    title="فتح الموقع مباشرة على خرائط Google Maps"
+                                  >
+                                    <ExternalLink className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                    <span>Google Maps</span>
+                                  </a>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

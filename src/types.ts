@@ -191,6 +191,11 @@ export interface PermitChangeDetail {
   segmentId?: string;
 
   // Extended Balloon & KML Attributes
+  featureName?: string;
+  lengthMeters?: number;
+  colorHex?: string;
+  stage?: string;
+  description?: string;
   streetName?: string;
   district?: string;
   innerDiameter?: string;

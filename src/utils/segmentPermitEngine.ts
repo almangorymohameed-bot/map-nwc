@@ -1,5 +1,5 @@
 import { KMLFeatureItem, StatusCategory, KMLAnalysisResult } from '../types';
-import { isValidIdentifier, getHaversineDistanceMeters } from './myMapsKmlParser';
+import { isValidIdentifier, getHaversineDistanceMeters, cleanSegmentId, cleanPermitNo } from './myMapsKmlParser';
 
 export interface PermitBoundaryPolygon {
   permitNo: string;
@@ -29,7 +29,8 @@ export function extractSegmentIdFromData(
       const k = (p.name || '').trim().toLowerCase();
       const val = (p.value || '').trim();
       if (targetKeys.some(tk => k === tk || k.includes(tk)) && isValidIdentifier(val)) {
-        return val;
+        const cleaned = cleanSegmentId(val);
+        if (cleaned && isValidIdentifier(cleaned)) return cleaned;
       }
     }
   } else if (properties && typeof properties === 'object') {
@@ -37,7 +38,8 @@ export function extractSegmentIdFromData(
       const keyLower = k.trim().toLowerCase();
       const val = String(v || '').trim();
       if (targetKeys.some(tk => keyLower === tk || keyLower.includes(tk)) && isValidIdentifier(val)) {
-        return val;
+        const cleaned = cleanSegmentId(val);
+        if (cleaned && isValidIdentifier(cleaned)) return cleaned;
       }
     }
   }
@@ -45,8 +47,11 @@ export function extractSegmentIdFromData(
   // 2. Check CAD / GIS Layer name (e.g., Layer_SEG-204_Water or Segment_ID_102)
   if (layerName) {
     const layerMatch = layerName.match(/(?:SEG|SEGMENT|SEC|SEC-|قطاع|سجمنت)[\s_#-]*([A-Za-z0-9_-]+)/i);
-    if (layerMatch && isValidIdentifier(layerMatch[1])) {
-      return `SEG-${layerMatch[1].replace(/^SEG[-_]?/i, '')}`;
+    if (layerMatch) {
+      const cleaned = cleanSegmentId(layerMatch[1] || layerMatch[0]);
+      if (cleaned && isValidIdentifier(cleaned)) {
+        return cleaned;
+      }
     }
   }
 
@@ -64,8 +69,9 @@ export function extractSegmentIdFromData(
     const m = combinedText.match(rx);
     if (m) {
       const extracted = m[1] || m[0];
-      if (isValidIdentifier(extracted)) {
-        return extracted.trim();
+      const cleaned = cleanSegmentId(extracted);
+      if (cleaned && isValidIdentifier(cleaned)) {
+        return cleaned;
       }
     }
   }
@@ -94,7 +100,8 @@ export function extractPermitNoFromText(
       const k = (p.name || '').trim().toLowerCase();
       const val = (p.value || '').trim();
       if (targetKeys.some(tk => k === tk || k.includes(tk)) && isValidIdentifier(val)) {
-        return val;
+        const cleaned = cleanPermitNo(val);
+        if (cleaned && isValidIdentifier(cleaned)) return cleaned;
       }
     }
   } else if (properties && typeof properties === 'object') {
@@ -102,7 +109,8 @@ export function extractPermitNoFromText(
       const keyLower = k.trim().toLowerCase();
       const val = String(v || '').trim();
       if (targetKeys.some(tk => keyLower === tk || keyLower.includes(tk)) && isValidIdentifier(val)) {
-        return val;
+        const cleaned = cleanPermitNo(val);
+        if (cleaned && isValidIdentifier(cleaned)) return cleaned;
       }
     }
   }
@@ -125,9 +133,10 @@ export function extractPermitNoFromText(
     const m = combinedText.match(rx);
     if (m) {
       const candidate = (m[1] || m[0]).trim();
+      const cleaned = cleanPermitNo(candidate);
       // Ensure candidate isn't a date like 20260811 or year 2025 or pure length like 1500
-      if (isValidIdentifier(candidate) && candidate.length >= 5 && !/^(19|20)\d{2}$/.test(candidate)) {
-        return candidate;
+      if (cleaned && isValidIdentifier(cleaned) && cleaned.length >= 5 && !/^(19|20)\d{2}$/.test(cleaned)) {
+        return cleaned;
       }
     }
   }
@@ -297,54 +306,13 @@ export function processGeometricalSegmentationAndVault(
 
   const updatedItems = items.map(item => {
     if (item.segmentId && isValidIdentifier(item.segmentId)) {
-      return item; // Keep existing valid segment ID
+      return item; // Keep existing valid segment ID as is
     }
 
-    const diameter = getCleanDiameter(item);
-    const type = getServiceTypeCode(item);
-    let assignedSegmentId = '';
-
-    // Vault System Proximity Check: check if item center or coordinates are close to an existing cluster within tolerance
-    if (item.centerLat !== undefined && item.centerLng !== undefined) {
-      for (const cls of clusters) {
-        if (cls.type === type) { // Match same service type
-          for (const [cLng, cLat] of cls.points) {
-            const dist = getHaversineDistanceMeters(item.centerLat, item.centerLng, cLat, cLng);
-            if (dist <= toleranceMeters) {
-              assignedSegmentId = cls.id; // Assign same Vault Segment ID
-              cls.points.push([item.centerLng, item.centerLat]);
-              cls.itemsCount++;
-              break;
-            }
-          }
-        }
-        if (assignedSegmentId) break;
-      }
-    }
-
-    // If no existing close cluster found, create a new Geometrical Segment ID
-    if (!assignedSegmentId) {
-      const seqStr = String(nextSequence).padStart(3, '0');
-      assignedSegmentId = `SEG-${diameter}-${type}-${seqStr}`;
-      nextSequence++;
-      generatedCount++;
-
-      if (item.centerLat !== undefined && item.centerLng !== undefined) {
-        clusters.push({
-          id: assignedSegmentId,
-          diameter,
-          type,
-          points: [[item.centerLng, item.centerLat]],
-          itemsCount: 1
-        });
-      }
-    } else {
-      generatedCount++;
-    }
-
+    // Do NOT generate default or synthetic segment IDs
     return {
       ...item,
-      segmentId: assignedSegmentId
+      segmentId: ''
     };
   });
 

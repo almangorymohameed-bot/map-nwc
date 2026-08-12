@@ -115,6 +115,133 @@ export function extractShapeLengthAttribute(pm: Element, description: string): n
   return null;
 }
 
+/**
+ * Extract map URL and explicit coordinates (latitude, longitude) from raw description (HTML or text) and ExtendedData
+ */
+export function extractMapUrlAndCoordsFromElement(
+  rawDescription: string,
+  descText: string,
+  dataElements: Element[]
+): { explicitMapUrl: string; descLat?: number; descLng?: number } {
+  let explicitMapUrl = '';
+  let descLat: number | undefined;
+  let descLng: number | undefined;
+
+  // 1. Extract explicit map URL from raw HTML description (checking href attributes and plain text)
+  const hrefMatch = rawDescription.match(/href=["'](https?:\/\/[^"'>]+)["']/i) || rawDescription.match(/href=(https?:\/\/[^\s>]+)/i);
+  if (hrefMatch && hrefMatch[1]) {
+    explicitMapUrl = hrefMatch[1];
+  }
+
+  if (!explicitMapUrl) {
+    const mapUrlMatch = rawDescription.match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps|earth\.google\.com|maps\.google\.com)[^\s"'<>]+)/i)
+                     || rawDescription.match(/(https?:\/\/[^\s"'<>]+)/i);
+    if (mapUrlMatch && mapUrlMatch[1]) {
+      explicitMapUrl = mapUrlMatch[1];
+    }
+  }
+
+  // Check dataElements for map URL or links
+  dataElements.forEach(dataEl => {
+    const val = dataEl.textContent?.trim() || '';
+    if (!val) return;
+    if (!explicitMapUrl && (val.startsWith('http://') || val.startsWith('https://') || val.includes('maps.google') || val.includes('google.com/maps'))) {
+      const urlM = val.match(/(https?:\/\/[^\s"'<>]+)/i);
+      if (urlM) explicitMapUrl = urlM[1];
+    }
+  });
+
+  // 2. Try extracting lat, lng from explicitMapUrl if it contains q=lat,lng or @lat,lng or ll=lat,lng
+  if (explicitMapUrl) {
+    const qMatch = explicitMapUrl.match(/(?:q|ll|query)=([0-9.-]+)[,%2C]+([0-9.-]+)/i) || explicitMapUrl.match(/@([0-9.-]+),([0-9.-]+)/i);
+    if (qMatch) {
+      const v1 = parseFloat(qMatch[1]);
+      const v2 = parseFloat(qMatch[2]);
+      if (!isNaN(v1) && !isNaN(v2)) {
+        if (Math.abs(v1) <= 35 && Math.abs(v2) >= 30) {
+          descLat = v1;
+          descLng = v2;
+        } else if (Math.abs(v2) <= 35 && Math.abs(v1) >= 30) {
+          descLat = v2;
+          descLng = v1;
+        }
+      }
+    }
+  }
+
+  // 3. Extract coordinates from description text or HTML tags
+  if (descLat === undefined || descLng === undefined) {
+    // Look for explicit coordinate labels (Arabic or English)
+    const labelMatch = rawDescription.match(/(?:الإحداثيات|إحداثيات|الاحداثيات|احداثيات|Coordinates|Coordinate|Location|الموقع|موقع|Point|LatLng|Lat\/Lng)\s*[:=]?\s*([0-9.-]+)\s*[,;\s%2C|]+\s*([0-9.-]+)/i)
+                    || descText.match(/(?:الإحداثيات|إحداثيات|الاحداثيات|احداثيات|Coordinates|Coordinate|Location|الموقع|موقع|Point|LatLng|Lat\/Lng)\s*[:=]?\s*([0-9.-]+)\s*[,;\s%2C|]+\s*([0-9.-]+)/i);
+    if (labelMatch) {
+      const v1 = parseFloat(labelMatch[1]);
+      const v2 = parseFloat(labelMatch[2]);
+      if (!isNaN(v1) && !isNaN(v2)) {
+        if (Math.abs(v1) <= 35 && Math.abs(v2) >= 30) {
+          descLat = v1;
+          descLng = v2;
+        } else if (Math.abs(v2) <= 35 && Math.abs(v1) >= 30) {
+          descLat = v2;
+          descLng = v1;
+        }
+      }
+    }
+  }
+
+  // 4. Look for separate Lat / Lng fields (Lat: 24.xxx, Lng: 46.xxx)
+  if (descLat === undefined || descLng === undefined) {
+    const latMatch = rawDescription.match(/(?:Lat|Latitude|خط\s*العرض|العرض|Y)\s*[:=]?\s*([0-9.-]+)/i)
+                  || descText.match(/(?:Lat|Latitude|خط\s*العرض|العرض|Y)\s*[:=]?\s*([0-9.-]+)/i);
+    const lngMatch = rawDescription.match(/(?:Lng|Lon|Longitude|خط\s*الطول|الطول|X)\s*[:=]?\s*([0-9.-]+)/i)
+                  || descText.match(/(?:Lng|Lon|Longitude|خط\s*الطول|الطول|X)\s*[:=]?\s*([0-9.-]+)/i);
+    if (latMatch && lngMatch) {
+      const vLat = parseFloat(latMatch[1]);
+      const vLng = parseFloat(lngMatch[1]);
+      if (!isNaN(vLat) && !isNaN(vLng)) {
+        descLat = vLat;
+        descLng = vLng;
+      }
+    }
+  }
+
+  // 5. Look in dataElements for lat/lng attributes
+  if (descLat === undefined || descLng === undefined) {
+    let dLat: number | undefined;
+    let dLng: number | undefined;
+    dataElements.forEach(dataEl => {
+      const nameAttr = (dataEl.getAttribute('name') || '').trim().toLowerCase();
+      const val = parseFloat(dataEl.textContent?.trim() || '');
+      if (isNaN(val)) return;
+      if (nameAttr.includes('lat') || nameAttr.includes('y') || nameAttr.includes('عرض')) {
+        dLat = val;
+      } else if (nameAttr.includes('lng') || nameAttr.includes('lon') || nameAttr.includes('x') || nameAttr.includes('طول')) {
+        dLng = val;
+      }
+    });
+    if (dLat !== undefined && dLng !== undefined) {
+      descLat = dLat;
+      descLng = dLng;
+    }
+  }
+
+  // 6. Standalone Saudi Arabia coordinates match (Lat 15-35, Lng 34-56)
+  if (descLat === undefined || descLng === undefined) {
+    const saudiCoordMatch = rawDescription.match(/\b([1-3][0-9]\.[0-9]{3,})\b[\s,;\/]+\b([3-5][0-9]\.[0-9]{3,})\b/)
+                         || descText.match(/\b([1-3][0-9]\.[0-9]{3,})\b[\s,;\/]+\b([3-5][0-9]\.[0-9]{3,})\b/);
+    if (saudiCoordMatch) {
+      const v1 = parseFloat(saudiCoordMatch[1]);
+      const v2 = parseFloat(saudiCoordMatch[2]);
+      if (!isNaN(v1) && !isNaN(v2)) {
+        descLat = v1;
+        descLng = v2;
+      }
+    }
+  }
+
+  return { explicitMapUrl, descLat, descLng };
+}
+
 // Convert KML color format (AABBGGRR in hex) or standard hex to #RRGGBB
 export function normalizeColorToHex(rawColorStr: string): string {
   if (!rawColorStr) return '';
@@ -394,25 +521,122 @@ export function parseKmlCoordinatesText(text: string): Array<[number, number]> {
 }
 
 /**
+ * Strips prefixes like "SEG-", "SEG_", "SEG ", "segment id:", "segment id", "segment_id", "Segment ID:", etc.
+ * Returns only the pure identifier value/content.
+ */
+export function cleanSegmentId(val: any): string {
+  if (val === null || val === undefined) return '';
+  let str = String(val).trim();
+  if (!str) return '';
+
+  // 1. Remove common text label prefixes (case-insensitive)
+  // Matches "segment id:", "segment id", "segment_id", "segment-id", "segment:", "segment", "seg-", "seg_", "seg:", "sec-", "sec_", "sec", "معرف القطاع:", "معرف القطاع", "رقم القطاع:", "رقم القطاع", "رقم السجمنت:", "رقم السجمنت", "رمز القطاع:"
+  str = str.replace(/^(?:segment\s*id|segment_id|segment-id|segment|seg|sec|sec-|معرف\s*القطاع|رقم\s*القطاع|رقم\s*السجمنت|رمز\s*القطاع|القطاع|السجمنت)[\s_:#=-]+/i, '');
+
+  // 2. Strip standalone leading "SEG-" or "SEG_" or "SEG " or "SEC-" or "SEC_" if present
+  str = str.replace(/^(?:SEG|SEC)[\s_#-]+/i, '');
+
+  // 3. Strip any remaining leading colons, hashes, dashes, underscores, slashes or spaces
+  str = str.replace(/^[\s_:#=-]+/, '').trim();
+
+  return str;
+}
+
+/**
+ * Strips label prefixes like "Permit No:", "permit_no:", "رقم الرخصة:", "تصريح:", etc.
+ * Returns only the pure permit number/code.
+ */
+export function cleanPermitNo(val: any): string {
+  if (val === null || val === undefined) return '';
+  let str = String(val).trim();
+  if (!str) return '';
+
+  // Remove prefixes like "permit no:", "permit_no:", "permit:", "permit no", "رقم الرخصة:", "رخصة الحفر:", "رقم التصريح:", "تصريح:", "فسح:"
+  str = str.replace(/^(?:permit\s*no|permit_no|permitno|permit|perm_no|perm|رقم\s*الرخصة|رخصة\s*الحفر|رخصة|رقم\s*التصريح|تصريح|رقم\s*الفسح|فسح)[\s_:#=-]+/i, '');
+
+  str = str.replace(/^[\s_:#=-]+/, '').trim();
+
+  return str;
+}
+
+/**
+ * Cleans and extracts the Stage (مرحلة العمل/الحفرية) string.
+ * Cuts off any concatenated downstream attributes (like CONTRACTOR, PROJECTNAME, STREETNAME, SHAPE_Length, etc.).
+ * If the result is empty, contains only dashes (-), or is an invalid placeholder, returns 'غير متوفر'.
+ */
+export function cleanStage(val: any): string {
+  if (val === null || val === undefined) return 'غير متوفر';
+  let str = String(val).trim();
+  if (!str) return 'غير متوفر';
+
+  // 1. Remove leading field labels like "Stage:", "بيان Stage:", "مرحلة:", "وضع الحفرية:", "حالة الحفرية:"
+  str = str.replace(/^(?:بيان\s*Stage|Stage|مرحلة|وضع\s*الحفرية|حالة\s*الحفرية)[\s_:#=-]+/i, '').trim();
+
+  // 2. Truncate before any concatenated downstream key-value pairs or field labels
+  const keywordRegex = /(?:^|\s+)(?:-|–|—)?\s*(?:CONTRACTOR|PROJECTNAME|PROJECTID|STREETNAME|STREET_NAME|DISTRICT|SHAPE_Length|SHAPE_LENGTH|PERMIT|PERMITNO|PERMIT_NO|SEGMENT|SEGMENTID|SEG_ID|ZONE|ZONE_NO|INNERDIAMETER|DRILLING|المقاول|اسم\s*المشروع|رقم\s*المشروع|اسم\s*الشارع|الحي|تصريح|القطر|المنطقة)\s*[:=]/i;
+  const match = str.match(keywordRegex);
+  if (match && match.index !== undefined) {
+    if (match.index === 0) {
+      // String starts directly with downstream label like "- CONTRACTOR:", so no actual stage value precedes it
+      return 'غير متوفر';
+    }
+    str = str.substring(0, match.index).trim();
+  }
+
+  // 3. Truncate if a secondary uppercase attribute key pattern like " KEY:" appears
+  const secondaryKeyMatch = str.match(/\s+[A-Z0-9_]{3,}\s*:/);
+  if (secondaryKeyMatch && secondaryKeyMatch.index !== undefined && secondaryKeyMatch.index > 0) {
+    str = str.substring(0, secondaryKeyMatch.index).trim();
+  }
+
+  // 4. Clean leading/trailing punctuation, dashes, colons, spaces, symbols
+  str = str.replace(/^[-\s:=–—_#;,.]+|[-\s:=–—_#;,.]+$/g, '').trim();
+
+  if (!str) return 'غير متوفر';
+
+  // 5. Check if string is an invalid placeholder or only symbols/dashes
+  const lower = str.toLowerCase();
+  const invalidPlaceholders = [
+    '-', '--', '---', '/', '.', 'n/a', 'na', 'none', 'null', 'undefined',
+    'لا يوجد', 'غير محدد', 'غير متوفر', 'لم تحدد', 'لاشيء', 'لايوجد', 'no', '0', '00'
+  ];
+
+  if (invalidPlaceholders.includes(lower) || /^[-–—_#\s/\\:;.]+$/.test(str)) {
+    return 'غير متوفر';
+  }
+
+  return str;
+}
+
+/**
  * Validates whether a Segment ID, Permit No, or text field contains a meaningful value.
  * Returns false if the value is empty, null, undefined, or consists only of
  * spaces, dashes (-), slashes (/), backslashes (\), underscores (_), or placeholders (e.g. N/A, none, بدون, - / -).
  */
 export function isValidIdentifier(val: any): boolean {
   if (val === null || val === undefined) return false;
-  const str = String(val).trim();
+  const rawStr = String(val).trim();
+  if (rawStr.length === 0) return false;
+
+  const str = cleanSegmentId(rawStr);
   if (str.length === 0) return false;
 
-  // Check if string contains ONLY dashes, slashes, spaces, backslashes, dots, or underscores
-  if (/^[-\s\/\\_\.]*$/.test(str) || /^[-\s\/\\_\.]+$/.test(str)) return false;
+  // Check if string contains ONLY dashes, slashes, spaces, backslashes, dots, underscores, hashes, colons, or symbols
+  if (/^[-\s\/\\_\.:#]*$/.test(str)) return false;
 
   const lower = str.toLowerCase();
   const invalidKeywords = [
-    '-', '/', '--', '//', '-/-', '- / -', '-/', '/-', 'n/a', 'na', 'none', 'null', 
-    'undefined', 'بدون', 'لا يوجد', 'لايوجد', 'غير محدد', 'غير متوفر', 'فراغ', 'بدون تصريح', 'بدون فسح'
+    '-', '/', '--', '//', '---', '///', '-/-', '- / -', '-/', '/-', '/ -', '- /', 'n/a', 'na', 'none', 'null', 
+    'undefined', 'بدون', 'لا يوجد', 'لايوجد', 'غير محدد', 'غير متوفر', 'فراغ', 'بدون تصريح', 'بدون فسح', 'لا', 'لايوجد تصريح',
+    'لا يوجد تصريح', 'لا يوجد فسح', 'لايوجد فسح', 'بدون سجمنت', 'لا يوجد سجمنت', '0', '00', '000', '0000', 'nan',
+    'segment id', 'segment_id', 'segment', 'seg', 'permit no', 'permit_no', 'permit'
   ];
 
   if (invalidKeywords.includes(lower)) return false;
+
+  // Strip all non-alphanumeric characters (letters/digits in English & Arabic)
+  const alphanumericOnly = str.replace(/[^A-Za-z0-9\u0600-\u06FF]/g, '');
+  if (alphanumericOnly.length === 0) return false;
 
   return true;
 }
@@ -520,21 +744,28 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     let contractor = '';
     let kmlProjectName = '';
     let kmlProjectId = '';
+    let explicitMapUrl = '';
 
     const dataElements = Array.from(pm.getElementsByTagName('Data')).concat(Array.from(pm.getElementsByTagName('SimpleData')));
     dataElements.forEach(dataEl => {
       const nameAttr = (dataEl.getAttribute('name') || '').trim().toLowerCase();
       const val = dataEl.textContent?.trim() || '';
+      if (!val) return;
+
+      if (val.startsWith('http://') || val.startsWith('https://')) {
+        explicitMapUrl = val;
+      }
+
       if (!isValidIdentifier(val)) return;
 
       if (nameAttr.includes('segment') || nameAttr.includes('قطاع') || nameAttr.includes('seg_id') || nameAttr === 'id') {
-        segmentId = val;
+        segmentId = cleanSegmentId(val);
       } else if (nameAttr.includes('permit') || nameAttr.includes('تصريح') || nameAttr.includes('إذن') || nameAttr.includes('اذن')) {
-        permitNo = val;
+        permitNo = cleanPermitNo(val);
       } else if (nameAttr.includes('color') || nameAttr.includes('اللون') || nameAttr.includes('لون')) {
         extractedColor = val;
       } else if (nameAttr.includes('stage') || nameAttr.includes('مرحلة') || nameAttr.includes('حفرية') || nameAttr.includes('وضع')) {
-        extractedStage = val;
+        extractedStage = cleanStage(val);
       } else if (nameAttr.includes('street') || nameAttr.includes('شارع')) {
         streetName = val;
       } else if (nameAttr.includes('district') || nameAttr.includes('hay') || nameAttr.includes('حي')) {
@@ -557,15 +788,28 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     // Fallback extraction from description text / HTML via Regex
     const descText = description.replace(/<[^>]+>/g, ' ');
 
+    if (!explicitMapUrl) {
+      const urlInDesc = description.match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps|earth\.google\.com|maps\.google\.com)[^\s"'<>]+)/i)
+                     || description.match(/(https?:\/\/[^\s"'<>]+)/i);
+      if (urlInDesc && urlInDesc[1]) {
+        explicitMapUrl = urlInDesc[1];
+      }
+    }
+
     if (!isValidIdentifier(segmentId)) {
       segmentId = extractSegmentIdFromData({}, '', descText, name);
     }
     if (!isValidIdentifier(permitNo)) {
       permitNo = extractPermitNoFromText({}, descText, name, '');
     }
-    if (!extractedStage) {
-      const stageMatch = descText.match(/(?:Stage|مرحلة|وضع الحفرية|حالة الحفرية)\s*[:=]?\s*([^\n\r<,]+)/i);
-      if (stageMatch) extractedStage = stageMatch[1].trim();
+    if (!extractedStage || extractedStage === 'غير متوفر') {
+      const stageMatch = descText.match(/(?:بيان\s*Stage|Stage|مرحلة|وضع\s*الحفرية|حالة\s*الحفرية)\s*[:=]?\s*([^\n\r<,]+)/i);
+      if (stageMatch) {
+        const cleaned = cleanStage(stageMatch[1]);
+        if (cleaned !== 'غير متوفر') {
+          extractedStage = cleaned;
+        }
+      }
     }
     if (!streetName) {
       const m = descText.match(/(?:STREETNAME|STREET_NAME|STREET|الشارع|اسم الشارع)\s*[:=]?\s*([^\r\n<,]+)/i) || descText.match(/([^\r\n<,]+)\s+STREETNAME/i);
@@ -600,10 +844,18 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
       if (m && m[1] && isValidIdentifier(m[1])) kmlProjectId = m[1].trim();
     }
 
+    // Extract map URL and explicit coordinates from description (HTML/text) and ExtendedData/SimpleData
+    const extractedGeo = extractMapUrlAndCoordsFromElement(description, descText, dataElements);
+    if (extractedGeo.explicitMapUrl) {
+      explicitMapUrl = extractedGeo.explicitMapUrl;
+    }
+
     // Clean out invalid segmentId and permitNo (e.g. whitespace, '-', '/', 'N/A')
+    segmentId = cleanSegmentId(segmentId);
     if (!isValidIdentifier(segmentId)) {
       segmentId = '';
     }
+    permitNo = cleanPermitNo(permitNo);
     if (!isValidIdentifier(permitNo)) {
       permitNo = '';
     }
@@ -684,32 +936,16 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
       }
     });
 
-    let centerLat: number | undefined;
-    let centerLng: number | undefined;
+    let centerLat: number | undefined = extractedGeo.descLat;
+    let centerLng: number | undefined = extractedGeo.descLng;
 
-    if (validPtsCount > 0) {
+    if ((centerLat === undefined || centerLng === undefined) && validPtsCount > 0) {
       centerLat = Number((sumLat / validPtsCount).toFixed(7));
       centerLng = Number((sumLng / validPtsCount).toFixed(7));
-    } else {
-      // Check description text for lat, lng
-      const coordMatch = descText.match(/(?:الإحداثيات|Coordinates)\s*[:=]?\s*([0-9.-]+)\s*,\s*([0-9.-]+)/i) || descText.match(/q=([0-9.-]+),([0-9.-]+)/i);
-      if (coordMatch) {
-        const val1 = parseFloat(coordMatch[1]);
-        const val2 = parseFloat(coordMatch[2]);
-        if (!isNaN(val1) && !isNaN(val2)) {
-          if (Math.abs(val1) <= 35 && Math.abs(val2) >= 30) {
-            centerLat = val1;
-            centerLng = val2;
-          } else if (Math.abs(val2) <= 35 && Math.abs(val1) >= 30) {
-            centerLat = val2;
-            centerLng = val1;
-          }
-        }
-      }
     }
 
-    let googleMapsUrl: string | undefined;
-    if (centerLat !== undefined && centerLng !== undefined) {
+    let googleMapsUrl: string | undefined = explicitMapUrl || extractedGeo.explicitMapUrl || undefined;
+    if (!googleMapsUrl && centerLat !== undefined && centerLng !== undefined && !isNaN(centerLat) && !isNaN(centerLng)) {
       googleMapsUrl = `https://www.google.com/maps?q=${centerLat},${centerLng}`;
     }
 
@@ -729,11 +965,7 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
     const assignedConfig = COLOR_CONFIG[category];
     const statusLabel = getStatusCategoryLabel(category, projectName, projectScope);
 
-    const yellowStages = ['حفر وتمديد', 'تم وضع الصبات', 'دفان واختبار', 'تم السفلتة والتنفيذ'];
-    let itemStage = extractedStage;
-    if (!itemStage && category === 'ongoing') {
-      itemStage = yellowStages[idx % yellowStages.length];
-    }
+    let itemStage = cleanStage(extractedStage);
 
     items.push({
       id: `feature-${idx + 1}`,
@@ -747,7 +979,7 @@ export function parseKMLContent(xmlString: string, projectName: string = 'مشر
       lengthKm: Number((finalLengthMeters / 1000).toFixed(3)),
       coordinatesCount: coordsCount || 2,
       description,
-      stage: itemStage || (category === 'ongoing' ? 'حفر وتمديد' : undefined),
+      stage: itemStage,
 
       // Extended Balloon Attributes
       streetName: streetName || name,

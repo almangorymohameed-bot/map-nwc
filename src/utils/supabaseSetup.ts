@@ -318,6 +318,22 @@ function mapRowToHistoricalReport(row: any): HistoricalReport {
     });
   }
 
+  const cleanedPermitNosByStatus = {
+    executedWater: (permitNosByStatus.executedWater || []).filter(isValidIdentifier),
+    executedSewage: (permitNosByStatus.executedSewage || []).filter(isValidIdentifier),
+    ongoing: (permitNosByStatus.ongoing || []).filter(isValidIdentifier),
+    remaining: (permitNosByStatus.remaining || []).filter(isValidIdentifier),
+    cancelled: (permitNosByStatus.cancelled || []).filter(isValidIdentifier),
+  };
+
+  const cleanedSegmentIdsByStatus = {
+    executedWater: (segmentIdsByStatus.executedWater || []).filter(isValidIdentifier),
+    executedSewage: (segmentIdsByStatus.executedSewage || []).filter(isValidIdentifier),
+    ongoing: (segmentIdsByStatus.ongoing || []).filter(isValidIdentifier),
+    remaining: (segmentIdsByStatus.remaining || []).filter(isValidIdentifier),
+    cancelled: (segmentIdsByStatus.cancelled || []).filter(isValidIdentifier),
+  };
+
   return {
     id: String(row.id),
     projectId: Number(row.project_id),
@@ -333,8 +349,8 @@ function mapRowToHistoricalReport(row: any): HistoricalReport {
       totalLengthKm: Number(row.total_length_km || 0),
       totalFeaturesCount: Number(row.total_features_count || 0),
       colorBreakdown: colorBreakdown,
-      permitNosByStatus: permitNosByStatus,
-      segmentIdsByStatus: segmentIdsByStatus,
+      permitNosByStatus: cleanedPermitNosByStatus,
+      segmentIdsByStatus: cleanedSegmentIdsByStatus,
       items: items,
       parsedAt: row.parsed_at || (row.created_at ? new Date(row.created_at).toLocaleString('ar-SA') : new Date().toLocaleString('ar-SA'))
     }

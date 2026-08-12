@@ -136,7 +136,7 @@ export function computeMetricFromAnalysis(
 
   const permitsList = Array.from(permitSet);
   const segmentsList = Array.from(segmentSet);
-  const totalSegmentsCount = Math.max(analysis.totalFeaturesCount || 0, itemCount, segmentSet.size);
+  const totalSegmentsCount = segmentSet.size;
 
   return {
     projectId,

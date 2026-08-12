@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { cleanStage } from '../utils/myMapsKmlParser';
 import { 
   X, 
   MapPin, 
@@ -215,7 +216,7 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
                   <div className="text-xs text-slate-600 dark:text-slate-400">مرحلة الحفرية والعمل:</div>
                   <div className="text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-900 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-2">
                     <HardHat className="w-4 h-4 text-amber-500" />
-                    {feature.stage || 'أعمال حفرية جارية'}
+                    {cleanStage(feature.stage)}
                   </div>
                 </div>
 

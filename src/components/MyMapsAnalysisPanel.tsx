@@ -12,7 +12,10 @@ import {
   parseKMLContent, 
   generateSyntheticProjectKMLData,
   COLOR_CONFIG,
-  getStatusCategoryLabel
+  getStatusCategoryLabel,
+  isValidIdentifier,
+  cleanSegmentId,
+  cleanPermitNo
 } from '../utils/myMapsKmlParser';
 import { compareKMLAnalyses } from '../utils/diffEngine';
 import { ReportHistoryStore, getSupabaseClient } from '../utils/supabaseSetup';
@@ -120,8 +123,8 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
     if (!analysisResult || !analysisResult.items) return;
     const exportRows = analysisResult.items.map((it, idx) => ({
       'م': idx + 1,
-      'Segment ID (معرف القطاع)': it.segmentId || 'غير محدد',
-      'Permit No (رقم تصريح الحفر)': it.permitNo || 'غير محدد',
+      'Segment ID (معرف القطاع)': cleanSegmentId(it.segmentId) || 'غير محدد',
+      'Permit No (رقم تصريح الحفر)': cleanPermitNo(it.permitNo) || 'غير محدد',
       'اسم القطاع / الخط': it.name || '-',
       'حالة التنفيذ والبيان': it.statusLabel || '-',
       'القطر الداخلي (مم)': it.innerDiameter || '-',
@@ -146,9 +149,10 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
 
   const handleUpdateItemSegmentOrPermit = (itemId: string, field: 'segmentId' | 'permitNo', value: string) => {
     if (!analysisResult) return;
+    const cleanedValue = field === 'segmentId' ? cleanSegmentId(value) : cleanPermitNo(value);
     const updatedItems = analysisResult.items.map(it => {
       if (it.id === itemId) {
-        return { ...it, [field]: value };
+        return { ...it, [field]: cleanedValue };
       }
       return it;
     });
@@ -175,24 +179,60 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   const [projectHistoryReports, setProjectHistoryReports] = useState<HistoricalReport[]>([]);
   const [isLoadingProjectHistory, setIsLoadingProjectHistory] = useState<boolean>(false);
 
-  // Fetch project history whenever activeProject changes
+  // Fetch project history and auto-load latest report whenever activeProject changes
   useEffect(() => {
+    let isMounted = true;
     if (activeProject) {
       setIsLoadingProjectHistory(true);
-      ReportHistoryStore.getHistoricalReports(activeProject.id, activeProject.name, activeProject.po)
-        .then(reports => {
+      setIsLoading(true);
+
+      Promise.all([
+        ReportHistoryStore.getHistoricalReports(activeProject.id, activeProject.name, activeProject.po),
+        ReportHistoryStore.getLatestReport(activeProject.id, activeProject.name, activeProject.po)
+      ])
+        .then(async ([reports, latest]) => {
+          if (!isMounted) return;
           setProjectHistoryReports(reports || []);
           setIsLoadingProjectHistory(false);
+
+          if (latest && latest.analysisResult && (latest.analysisResult.totalLengthMeters > 0 || (latest.analysisResult.items && latest.analysisResult.items.length > 0))) {
+            setAnalysisResult(latest.analysisResult);
+            setIsLoading(false);
+          } else if (activeProject.mapUrl && activeProject.mapUrl.trim().length > 10) {
+            try {
+              const res = await handleLoadMyMapsLink(activeProject.mapUrl, activeProject.name, activeProject.scope);
+              if (!isMounted) return;
+              await processAndSaveAnalysis(res, activeProject);
+            } catch (err) {
+              console.error('Error auto-loading live map URL:', err);
+              if (!isMounted) return;
+              const synthetic = generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '', activeProject.scope);
+              setAnalysisResult(synthetic);
+            } finally {
+              if (isMounted) setIsLoading(false);
+            }
+          } else {
+            const synthetic = generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '', activeProject.scope);
+            setAnalysisResult(synthetic);
+            setIsLoading(false);
+          }
         })
         .catch(err => {
-          console.error('Error fetching project history reports:', err);
+          console.error('Error fetching project history/report:', err);
+          if (!isMounted) return;
           setProjectHistoryReports([]);
           setIsLoadingProjectHistory(false);
+          setIsLoading(false);
         });
     } else {
       setProjectHistoryReports([]);
       setIsLoadingProjectHistory(false);
+      setIsLoading(false);
     }
+
+    return () => {
+      isMounted = false;
+    };
   }, [activeProject?.id, activeProject?.name]);
 
   // Filtered projects list based on search term
@@ -360,12 +400,10 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
     if (selectedProject) {
       setActiveProject(selectedProject);
       setMapInputUrl(selectedProject.mapUrl || '');
-      setAnalysisResult(null); // Wait for user click to perform analysis
     } else if (projects.length > 0 && !activeProject) {
       const first = projects[0];
       setActiveProject(first);
       setMapInputUrl(first.mapUrl || '');
-      setAnalysisResult(null); // Wait for user click to perform analysis
     }
   }, [selectedProject]);
 
@@ -411,7 +449,6 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   const handleSelectProjectClick = (proj: Project) => {
     setActiveProject(proj);
     setMapInputUrl(proj.mapUrl || '');
-    setAnalysisResult(null); // Wait for user click to perform analysis
     if (onSelectProject) onSelectProject(proj);
   };
 
@@ -679,7 +716,6 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                       onClick={() => {
                         setActiveProject(p);
                         setMapInputUrl(p.mapUrl || '');
-                        setAnalysisResult(null);
                       }}
                       className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
                         activeProject?.id === p.id
@@ -706,7 +742,6 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                   if (found) {
                     setActiveProject(found);
                     setMapInputUrl(found.mapUrl || '');
-                    setAnalysisResult(null); // Wait for click on analyze button
                   }
                 }}
                 className="w-full bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-xs font-black px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs appearance-none cursor-pointer"
@@ -1180,7 +1215,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
 
                   <button
                     onClick={() => {
-                      const allSegs = Object.values(analysisResult.segmentIdsByStatus).flat().join(', ');
+                      const allSegs = Object.values(analysisResult.segmentIdsByStatus).flat().filter(isValidIdentifier).join(', ');
                       copyToClipboard(allSegs, 'جميع معرفات Segment ID');
                     }}
                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
@@ -1354,7 +1389,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
 
                   <button
                     onClick={() => {
-                      const allPerms = Object.values(analysisResult.permitNosByStatus).flat().join(', ');
+                      const allPerms = Object.values(analysisResult.permitNosByStatus).flat().filter(isValidIdentifier).join(', ');
                       copyToClipboard(allPerms, 'جميع أرقام التصاريح Permit No');
                     }}
                     className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"

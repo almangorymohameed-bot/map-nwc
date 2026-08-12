@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { ProjectDiffResult } from '../types';
 import { groupYellowLineChangesByPermit } from '../utils/diffEngine';
+import { cleanStage } from '../utils/myMapsKmlParser';
 import { FeatureDetailsModal, FeatureDetailData } from './FeatureDetailsModal';
 import { 
   X, 
@@ -25,7 +26,8 @@ import {
   TrendingUp,
   TrendingDown,
   ArrowRight,
-  MapPin
+  MapPin,
+  ExternalLink
 } from 'lucide-react';
 
 interface ChangeReportModalProps {
@@ -283,7 +285,7 @@ ${diffResult.summaryMessages.map(m => `• ${m}`).join('\n')}
                                   🔴 بیان Stage السابق (القديم):
                                 </span>
                                 <p className="text-xs font-bold text-slate-700 dark:text-slate-300 font-mono line-through">
-                                  {change.previousStage}
+                                  {change.previousStage === 'قطاع جديد' ? 'قطاع جديد' : cleanStage(change.previousStage)}
                                 </p>
                               </div>
 
@@ -293,7 +295,7 @@ ${diffResult.summaryMessages.map(m => `• ${m}`).join('\n')}
                                   🟢 بیان Stage الحالي (الجديد):
                                 </span>
                                 <p className="text-xs font-black text-amber-900 dark:text-amber-200 font-mono">
-                                  {change.newStage}
+                                  {cleanStage(change.newStage)}
                                 </p>
                               </div>
                             </div>
@@ -307,7 +309,7 @@ ${diffResult.summaryMessages.map(m => `• ${m}`).join('\n')}
                                   name: change.featureName,
                                   segmentId: change.segmentId,
                                   permitNo: change.permitNo,
-                                  stage: change.newStage,
+                                  stage: cleanStage(change.newStage),
                                   lengthMeters: change.lengthMeters,
                                   colorHex: change.colorHex,
                                   streetName: change.streetName,
@@ -357,32 +359,81 @@ ${diffResult.summaryMessages.map(m => `• ${m}`).join('\n')}
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {diffResult.addedPermits.map((permit, idx) => (
-                    <div 
-                      key={idx}
-                      className="p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-900/50 shadow-xs flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-black font-mono rounded-lg">
-                          {permit.permitNo}
-                        </span>
-                        <div>
-                          <p className="text-xs font-bold text-slate-900 dark:text-white">
-                            إضافة فسح/رخصة جديدة ✨
-                          </p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                            الفئة: {permit.category || 'عام'} {permit.segmentId ? `• للقطاع: ${permit.segmentId}` : ''}
-                          </p>
+                  {diffResult.addedPermits.map((permit, idx) => {
+                    let mapUrl = permit.googleMapsUrl;
+                    if (!mapUrl && permit.centerLat !== undefined && permit.centerLng !== undefined) {
+                      mapUrl = `https://www.google.com/maps?q=${permit.centerLat},${permit.centerLng}`;
+                    }
+
+                    return (
+                      <div 
+                        key={idx}
+                        className="p-3.5 rounded-2xl bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-900/50 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-xs font-black font-mono rounded-lg shrink-0">
+                            {permit.permitNo}
+                          </span>
+                          <div>
+                            <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                              <span>إضافة فسح/رخصة جديدة ✨</span>
+                            </p>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                              الفئة: {permit.category || 'عام'} {permit.segmentId ? `• للقطاع: ${permit.segmentId}` : ''}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => setSelectedFeatureForModal({
+                              id: `permit-${idx}`,
+                              name: permit.featureName || `رخصة/فسح رقم: ${permit.permitNo}`,
+                              segmentId: permit.segmentId,
+                              permitNo: permit.permitNo,
+                              stage: permit.stage,
+                              lengthMeters: permit.lengthMeters,
+                              colorHex: permit.colorHex,
+                              streetName: permit.streetName,
+                              district: permit.district,
+                              innerDiameter: permit.innerDiameter,
+                              zone: permit.zone,
+                              drillingType: permit.drillingType,
+                              contractor: permit.contractor,
+                              kmlProjectName: permit.kmlProjectName,
+                              kmlProjectId: permit.kmlProjectId,
+                              centerLat: permit.centerLat,
+                              centerLng: permit.centerLng,
+                              googleMapsUrl: mapUrl,
+                              description: permit.description
+                            })}
+                            className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 text-[11px] font-bold rounded-lg border border-blue-200 dark:border-blue-800 transition-all flex items-center gap-1 cursor-pointer"
+                            title="عرض تفاصيل وموقع الفسح على الخريطة التفاعلية"
+                          >
+                            <MapPin className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                            <span>📍 موقع الفسح على الخريطة</span>
+                          </button>
+
+                          {mapUrl && (
+                            <a
+                              href={mapUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold rounded-lg border border-emerald-200 dark:border-emerald-800 transition-all flex items-center gap-1 cursor-pointer"
+                              title="فتح الموضع مباشرة في خرائط Google"
+                            >
+                              <ExternalLink className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                              <span className="hidden sm:inline">Google Maps</span>
+                            </a>
+                          )}
+
+                          <span className="px-3 py-1 bg-emerald-500 text-white font-bold text-[10px] rounded-full hidden md:inline-block">
+                            جديد مضاف
+                          </span>
                         </div>
                       </div>
-
-                      <div className="text-left">
-                        <span className="px-3 py-1 bg-emerald-500 text-white font-bold text-[10px] rounded-full">
-                          جديد مضاف
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

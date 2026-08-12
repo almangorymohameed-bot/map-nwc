@@ -12,7 +12,7 @@ import {
   ScopeChangeDetail,
   StatusCategory
 } from '../types';
-import { COLOR_CONFIG, getStatusCategoryLabel, isValidIdentifier } from './myMapsKmlParser';
+import { COLOR_CONFIG, getStatusCategoryLabel, isValidIdentifier, cleanStage, cleanPermitNo } from './myMapsKmlParser';
 
 export interface GroupedYellowLineChanges {
   permitNo: string; // empty string if no permit
@@ -144,13 +144,34 @@ export function compareKMLAnalyses(
 
   newPermits.forEach((p) => {
     if (!oldPermits.has(p)) {
-      // Find matching item for segment reference
-      const matchingItem = newResult.items.find(it => it.permitNo === p);
+      // Find matching item for segment & geo reference
+      const cleanP = isValidIdentifier(p) ? cleanPermitNo(p) : p;
+      const matchingItem = newResult.items.find(it => it.permitNo === p)
+                        || newResult.items.find(it => it.permitNo && cleanPermitNo(it.permitNo) === cleanP)
+                        || newResult.items.find(it => (it.description || '').includes(p))
+                        || newResult.items.find(it => (it.name || '').includes(p));
+
+      let mapUrl = matchingItem?.googleMapsUrl;
+      if (!mapUrl && matchingItem?.centerLat !== undefined && matchingItem?.centerLng !== undefined) {
+        mapUrl = `https://www.google.com/maps?q=${matchingItem.centerLat},${matchingItem.centerLng}`;
+      }
+      if (!mapUrl && matchingItem?.description) {
+        const descUrlMatch = matchingItem.description.match(/href=["'](https?:\/\/[^"'>]+)["']/i)
+                          || matchingItem.description.match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps|earth\.google\.com|maps\.google\.com)[^\s"'<>]+)/i)
+                          || matchingItem.description.match(/(https?:\/\/[^\s"'<>]+)/i);
+        if (descUrlMatch) mapUrl = descUrlMatch[1];
+      }
+
       addedPermits.push({
         type: 'added',
         permitNo: p,
         category: matchingItem?.statusLabel || 'فسح جديد',
         segmentId: matchingItem?.segmentId,
+        featureName: matchingItem?.name,
+        lengthMeters: matchingItem?.lengthMeters,
+        colorHex: matchingItem?.colorHex,
+        stage: matchingItem?.stage,
+        description: matchingItem?.description,
         streetName: matchingItem?.streetName,
         district: matchingItem?.district,
         innerDiameter: matchingItem?.innerDiameter,
@@ -161,18 +182,32 @@ export function compareKMLAnalyses(
         kmlProjectId: matchingItem?.kmlProjectId,
         centerLat: matchingItem?.centerLat,
         centerLng: matchingItem?.centerLng,
-        googleMapsUrl: matchingItem?.googleMapsUrl
+        googleMapsUrl: mapUrl
       });
     }
   });
 
   oldPermits.forEach((p) => {
     if (!newPermits.has(p)) {
-      const matchingItem = oldResult.items?.find(it => it.permitNo === p);
+      const cleanP = isValidIdentifier(p) ? cleanPermitNo(p) : p;
+      const matchingItem = oldResult.items?.find(it => it.permitNo === p)
+                        || oldResult.items?.find(it => it.permitNo && cleanPermitNo(it.permitNo) === cleanP)
+                        || oldResult.items?.find(it => (it.description || '').includes(p));
+
+      let mapUrl = matchingItem?.googleMapsUrl;
+      if (!mapUrl && matchingItem?.centerLat !== undefined && matchingItem?.centerLng !== undefined) {
+        mapUrl = `https://www.google.com/maps?q=${matchingItem.centerLat},${matchingItem.centerLng}`;
+      }
+
       removedPermits.push({
         type: 'removed',
         permitNo: p,
         segmentId: matchingItem?.segmentId,
+        featureName: matchingItem?.name,
+        lengthMeters: matchingItem?.lengthMeters,
+        colorHex: matchingItem?.colorHex,
+        stage: matchingItem?.stage,
+        description: matchingItem?.description,
         streetName: matchingItem?.streetName,
         district: matchingItem?.district,
         innerDiameter: matchingItem?.innerDiameter,
@@ -183,7 +218,7 @@ export function compareKMLAnalyses(
         kmlProjectId: matchingItem?.kmlProjectId,
         centerLat: matchingItem?.centerLat,
         centerLng: matchingItem?.centerLng,
-        googleMapsUrl: matchingItem?.googleMapsUrl
+        googleMapsUrl: mapUrl
       });
     }
   });
@@ -197,7 +232,7 @@ export function compareKMLAnalyses(
     .filter((it) => it.statusCategory === 'ongoing' || it.colorHex?.toLowerCase() === '#ffea00')
     .forEach((it) => {
       const key = it.segmentId || it.name || it.id;
-      oldOngoingItemsMap.set(key, { stage: it.stage || 'لم تحدد المرحلة', item: it });
+      oldOngoingItemsMap.set(key, { stage: cleanStage(it.stage), item: it });
     });
 
   (newResult.items || [])
@@ -206,10 +241,10 @@ export function compareKMLAnalyses(
       const key = newItem.segmentId || newItem.name || newItem.id;
       const oldData = oldOngoingItemsMap.get(key);
 
-      const currentStage = newItem.stage || 'حفرية جارية';
+      const currentStage = cleanStage(newItem.stage);
 
       if (oldData) {
-        const previousStage = oldData.stage;
+        const previousStage = cleanStage(oldData.stage);
         if (previousStage !== currentStage) {
           yellowLineStageChanges.push({
             segmentId: newItem.segmentId,

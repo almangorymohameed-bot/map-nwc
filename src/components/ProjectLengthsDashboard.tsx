@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Project, StatusCategory, KMLAnalysisResult, HistoricalReport } from '../types';
 import { ReportHistoryStore, extractPoDigits, isReportMatchingProject } from '../utils/supabaseSetup';
 import { DashboardMetricsStore, DashboardProjectMetric } from '../utils/dashboardMetricsStore';
-import { generateSyntheticProjectKMLData, getStatusCategoryLabel, isValidIdentifier } from '../utils/myMapsKmlParser';
+import { generateSyntheticProjectKMLData, getStatusCategoryLabel, isValidIdentifier, cleanSegmentId, cleanPermitNo, cleanStage } from '../utils/myMapsKmlParser';
 import * as XLSX from 'xlsx';
 import {
   Ruler,
@@ -392,11 +392,9 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
               globalSegmentSet.add(cleanS);
               if (breakdownMap[cat]) {
                 breakdownMap[cat].segmentSet.add(cleanS);
+                breakdownMap[cat].segmentTotalCount++;
               }
-            }
-            globalSegmentTotalCount++;
-            if (breakdownMap[cat]) {
-              breakdownMap[cat].segmentTotalCount++;
+              globalSegmentTotalCount++;
             }
           });
         } else {
@@ -609,7 +607,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
 
       const totalSegmentCount = metric 
         ? metric.totalSegmentsCount 
-        : (res ? (res.totalFeaturesCount || 0) : 0);
+        : uniqueSegmentCount;
 
       return {
         'م': idx + 1,
@@ -652,6 +650,137 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
 
     const dateStr = new Date().toISOString().split('T')[0];
     XLSX.writeFile(workbook, `قائمة_المشاريع_وحصر_الأطوال_${dateStr}.xlsx`);
+  };
+
+  // Excel Export Handler for Segment ID detailed data
+  const handleExportSegmentsToExcel = (targetProjects?: Project[]) => {
+    const projectsToExport = targetProjects || searchedProjects;
+    const exportRows: any[] = [];
+
+    projectsToExport.forEach(p => {
+      const savedReport = findReportForProject(p, reportsMap);
+      const metric = getValidMetricForProject(p);
+      const res = savedReport?.analysisResult || getAnalysisForProject(p);
+      const items = res?.items || [];
+
+      // Filter items that have a valid segmentId
+      const validItems = items.filter(it => it && isValidIdentifier(it.segmentId));
+
+      if (validItems.length > 0) {
+        validItems.forEach(item => {
+          let lat: number | string = '';
+          let lng: number | string = '';
+
+          if (item.centerLat !== undefined && item.centerLat !== null && !isNaN(Number(item.centerLat))) {
+            lat = Number(item.centerLat);
+          } else if (item.coordinates && item.coordinates.length > 0 && item.coordinates[0] && item.coordinates[0].length >= 2) {
+            lat = Number(item.coordinates[0][1]);
+          }
+
+          if (item.centerLng !== undefined && item.centerLng !== null && !isNaN(Number(item.centerLng))) {
+            lng = Number(item.centerLng);
+          } else if (item.coordinates && item.coordinates.length > 0 && item.coordinates[0] && item.coordinates[0].length >= 2) {
+            lng = Number(item.coordinates[0][0]);
+          }
+
+          // Determine explicit element map link registered in element data
+          let mapLink = item.googleMapsUrl || '';
+
+          // Check if description has an embedded URL registered for the element
+          if (!mapLink && item.description) {
+            const descUrlMatch = item.description.match(/href=["'](https?:\/\/[^"'>]+)["']/i)
+                              || item.description.match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps|earth\.google\.com|maps\.google\.com)[^\s"'<>]+)/i)
+                              || item.description.match(/(https?:\/\/[^\s"'<>]+)/i);
+            if (descUrlMatch && descUrlMatch[1]) {
+              mapLink = descUrlMatch[1];
+            }
+          }
+
+          if (!mapLink && lat !== '' && lng !== '') {
+            mapLink = `https://www.google.com/maps?q=${lat},${lng}`;
+          }
+
+          exportRows.push({
+            'اسم المشروع': p.name || item.kmlProjectName || 'غير محدد',
+            'البرنامج / القطاع': p.subProgram || p.scope || 'غير محدد',
+            'اسم المقاول': p.contractor || item.contractor || 'غير محدد',
+            'Segment ID (معرف القطاع)': cleanSegmentId(item.segmentId),
+            'القطر': item.innerDiameter || 'غير محدد',
+            'خط العرض (Latitude)': lat !== '' ? lat : 'غير متوفر',
+            'خط الطول (Longitude)': lng !== '' ? lng : 'غير متوفر',
+            'رابط الموقع للعنصر على الخريطة': mapLink || 'غير متوفر',
+            'أمر الشراء (PO)': p.po || 'غير محدد',
+            'رقم الرخصة (Permit No)': item.permitNo && isValidIdentifier(item.permitNo) ? cleanPermitNo(item.permitNo) : 'غير محدد',
+            'حالة العنصر / المرحلة': cleanStage(item.stage) !== 'غير متوفر' ? cleanStage(item.stage) : (item.statusLabel || 'غير متوفر'),
+            'الطول (متر)': item.lengthMeters ? Number(item.lengthMeters.toFixed(2)) : 0,
+          });
+        });
+      } else {
+        // Fallback: Check segmentIdsByStatus or metric.segmentsList
+        const segmentsList: string[] = res?.segmentIdsByStatus
+          ? Array.from(new Set(Object.values(res.segmentIdsByStatus).flat().filter(isValidIdentifier)))
+          : (metric && metric.segmentsList && metric.segmentsList.length > 0
+            ? metric.segmentsList.filter(isValidIdentifier)
+            : []);
+
+        segmentsList.forEach(segId => {
+          const matchingItem = res?.items?.find(it => cleanSegmentId(it.segmentId) === cleanSegmentId(segId));
+          let lat: number | string = matchingItem?.centerLat ?? (p.y ? Number(p.y) : '');
+          let lng: number | string = matchingItem?.centerLng ?? (p.x ? Number(p.x) : '');
+          let mapLink = matchingItem?.googleMapsUrl || '';
+
+          if (!mapLink && matchingItem?.description) {
+            const descUrlMatch = matchingItem.description.match(/href=["'](https?:\/\/[^"'>]+)["']/i)
+                              || matchingItem.description.match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps|earth\.google\.com|maps\.google\.com)[^\s"'<>]+)/i)
+                              || matchingItem.description.match(/(https?:\/\/[^\s"'<>]+)/i);
+            if (descUrlMatch && descUrlMatch[1]) {
+              mapLink = descUrlMatch[1];
+            }
+          }
+
+          if (!mapLink && lat !== '' && lng !== '') {
+            mapLink = `https://www.google.com/maps?q=${lat},${lng}`;
+          }
+
+          exportRows.push({
+            'اسم المشروع': p.name || 'غير محدد',
+            'البرنامج / القطاع': p.subProgram || p.scope || 'غير محدد',
+            'اسم المقاول': p.contractor || 'غير محدد',
+            'Segment ID (معرف القطاع)': cleanSegmentId(segId),
+            'القطر': matchingItem?.innerDiameter || 'غير محدد',
+            'خط العرض (Latitude)': lat !== '' ? lat : 'غير متوفر',
+            'خط الطول (Longitude)': lng !== '' ? lng : 'غير متوفر',
+            'رابط الموقع للعنصر على الخريطة': mapLink || 'غير متوفر',
+            'أمر الشراء (PO)': p.po || 'غير محدد',
+            'رقم الرخصة (Permit No)': matchingItem?.permitNo && isValidIdentifier(matchingItem.permitNo) ? cleanPermitNo(matchingItem.permitNo) : 'غير محدد',
+            'حالة العنصر / المرحلة': cleanStage(matchingItem?.stage) !== 'غير متوفر' ? cleanStage(matchingItem?.stage) : (matchingItem?.statusLabel || 'غير متوفر'),
+            'الطول (متر)': matchingItem?.lengthMeters ? Number(matchingItem.lengthMeters.toFixed(2)) : 0,
+          });
+        });
+      }
+    });
+
+    if (exportRows.length === 0) {
+      alert('لا توجد بيانات Segment ID محللة أو معرفة حالياً في المشاريع المحددة للتصدير.');
+      return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    worksheet['!views'] = [{ RTL: true }];
+
+    const keys = Object.keys(exportRows[0]);
+    worksheet['!cols'] = keys.map(key => ({
+      wch: Math.max(key.length * 2.2, 18)
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'بيانات_Segment_ID');
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const fileNameSuffix = targetProjects && targetProjects.length === 1 
+      ? `مشروع_${targetProjects[0].id}`
+      : 'جميع_المشاريع';
+    XLSX.writeFile(workbook, `بيانات_Segment_ID_${fileNameSuffix}_${dateStr}.xlsx`);
   };
 
   // Excel Export Handler for Sector Comparison Table
@@ -1634,7 +1763,17 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
               title="تصدير جدول المشاريع بجميع بيانات وأعمدة الجدول إلى إكسل"
             >
               <FileSpreadsheet className="h-4 w-4" />
-              <span>تصدير إلى إكسل (Excel)</span>
+              <span>تصدير المشاريع لإكسل</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleExportSegmentsToExcel()}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer whitespace-nowrap"
+              title="تصدير تفاصيل بيانات Segment ID والإحداثيات والروابط والقطر لجميع المشاريع إلى ملف إكسل"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-cyan-300" />
+              <span>تصدير بيانات Segment ID (إكسل)</span>
             </button>
 
             <div className="relative w-full sm:w-64">
@@ -1758,11 +1897,15 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                       <button
                         type="button"
                         onClick={() => {
-                          setSelectedReportModalProject(p);
-                          if (onSelectProject) onSelectProject(p);
+                          if (onOpenMyMaps) {
+                            onOpenMyMaps(p);
+                          } else {
+                            if (onSelectProject) onSelectProject(p);
+                            setSelectedReportModalProject(p);
+                          }
                         }}
-                        className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 font-extrabold text-[11px] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 mx-auto border border-blue-200 dark:border-blue-800/80 shadow-3xs whitespace-nowrap shrink-0"
-                        title="تصفح وفتح آخر تقرير تم تحليله للمشروع"
+                        className="px-3 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900 text-blue-700 dark:text-blue-300 font-extrabold text-[11px] rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 mx-auto border border-blue-200 dark:border-blue-800/80 shadow-3xs whitespace-nowrap shrink-0 hover:scale-102"
+                        title="استدعاء وفتح آخر تقرير تم تحليله للمشروع مباشرة في قسم تحليل الخرائط الجغرافية"
                       >
                         <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
                         <span className="whitespace-nowrap">{savedReport ? `تقرير ${reportDateFormatted || 'المعتمد'}` : (reportDateFormatted ? `تقرير ${reportDateFormatted}` : 'آخر تقرير مُحلل')}</span>
@@ -1972,22 +2115,32 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
 
               {/* Modal Footer */}
               <div className="p-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
-                {onOpenMyMaps ? (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {onOpenMyMaps && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const proj = p;
+                        setSelectedReportModalProject(null);
+                        onOpenMyMaps(proj);
+                      }}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+                    >
+                      <Globe className="h-4 w-4 text-cyan-300" />
+                      <span>فتح خريطة التحليل (My Maps) 🌐</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
-                    onClick={() => {
-                      const proj = p;
-                      setSelectedReportModalProject(null);
-                      onOpenMyMaps(proj);
-                    }}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+                    onClick={() => handleExportSegmentsToExcel([p])}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+                    title="تصدير تفاصيل بيانات Segment ID لهذا المشروع إلى إكسل"
                   >
-                    <Globe className="h-4 w-4 text-cyan-300" />
-                    <span>فتح خريطة التحليل الجغرافي التفصيلية (My Maps) 🌐</span>
+                    <FileSpreadsheet className="h-4 w-4 text-cyan-300" />
+                    <span>تصدير Segment ID لإكسل</span>
                   </button>
-                ) : (
-                  <div></div>
-                )}
+                </div>
 
                 <button
                   type="button"
