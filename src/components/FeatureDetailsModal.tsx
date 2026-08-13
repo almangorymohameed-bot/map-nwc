@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { cleanStage } from '../utils/myMapsKmlParser';
+import { cleanStage, cleanPermitNo, isYellowItemWithoutPermit } from '../utils/myMapsKmlParser';
 import { 
   X, 
   MapPin, 
@@ -280,15 +280,15 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
               </div>
 
               {/* رقم التصريح / الفسح PERMITNO */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80">
+              <div className={`p-3 rounded-xl border ${isYellowItemWithoutPermit(feature) ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/80'}`}>
                 <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">رقم التصريح / الفسح (PERMITNO)</div>
                 <div className="text-xs font-bold mt-0.5">
-                  {feature.permitNo ? (
-                    <span className="text-emerald-600 dark:text-emerald-400">{feature.permitNo}</span>
+                  {cleanPermitNo(feature.permitNo) ? (
+                    <span className="text-emerald-700 dark:text-emerald-400 font-mono text-sm">{cleanPermitNo(feature.permitNo)}</span>
                   ) : (
-                    <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5 inline" />
-                      الاعمال جارية ولا يوجد رقم فسح للقطاع
+                    <span className="text-rose-700 dark:text-rose-300 font-extrabold flex items-center gap-1.5 leading-relaxed">
+                      <AlertTriangle className="w-4 h-4 inline shrink-0 text-rose-600 animate-bounce" />
+                      🚨 الأعمال جارية ولا يوجد رقم فسح/تصريح صريح للقطاع (يحتوي على - أو / أو فارغ)
                     </span>
                   )}
                 </div>

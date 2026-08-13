@@ -426,7 +426,7 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
                 <b>اسم الخط:</b> ${item.name || '-'}<br/>
                 <b>الطول:</b> ${item.lengthMeters} متر (${item.lengthKm} كم)<br/>
                 ${item.segmentId && isValidIdentifier(item.segmentId) ? `<b>Segment ID:</b> ${cleanSegmentId(item.segmentId)}<br/>` : ''}
-                ${item.permitNo && isValidIdentifier(item.permitNo) ? `<b>Permit No:</b> ${cleanPermitNo(item.permitNo)}<br/>` : '<b style="color: #be123c;">Permit No:</b> <span style="color: #be123c; font-weight: bold;">غير مسجل ❌</span><br/>'}
+                ${cleanPermitNo(item.permitNo) ? `<b>Permit No:</b> ${cleanPermitNo(item.permitNo)}<br/>` : '<b style="color: #be123c;">Permit No:</b> <span style="color: #be123c; font-weight: bold;">🚨 بدون تصريح صريح (يحتوي على - أو / أو فارغ) ❌</span><br/>'}
                 ${item.streetName ? `<b>الشارع:</b> ${item.streetName}<br/>` : ''}
                 ${item.district ? `<b>الحي:</b> ${item.district}<br/>` : ''}
                 ${item.stage ? `<b>المرحلة:</b> ${cleanStage(item.stage)}<br/>` : ''}

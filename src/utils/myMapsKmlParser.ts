@@ -550,20 +550,43 @@ export function cleanSegmentId(val: any): string {
 /**
  * Strips label prefixes like "Permit No:", "permit_no:", "رقم الرخصة:", "تصريح:", etc.
  * Returns only the pure permit number/code.
+ * Returns empty string ('') if value is empty, dashes (-), slashes (/), placeholders (- / -), or lacks explicit alphanumeric characters.
  */
 export function cleanPermitNo(val: any): string {
   if (val === null || val === undefined) return '';
   let str = String(val).trim();
   if (!str) return '';
 
-  // Remove prefixes (longest keywords first!)
+  // 1. Remove prefixes (longest keywords first!)
   str = str.replace(/^(?:permit\s*no|permit_no|permitno|perm_no|رقم\s*الرخصة|رخصة\s*الحفر|رقم\s*التصريح|رقم\s*الفسح|رخصة|تصريح|فسح|permit|perm|prm)[\s_:#=-]*/i, '');
 
-  str = str.replace(/^[\s_:#=-]+/, '').trim();
+  // 2. Clean leading/trailing punctuation, dashes, slashes, colons, spaces, symbols
+  str = str.replace(/^[-\s:=–—_#/\\;,.]+|[-\s:=–—_#/\\;,.]+$|\s+/g, (match, offset, fullStr) => {
+    // If replacing at start or end, strip it; internal spaces condensed
+    if (offset === 0 || offset + match.length === fullStr.length) return '';
+    return ' ';
+  }).trim();
 
-  // If the resulting string is just "ermit" (from bad regex substring), "permit", "perm", "prm", "permit no", etc.
+  if (!str) return '';
+
+  // 3. Check for invalid placeholder words, dashes, slashes, or symbols
   const lower = str.toLowerCase();
-  if (['ermit', 'permit', 'perm', 'prm', 'permit no', 'permit_no', 'permitno', 'no', 'num', 'number'].includes(lower)) {
+  const invalidKeywords = [
+    '-', '/', '--', '//', '---', '///', '-/-', '- / -', '-/', '/-', '/ -', '- /', 'n/a', 'na', 'none', 'null',
+    'undefined', 'بدون', 'لا يوجد', 'لايوجد', 'غير محدد', 'غير متوفر', 'فراغ', 'بدون تصريح', 'بدون فسح', 'لا', 'لايوجد تصريح',
+    'لا يوجد تصريح', 'لا يوجد فسح', 'لايوجد فسح', 'بدون سجمنت', 'لا يوجد سجمنت', '0', '00', '000', '0000', 'nan',
+    'ermit', 'permit', 'perm', 'prm', 'permit no', 'permit_no', 'permitno', 'no', 'num', 'number', 'id', 'id:'
+  ];
+
+  if (invalidKeywords.includes(lower) || /^[-–—_#/\\:;.\s]+$/.test(str)) {
+    return '';
+  }
+
+  // 4. Must contain at least one alphanumeric character (Arabic/English digit or letter)
+  const alphanumericOnly = str.replace(/[^A-Za-z0-9\u0600-\u06FF]/g, '');
+  if (alphanumericOnly.length === 0) return '';
+
+  if (['id', 'ermit', 'permit', 'segment', 'seg', 'sec', 'perm', 'prm', 'no', 'num', 'null', 'undefined', 'none', 'nan'].includes(alphanumericOnly.toLowerCase())) {
     return '';
   }
 

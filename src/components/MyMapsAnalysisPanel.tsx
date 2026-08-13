@@ -1716,10 +1716,18 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                           <td className="p-3 font-mono font-bold text-slate-800 dark:text-slate-200">
                             <span 
                               onClick={() => setSelectedFeatureForModal(item)}
-                              className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 rounded border border-slate-200 dark:border-slate-700 cursor-pointer transition-colors"
+                              className="cursor-pointer transition-colors"
                               title="انقر لعرض تفاصيل وموقع الفسح"
                             >
-                              {item.permitNo || 'بدون فسح'}
+                              {cleanPermitNo(item.permitNo) ? (
+                                <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 rounded border border-slate-200 dark:border-slate-700 text-emerald-800 dark:text-emerald-200">
+                                  {cleanPermitNo(item.permitNo)}
+                                </span>
+                              ) : (
+                                <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${isYellowItemWithoutPermit(item) ? 'bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-200 dark:border-slate-700'}`}>
+                                  {isYellowItemWithoutPermit(item) ? '🚨 بدون تصريح صريح (يحتوي - أو /)' : 'غير مسجل ❌'}
+                                </span>
+                              )}
                             </span>
                           </td>
                           <td className="p-3">
