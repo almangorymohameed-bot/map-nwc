@@ -382,54 +382,73 @@ function sanitizeItemsForStorage(items: any[]): any[] {
 
 export function extractPoDigits(text?: string | null): string {
   if (!text) return '';
-  const match = String(text).match(/\b\d{6,12}\b/);
-  return match ? match[0] : '';
+  const match = String(text).match(/(?:po|أمر\s*شراء|شراء)?\s*:?\s*\b(20\d{7,9})\b/i);
+  return match ? match[1] : '';
 }
 
 export function isReportMatchingProject(rowProjId: number, rowProjName: string, targetId: number, targetName: string, targetPo?: string): boolean {
   if (!targetName && (isNaN(targetId) || targetId <= 0) && !targetPo) return false;
 
+  const numTargetId = Number(targetId);
+  const numRowId = Number(rowProjId);
+
+  // 1. Direct project_id match (Highest priority: if project_id is identical in Supabase, it is the exact same project)
+  if (!isNaN(numTargetId) && numTargetId > 0 && !isNaN(numRowId) && numRowId > 0 && numTargetId === numRowId) {
+    return true;
+  }
+
+  // 2. PO Number matching
   const targetPoDigits = extractPoDigits(targetPo) || extractPoDigits(targetName);
   const rowPoDigits = extractPoDigits(rowProjName);
 
-  // 1. PO Number matching (Highest priority & accuracy across database records)
   if (targetPoDigits && rowPoDigits) {
     if (targetPoDigits === rowPoDigits) {
       return true;
     }
-    // CRITICAL FIX: If PO numbers exist on both sides and do NOT match, this report CANNOT belong to this project
     return false;
   }
 
-  // 2. Exact project name matching
+  // 3. Exact or normalized project name matching
   const cleanTargetName = (targetName || '').trim();
   const cleanRowName = (rowProjName || '').trim();
   if (cleanTargetName && cleanRowName) {
     if (cleanTargetName === cleanRowName) {
       return true;
     }
-  }
-
-  // 3. Operational number matching if both contain [OP]
-  const targetOp = (cleanTargetName.match(/\[(.*?)\]/) || [])[1];
-  const rowOp = (cleanRowName.match(/\[(.*?)\]/) || [])[1];
-  if (targetOp && rowOp) {
-    if (targetOp.trim() === rowOp.trim()) return true;
-    return false;
-  }
-
-  // 4. ID matching ONLY if project names/POs don't contradict
-  const numTargetId = Number(targetId);
-  const numRowId = Number(rowProjId);
-  if (!isNaN(numTargetId) && numTargetId > 0 && !isNaN(numRowId) && numRowId > 0) {
-    if (numTargetId === numRowId) {
-      if (!cleanTargetName || !cleanRowName) {
-        return true;
-      }
+    const normTarget = cleanTargetName.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').toLowerCase();
+    const normRow = cleanRowName.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').toLowerCase();
+    if (normTarget === normRow || normTarget.includes(normRow) || normRow.includes(normTarget)) {
+      return true;
     }
   }
 
+  // 4. Operational number matching if both contain [OP]
+  const targetOp = (cleanTargetName.match(/\[(.*?)\]/) || [])[1];
+  const rowOp = (cleanRowName.match(/\[(.*?)\]/) || [])[1];
+  if (targetOp && rowOp && targetOp.trim() === rowOp.trim()) {
+    return true;
+  }
+
   return false;
+}
+
+export function findReportForProject(p: { id: number; name: string; po?: string }, map: Map<number, HistoricalReport>): HistoricalReport | undefined {
+  if (!p) return undefined;
+
+  // Direct map lookup by ID if report matches strictly
+  const repById = map.get(p.id);
+  if (repById && isReportMatchingProject(repById.projectId, repById.projectName, p.id, p.name, p.po)) {
+    return repById;
+  }
+
+  // Iterate map values to find report matching this project
+  for (const rep of map.values()) {
+    if (isReportMatchingProject(rep.projectId, rep.projectName, p.id, p.name, p.po)) {
+      return rep;
+    }
+  }
+
+  return undefined;
 }
 
 export const ReportHistoryStore = {
@@ -444,16 +463,15 @@ export const ReportHistoryStore = {
         if (!error && data && data.length > 0) {
           for (const row of data) {
             const report = mapRowToHistoricalReport(row);
+            const rId = Number(report.projectId);
+            if (rId > 0 && !map.has(rId)) {
+              map.set(rId, report);
+            }
             if (projects && Array.isArray(projects) && projects.length > 0) {
               for (const proj of projects) {
                 if (!map.has(proj.id) && isReportMatchingProject(report.projectId, report.projectName, proj.id, proj.name, proj.po)) {
                   map.set(proj.id, report);
                 }
-              }
-            } else {
-              const pId = Number(report.projectId);
-              if (pId > 0 && !map.has(pId)) {
-                map.set(pId, report);
               }
             }
           }
@@ -463,16 +481,15 @@ export const ReportHistoryStore = {
       }
     }
     for (const mem of memoryReports) {
+      const mId = Number(mem.projectId);
+      if (mId > 0 && !map.has(mId)) {
+        map.set(mId, mem);
+      }
       if (projects && Array.isArray(projects) && projects.length > 0) {
         for (const proj of projects) {
           if (!map.has(proj.id) && isReportMatchingProject(mem.projectId, mem.projectName, proj.id, proj.name, proj.po)) {
             map.set(proj.id, mem);
           }
-        }
-      } else {
-        const pId = Number(mem.projectId);
-        if (pId > 0 && !map.has(pId)) {
-          map.set(pId, mem);
         }
       }
     }
@@ -752,7 +769,7 @@ export const ReportHistoryStore = {
           if (error.message && error.message.includes('timeout')) {
             console.warn('⚠️ Supabase insert statement timeout. Report stored in active session memory fallback.');
           } else {
-            console.error('❌ Supabase Report Insert Error:', error.message);
+            console.warn('⚠️ Supabase Report Insert Note:', error.message || error);
           }
         } else if (data && data.length > 0) {
           console.log('✅ Successfully inserted report row to Supabase project_reports');
@@ -761,7 +778,7 @@ export const ReportHistoryStore = {
           resultReport = dbReport;
         }
       } catch (err: any) {
-        console.error('Supabase async exception during report insert:', err);
+        console.warn('⚠️ Supabase async exception during report insert (falling back to memory):', err?.message || err);
       }
     } else {
       console.warn('⚠️ Supabase config not provided. Saved report in temporary session memory.');
@@ -778,6 +795,39 @@ export const ReportHistoryStore = {
       await DashboardMetricsStore.saveProjectMetric(projectId, projectName, analysisResult);
     } catch (metricErr) {
       console.warn('⚠️ Could not update dashboard project metric:', metricErr);
+    }
+
+    // 📢 إرسال إشعار فوري لجميع المستخدمين بتسجيل / تحديث تقرير التحليل للمشروع
+    try {
+      const totalKm = analysisResult.totalLengthKm || (analysisResult.totalLengthMeters ? Number((analysisResult.totalLengthMeters / 1000).toFixed(3)) : 0);
+      const notifMsg = `📊 تم تحليل وإصدار تقرير جديد لمشروع (${projectName}) - إجمالي الأطوال: ${totalKm} كم (${analysisResult.totalFeaturesCount || 0} عنصر)`;
+      
+      if (supabase) {
+        await supabase.from('notifications').insert([{
+          user_id: 'all',
+          project_id: projectId,
+          project_name: projectName,
+          type: 'report_generated',
+          message: notifMsg,
+          created_at: new Date().toISOString()
+        }]);
+      }
+
+      const savedLocal = localStorage.getItem('water_maps_local_notifications');
+      let localList: any[] = savedLocal ? JSON.parse(savedLocal) : [];
+      localList.unshift({
+        id: Date.now() + Math.random(),
+        projectId: projectId,
+        projectName: projectName,
+        type: 'report_generated',
+        message: notifMsg,
+        created_at: new Date().toISOString()
+      });
+      if (localList.length > 100) localList = localList.slice(0, 100);
+      localStorage.setItem('water_maps_local_notifications', JSON.stringify(localList));
+      window.dispatchEvent(new Event('water_maps_notifications_updated'));
+    } catch (notifErr) {
+      console.warn('⚠️ Could not dispatch notification on report save:', notifErr);
     }
 
     return resultReport;
@@ -845,13 +895,29 @@ export const ReportHistoryStore = {
               message: notifMsg,
               created_at: new Date().toISOString()
             }]);
+
+            try {
+              const savedLocal = localStorage.getItem('water_maps_local_notifications');
+              let localList: any[] = savedLocal ? JSON.parse(savedLocal) : [];
+              localList.unshift({
+                id: Date.now() + Math.random(),
+                projectId: projectId,
+                projectName: projectName,
+                type: 'change_detected',
+                message: notifMsg,
+                created_at: new Date().toISOString()
+              });
+              if (localList.length > 100) localList = localList.slice(0, 100);
+              localStorage.setItem('water_maps_local_notifications', JSON.stringify(localList));
+              window.dispatchEvent(new Event('water_maps_notifications_updated'));
+            } catch (e) {}
           } catch (notifErr) {
             console.warn('Error inserting changelog notification:', notifErr);
           }
         }
 
         if (error) {
-          console.error('❌ Supabase Changelog Insert Error:', error.message);
+          console.warn('⚠️ Supabase Changelog Insert Note:', error.message || error);
         } else if (data && data.length > 0) {
           console.log('✅ Successfully inserted changelog row to Supabase project_changelogs');
           const dbRecord = mapRowToChangelogRecord(data[0]);
@@ -859,7 +925,7 @@ export const ReportHistoryStore = {
           return dbRecord;
         }
       } catch (err: any) {
-        console.error('Supabase async exception:', err);
+        console.warn('⚠️ Supabase async exception in saveChangelog (falling back to memory):', err?.message || err);
       }
     }
 
@@ -889,10 +955,10 @@ export const ReportHistoryStore = {
           return data.map(mapRowToChangelogRecord);
         }
         if (error) {
-          console.error('❌ Supabase getChangelogs Error:', error.message);
+          console.warn('⚠️ Supabase getChangelogs Note:', error.message || error);
         }
-      } catch (err) {
-        console.error('Supabase getChangelogs exception:', err);
+      } catch (err: any) {
+        console.warn('⚠️ Supabase getChangelogs exception (falling back to memory):', err?.message || err);
       }
     }
 

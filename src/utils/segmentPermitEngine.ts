@@ -121,13 +121,11 @@ export function extractPermitNoFromText(
   const permitPatterns = [
     // Standard slashes/dashes permit numbers e.g. 24/19/2/02/0012/1 or 2024/0012/1 or 24-10-01-0012
     /\b([0-9]{2,4}[\/\\-][0-9]{1,4}[\/\\-][0-9]{1,4}[\/\\-][0-9]{1,4}(?:[\/\\-][0-9]{1,4})*)\b/i,
-    // Prefixed permit numbers e.g. PERM-2025-1092, PERMIT-99120, PRM-2024-101
-    /(?:PERMIT|PERM_NO|PERM|PRM|PER|تصريح|رخصة|فسح)\s*[:=#-]?\s*([A-Za-z0-9_-]{5,25})/i,
+    // Prefixed permit numbers e.g. PERM-2025-1092, PERMIT-99120, PRM-2024-101, PERMIT_NO_9921
+    /(?:PERMIT|PERM_NO|PERM|PRM|PER)\s*[:=#-]?\s*([A-Za-z0-9_-]{5,25})/i,
     /\b(P[-_#\s]+[A-Za-z0-9_-]{5,20})\b/i,
-    // Saudi national permit numbers starting with 44, 45, 46, 2024, 2025, 2026 (e.g. 4400123456)
-    /\b((?:44|45|46|2024|2025|2026)[0-9]{6,8})\b/,
-    // Contiguous 8 to 12 digit permit numbers
-    /\b([0-9]{8,12})\b/
+    // Arabic keywords followed explicitly by permit numbers e.g. "تصريح 4400123456" or "رقم الفسح: 20251092"
+    /(?:تصريح|رخصة|فسح)\s*(?:حفر|عمل|رمزي|رقم|مشاريع)?\s*[:=#-]?\s*([A-Za-z0-9_-]{5,25})/i
   ];
 
   for (const rx of permitPatterns) {
@@ -172,22 +170,28 @@ export function processSpatialPermitOverlay(
 ): { items: KMLFeatureItem[]; matchedCount: number } {
   let matchedCount = 0;
   if (!permitBoundaries || permitBoundaries.length === 0) {
-    // If no explicit boundaries array, construct permit boundaries from items that already have permitNo and polygon coordinates
+    // Construct permit boundaries ONLY from closed polygon features that have permitNo and at least 4 coordinates
     const extractedBoundaries: PermitBoundaryPolygon[] = [];
     items.forEach(it => {
-      if (it.permitNo && it.coordinates && it.coordinates.length >= 3) {
-        let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
-        it.coordinates.forEach(([lng, lat]) => {
-          if (lat < minLat) minLat = lat;
-          if (lat > maxLat) maxLat = lat;
-          if (lng < minLng) minLng = lng;
-          if (lng > maxLng) maxLng = lng;
-        });
-        extractedBoundaries.push({
-          permitNo: it.permitNo,
-          bounds: { minLat, maxLat, minLng, maxLng },
-          coordinates: it.coordinates
-        });
+      if (it.permitNo && isValidIdentifier(it.permitNo) && it.coordinates && it.coordinates.length >= 4) {
+        const first = it.coordinates[0];
+        const last = it.coordinates[it.coordinates.length - 1];
+        // Check if closed polygon ring (distance between first and last point < 20 meters)
+        const isClosed = getHaversineDistanceMeters(first[1], first[0], last[1], last[0]) < 20;
+        if (isClosed) {
+          let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+          it.coordinates.forEach(([lng, lat]) => {
+            if (lat < minLat) minLat = lat;
+            if (lat > maxLat) maxLat = lat;
+            if (lng < minLng) minLng = lng;
+            if (lng > maxLng) maxLng = lng;
+          });
+          extractedBoundaries.push({
+            permitNo: it.permitNo,
+            bounds: { minLat, maxLat, minLng, maxLng },
+            coordinates: it.coordinates
+          });
+        }
       }
     });
 
@@ -213,27 +217,23 @@ export function processSpatialPermitOverlay(
     const lng = item.centerLng;
 
     for (const pb of permitBoundaries) {
-      let isInside = false;
-
-      // 1. Check Bounding Box
+      // Must pass Bounding Box check first as quick filter
       if (pb.bounds) {
-        if (lat >= pb.bounds.minLat && lat <= pb.bounds.maxLat &&
-            lng >= pb.bounds.minLng && lng <= pb.bounds.maxLng) {
-          isInside = true;
+        if (lat < pb.bounds.minLat || lat > pb.bounds.maxLat ||
+            lng < pb.bounds.minLng || lng > pb.bounds.maxLng) {
+          continue;
         }
       }
 
-      // 2. Check Polygon Ray-casting if coordinates exist
+      // Check strict ray-casting Point-In-Polygon match
       if (pb.coordinates && pb.coordinates.length >= 3) {
-        isInside = isPointInPolygon(lat, lng, pb.coordinates);
-      }
-
-      if (isInside) {
-        matchedCount++;
-        return {
-          ...item,
-          permitNo: pb.permitNo
-        };
+        if (isPointInPolygon(lat, lng, pb.coordinates)) {
+          matchedCount++;
+          return {
+            ...item,
+            permitNo: pb.permitNo
+          };
+        }
       }
     }
 

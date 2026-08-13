@@ -127,7 +127,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
           });
         }
       } catch (err) {
-        console.error('Error fetching project_changelogs:', err);
+        console.warn('⚠️ Notice fetching project_changelogs (falling back to local memory):', err);
       }
 
       // جـ) تحويل الإشعارات المخزنة في notifications إلى سجلات إضافية للتغطية الشاملة
@@ -170,7 +170,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
           });
         }
       } catch (err) {
-        console.error('Error converting notifications to changelogs:', err);
+        console.warn('⚠️ Notice converting notifications to changelogs:', err);
       }
     }
 

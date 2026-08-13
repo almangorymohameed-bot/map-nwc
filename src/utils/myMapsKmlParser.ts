@@ -665,6 +665,32 @@ export function isValidIdentifier(val: any): boolean {
 }
 
 /**
+ * Checks if a KML feature item is in yellow color (#ffea00 / ongoing status) AND lacks a valid permit number.
+ */
+export function isYellowItemWithoutPermit(item: KMLFeatureItem): boolean {
+  if (!item) return false;
+
+  // 1. Check if color or status category is yellow / ongoing
+  const color = (item.colorHex || '').toLowerCase();
+  const isYellow = color === '#ffea00' || color === '#ffeb3b' || color === '#ffff00' ||
+                   color === '#f59e0b' || color === '#eab308' || color === '#facc15' ||
+                   color === '#ffd600' || color === '#ffee58' || color === '#fff176' ||
+                   color === '#fbc02d' || color === '#f57f17' || color.includes('yellow') ||
+                   item.statusCategory === 'ongoing';
+
+  if (!isYellow) return false;
+
+  // 2. Check if permitNo is missing or invalid
+  const rawPerm = item.permitNo ? String(item.permitNo).trim() : '';
+  if (!rawPerm) return true;
+
+  const cleanPerm = cleanPermitNo(rawPerm);
+  const hasNoPermit = !cleanPerm || !isValidIdentifier(cleanPerm);
+
+  return hasNoPermit;
+}
+
+/**
  * Parse KML XML string into analytical dataset
  */
 export function parseKMLContent(xmlString: string, projectName: string = 'مشروع الخارطة التفاعلية', mapUrl: string = '', projectScope?: string): KMLAnalysisResult {

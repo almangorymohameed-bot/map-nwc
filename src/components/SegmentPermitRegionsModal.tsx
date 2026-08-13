@@ -11,7 +11,8 @@ import {
   cleanSegmentId, 
   cleanPermitNo, 
   cleanStage,
-  isValidIdentifier 
+  isValidIdentifier,
+  isYellowItemWithoutPermit
 } from '../utils/myMapsKmlParser';
 import { 
   X, 
@@ -43,6 +44,7 @@ interface SegmentPermitRegionsModalProps {
   analysisResult: KMLAnalysisResult | null;
   initialMode?: 'segment' | 'permit';
   initialFocusId?: string;
+  initialStatusFilter?: string;
   projectName?: string;
 }
 
@@ -64,6 +66,9 @@ interface GroupedRegion {
   centerLat?: number;
   centerLng?: number;
   allCoordinates: Array<[number, number]>; // [lng, lat]
+  hasYellowNoPermit?: boolean;
+  yellowNoPermitCount?: number;
+  yellowNoPermitLengthMeters?: number;
 }
 
 export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps> = ({
@@ -72,6 +77,7 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
   analysisResult,
   initialMode = 'segment',
   initialFocusId = '',
+  initialStatusFilter = '',
   projectName = ''
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -81,7 +87,7 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
   const [mode, setMode] = useState<'segment' | 'permit'>(initialMode);
   const [selectedId, setSelectedId] = useState<string>(initialFocusId);
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>(initialStatusFilter || 'all');
   const [tileLayerType, setTileLayerType] = useState<'google' | 'satellite' | 'dark' | 'osm'>('google');
   const [showLabelsOnMap, setShowLabelsOnMap] = useState<boolean>(true);
   const [copied, setCopied] = useState<boolean>(false);
@@ -101,8 +107,11 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
     if (isOpen) {
       setMode(initialMode);
       setSelectedId(initialFocusId || '');
+      if (initialStatusFilter) {
+        setSelectedStatusFilter(initialStatusFilter);
+      }
     }
-  }, [isOpen, initialMode, initialFocusId]);
+  }, [isOpen, initialMode, initialFocusId, initialStatusFilter]);
 
   // Group KML items into Segment regions or Permit regions
   const groupedRegions = useMemo(() => {
@@ -115,34 +124,53 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
     analysisResult.items.forEach(item => {
       const cleanSeg = cleanSegmentId(item.segmentId);
       const cleanPerm = cleanPermitNo(item.permitNo);
+      const isYellowNoPerm = isYellowItemWithoutPermit(item);
 
-      const targetId = mode === 'segment' ? cleanSeg : cleanPerm;
-      if (!isValidIdentifier(targetId)) return;
+      let targetId = mode === 'segment' ? cleanSeg : cleanPerm;
+
+      if (!isValidIdentifier(targetId)) {
+        if (isYellowNoPerm && mode === 'permit') {
+          targetId = 'عناصر جارية بدون رقم فسح (تنبيه قرمزي)';
+        } else if (isYellowNoPerm && mode === 'segment' && !isValidIdentifier(cleanSeg)) {
+          targetId = 'قطاعات جارية بدون ترميز (تنبيه قرمزي)';
+        } else {
+          return;
+        }
+      }
 
       let group = map.get(targetId);
       if (!group) {
         group = {
           id: targetId,
-          rawId: mode === 'segment' ? item.segmentId : item.permitNo,
+          rawId: targetId,
           mode,
           items: [],
           totalLengthMeters: 0,
           totalLengthKm: 0,
           statusCategories: new Set(),
-          colorHex: item.colorHex || (mode === 'segment' ? '#3b82f6' : '#10b981'),
+          colorHex: isYellowNoPerm ? '#dc2626' : (item.colorHex || (mode === 'segment' ? '#3b82f6' : '#10b981')),
           associatedPermits: new Set(),
           associatedSegments: new Set(),
           streets: new Set(),
           districts: new Set(),
           contractors: new Set(),
           stages: new Set(),
-          allCoordinates: []
+          allCoordinates: [],
+          hasYellowNoPermit: false,
+          yellowNoPermitCount: 0,
+          yellowNoPermitLengthMeters: 0
         };
         map.set(targetId, group);
       }
 
       group.items.push(item);
       group.totalLengthMeters += (item.lengthMeters || 0);
+
+      if (isYellowNoPerm) {
+        group.hasYellowNoPermit = true;
+        group.yellowNoPermitCount = (group.yellowNoPermitCount || 0) + 1;
+        group.yellowNoPermitLengthMeters = (group.yellowNoPermitLengthMeters || 0) + (item.lengthMeters || 0);
+      }
 
       if (item.statusCategory) group.statusCategories.add(item.statusCategory);
       if (isValidIdentifier(cleanPerm) && cleanPerm !== targetId) group.associatedPermits.add(cleanPerm);
@@ -183,6 +211,28 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
     return resultList.sort((a, b) => b.totalLengthMeters - a.totalLengthMeters);
   }, [analysisResult, mode]);
 
+  // Overall yellow items without permit statistics across regions
+  const yellowNoPermitStats = useMemo(() => {
+    let count = 0;
+    let lengthMeters = 0;
+    let regionsCount = 0;
+
+    groupedRegions.forEach(r => {
+      if (r.hasYellowNoPermit) {
+        count += r.yellowNoPermitCount || 0;
+        lengthMeters += r.yellowNoPermitLengthMeters || 0;
+        regionsCount++;
+      }
+    });
+
+    return {
+      count,
+      lengthMeters,
+      lengthKm: Number((lengthMeters / 1000).toFixed(3)),
+      regionsCount
+    };
+  }, [groupedRegions]);
+
   // Filtered list based on search and status filter
   const filteredRegions = useMemo(() => {
     return groupedRegions.filter(region => {
@@ -198,6 +248,9 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
 
       // Status filter
       if (selectedStatusFilter === 'all') return true;
+      if (selectedStatusFilter === 'yellow_no_permit') {
+        return Boolean(region.hasYellowNoPermit);
+      }
       if (selectedStatusFilter === 'executed') {
         return region.statusCategories.has('executed_water') || region.statusCategories.has('executed_sewage');
       }
@@ -325,9 +378,10 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
             allBoundsPoints.push(...latLngs);
           }
 
-          const baseColor = item.colorHex || region.colorHex || (mode === 'segment' ? '#3b82f6' : '#10b981');
+          const isUnpermittedYellow = isYellowItemWithoutPermit(item);
+          const baseColor = isUnpermittedYellow ? '#dc2626' : (item.colorHex || region.colorHex || (mode === 'segment' ? '#3b82f6' : '#10b981'));
 
-          // Outer glowing polyline if selected
+          // Outer glowing polyline if selected or unpermitted yellow alert
           if (isSelected) {
             L.polyline(latLngs, {
               color: '#38bdf8',
@@ -335,18 +389,31 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
               opacity: 0.55,
               lineCap: 'round'
             }).addTo(layerGroupRef.current!);
+          } else if (isUnpermittedYellow) {
+            // Crimson alert glow for yellow elements lacking permit
+            L.polyline(latLngs, {
+              color: '#dc2626',
+              weight: 10,
+              opacity: 0.8,
+              dashArray: '5, 8'
+            }).addTo(layerGroupRef.current!);
           }
 
           const polyline = L.polyline(latLngs, {
             color: isSelected ? '#3b82f6' : baseColor,
-            weight: isSelected ? 8 : 4,
-            opacity: isSelected ? 1.0 : 0.65,
+            weight: isSelected ? 8 : (isUnpermittedYellow ? 6 : 4),
+            opacity: isSelected ? 1.0 : 0.85,
             dashArray: (item.statusCategory === 'remaining' || item.statusCategory === 'cancelled') ? '6, 6' : undefined
           }).addTo(layerGroupRef.current!);
 
           // Tooltip/Popup
           const popupContent = `
-            <div style="direction: rtl; font-family: sans-serif; padding: 4px; min-width: 200px;">
+            <div style="direction: rtl; font-family: sans-serif; padding: 4px; min-width: 220px;">
+              ${isUnpermittedYellow ? `
+                <div style="background-color: #be123c; color: white; padding: 4px 8px; border-radius: 6px; font-weight: 900; font-size: 11px; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">
+                  <span>🚨 تنبيه قرمزي: أصفر بدون رقم فسح!</span>
+                </div>
+              ` : ''}
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px;">
                 <span style="background-color: ${baseColor}; color: white; padding: 2px 8px; border-radius: 6px; font-weight: bold; font-size: 11px;">
                   ${item.statusLabel || 'منطقة جغرافية'}
@@ -359,7 +426,7 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
                 <b>اسم الخط:</b> ${item.name || '-'}<br/>
                 <b>الطول:</b> ${item.lengthMeters} متر (${item.lengthKm} كم)<br/>
                 ${item.segmentId && isValidIdentifier(item.segmentId) ? `<b>Segment ID:</b> ${cleanSegmentId(item.segmentId)}<br/>` : ''}
-                ${item.permitNo && isValidIdentifier(item.permitNo) ? `<b>Permit No:</b> ${cleanPermitNo(item.permitNo)}<br/>` : ''}
+                ${item.permitNo && isValidIdentifier(item.permitNo) ? `<b>Permit No:</b> ${cleanPermitNo(item.permitNo)}<br/>` : '<b style="color: #be123c;">Permit No:</b> <span style="color: #be123c; font-weight: bold;">غير مسجل ❌</span><br/>'}
                 ${item.streetName ? `<b>الشارع:</b> ${item.streetName}<br/>` : ''}
                 ${item.district ? `<b>الحي:</b> ${item.district}<br/>` : ''}
                 ${item.stage ? `<b>المرحلة:</b> ${cleanStage(item.stage)}<br/>` : ''}
@@ -378,7 +445,7 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
       // Render Region Label Marker if showLabelsOnMap is enabled or if selected
       if ((showLabelsOnMap || isSelected) && isValidLatLng(region.centerLat, region.centerLng)) {
         const isSelectedRegion = activeSelectedRegion?.id === region.id;
-        const badgeColor = isSelectedRegion ? '#2563eb' : region.colorHex;
+        const badgeColor = isSelectedRegion ? '#2563eb' : (region.hasYellowNoPermit ? '#be123c' : region.colorHex);
 
         const customLabelIcon = L.divIcon({
           className: 'region-map-badge',
@@ -391,8 +458,8 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
               font-family: monospace; 
               font-weight: 900; 
               font-size: 11px; 
-              border: 2px solid white; 
-              box-shadow: 0 4px 12px rgba(0,0,0,0.35); 
+              border: ${region.hasYellowNoPermit ? '2px solid #fecdd3' : '2px solid white'}; 
+              box-shadow: ${region.hasYellowNoPermit ? '0 0 12px rgba(190, 18, 60, 0.8)' : '0 4px 12px rgba(0,0,0,0.35)'}; 
               white-space: nowrap;
               display: flex;
               align-items: center;
@@ -401,7 +468,7 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
               transition: all 0.2s ease;
               cursor: pointer;
             ">
-              <span>${mode === 'segment' ? '🏷️' : '📜'}</span>
+              <span>${region.hasYellowNoPermit ? '🚨' : (mode === 'segment' ? '🏷️' : '📜')}</span>
               <span>${region.id}</span>
             </div>
           `,
@@ -576,6 +643,21 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
                 >
                   الكل ({groupedRegions.length})
                 </button>
+
+                {yellowNoPermitStats.count > 0 && (
+                  <button
+                    onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'yellow_no_permit' ? 'all' : 'yellow_no_permit')}
+                    className={`px-2.5 py-1 rounded-lg shrink-0 transition-all cursor-pointer flex items-center gap-1.5 font-black shadow-2xs ${
+                      selectedStatusFilter === 'yellow_no_permit'
+                        ? 'bg-rose-600 text-white ring-2 ring-rose-400 shadow-md'
+                        : 'bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 hover:bg-rose-200 border border-rose-300 dark:border-rose-800'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping shrink-0" />
+                    <span>🚨 قطاعات جارية بدون فسح ({yellowNoPermitStats.count})</span>
+                  </button>
+                )}
+
                 <button
                   onClick={() => setSelectedStatusFilter('executed')}
                   className={`px-2.5 py-1 rounded-lg shrink-0 transition-colors cursor-pointer ${
@@ -786,6 +868,19 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
                     <span>{copied ? 'تم النسخ' : 'نسخ النص'}</span>
                   </button>
                 </div>
+
+                {/* Crimson alert callout if region contains yellow items without permit */}
+                {activeSelectedRegion.hasYellowNoPermit && (
+                  <div className="bg-rose-50 dark:bg-rose-950/80 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 p-2.5 rounded-xl text-[11px] flex items-center gap-2 font-extrabold shadow-2xs">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600 dark:text-rose-400 animate-bounce" />
+                    <div>
+                      <span>🚨 تنبيه قرمزي: يوجد {activeSelectedRegion.yellowNoPermitCount} قطاع جاري (باللون الأصفر) بدون رقم فسح مسجل!</span>
+                      <span className="block text-[10px] text-rose-700 dark:text-rose-300 font-normal mt-0.5">
+                        إجمالي طول القطاعات بدون فسح: {((activeSelectedRegion.yellowNoPermitLengthMeters || 0) / 1000).toFixed(3)} كم
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                   {mode === 'segment' && (

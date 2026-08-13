@@ -5,9 +5,9 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Project, StatusCategory, KMLAnalysisResult, HistoricalReport } from '../types';
-import { ReportHistoryStore, extractPoDigits, isReportMatchingProject } from '../utils/supabaseSetup';
+import { ReportHistoryStore, extractPoDigits, isReportMatchingProject, findReportForProject } from '../utils/supabaseSetup';
 import { DashboardMetricsStore, DashboardProjectMetric } from '../utils/dashboardMetricsStore';
-import { generateSyntheticProjectKMLData, getStatusCategoryLabel, isValidIdentifier, cleanSegmentId, cleanPermitNo, cleanStage } from '../utils/myMapsKmlParser';
+import { generateSyntheticProjectKMLData, getStatusCategoryLabel, isValidIdentifier, cleanSegmentId, cleanPermitNo, cleanStage, isYellowItemWithoutPermit } from '../utils/myMapsKmlParser';
 import * as XLSX from 'xlsx';
 import {
   Ruler,
@@ -62,6 +62,9 @@ interface CategoryStats {
     segmentCount: number;
     uniqueSegmentCount: number;
     projectsCount: number;
+    yellowNoPermitCount?: number;
+    yellowNoPermitMeters?: number;
+    yellowNoPermitKm?: number;
   }>;
 }
 
@@ -243,32 +246,20 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
   const getValidMetricForProject = (p: Project): DashboardProjectMetric | undefined => {
     const metric = metricsMap.get(p.id);
     if (!metric) return undefined;
-    if (metric.projectId !== p.id) return undefined;
-
-    const pPo = extractPoDigits(p.po) || extractPoDigits(p.name);
-    const mPo = extractPoDigits(metric.projectName);
-    if (pPo && mPo && pPo !== mPo) {
-      return undefined;
-    }
-
-    if (metric.projectName && p.name && metric.projectName.trim() !== p.name.trim()) {
-      const getOp = (str: string) => {
-        const m = str.match(/\[(.*?)\]/);
-        return m ? m[1].trim() : '';
-      };
-      const opP = getOp(p.name);
-      const opM = getOp(metric.projectName);
-      if (opP && opM && opP !== opM) {
-        return undefined; // Reject mismatching project metric
-      }
-    }
-    return metric;
+    if (metric.projectId === p.id) return metric;
+    return undefined;
   };
 
-  // Helper to get KML analysis result for a project strictly from stored reports in database
+  // Helper to format integer metrics cleanly so 0 and numbers display clearly
+  const formatVal = (val: number | undefined | null): string => {
+    if (val === undefined || val === null || isNaN(val)) return '0';
+    return val.toLocaleString('en-US');
+  };
+
+  // Helper to get KML analysis result for a project strictly from stored reports in database or null if none
   const getAnalysisForProject = (p: Project): KMLAnalysisResult | null => {
     const saved = findReportForProject(p, reportsMap);
-    if (saved && saved.analysisResult && saved.analysisResult.totalLengthMeters > 0) {
+    if (saved && saved.analysisResult) {
       return saved.analysisResult;
     }
     return null;
@@ -294,42 +285,21 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
       segmentSet: Set<string>;
       segmentTotalCount: number;
       projectSet: Set<number>;
+      yellowNoPermitCount: number;
+      yellowNoPermitMeters: number;
     }> = {
-      executed_water: { category: 'executed_water', label: 'منفذ - شبكات مياه', hex: '#01579B', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set() },
-      executed_sewage: { category: 'executed_sewage', label: 'منفذ - شبكات صرف صحي', hex: '#097138', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set() },
-      ongoing: { category: 'ongoing', label: 'جاري العمل / التنفيذ', hex: '#ffea00', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set() },
-      remaining: { category: 'remaining', label: 'أعمال متبقية', hex: '#a52714', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set() },
-      cancelled: { category: 'cancelled', label: 'خطوط تم إلغائها', hex: '#F48FB1', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set() }
+      executed_water: { category: 'executed_water', label: 'منفذ - شبكات مياه', hex: '#01579B', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set(), yellowNoPermitCount: 0, yellowNoPermitMeters: 0 },
+      executed_sewage: { category: 'executed_sewage', label: 'منفذ - شبكات صرف صحي', hex: '#097138', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set(), yellowNoPermitCount: 0, yellowNoPermitMeters: 0 },
+      ongoing: { category: 'ongoing', label: 'جاري العمل / التنفيذ', hex: '#ffea00', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set(), yellowNoPermitCount: 0, yellowNoPermitMeters: 0 },
+      remaining: { category: 'remaining', label: 'أعمال متبقية', hex: '#a52714', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set(), yellowNoPermitCount: 0, yellowNoPermitMeters: 0 },
+      cancelled: { category: 'cancelled', label: 'خطوط تم إلغائها', hex: '#F48FB1', totalMeters: 0, totalKm: 0, percentage: 0, permitSet: new Set(), segmentSet: new Set(), segmentTotalCount: 0, projectSet: new Set(), yellowNoPermitCount: 0, yellowNoPermitMeters: 0 }
     };
 
     catProjects.forEach(p => {
-      const metric = getValidMetricForProject(p);
       const res = getAnalysisForProject(p);
+      const metric = getValidMetricForProject(p);
 
-      if (metric) {
-        totalMeters += metric.totalLengthMeters;
-
-        if (metric.executedWaterMeters > 0) {
-          breakdownMap.executed_water.totalMeters += metric.executedWaterMeters;
-          breakdownMap.executed_water.projectSet.add(p.id);
-        }
-        if (metric.executedSewageMeters > 0) {
-          breakdownMap.executed_sewage.totalMeters += metric.executedSewageMeters;
-          breakdownMap.executed_sewage.projectSet.add(p.id);
-        }
-        if (metric.ongoingMeters > 0) {
-          breakdownMap.ongoing.totalMeters += metric.ongoingMeters;
-          breakdownMap.ongoing.projectSet.add(p.id);
-        }
-        if (metric.remainingMeters > 0) {
-          breakdownMap.remaining.totalMeters += metric.remainingMeters;
-          breakdownMap.remaining.projectSet.add(p.id);
-        }
-        if (metric.cancelledMeters > 0) {
-          breakdownMap.cancelled.totalMeters += metric.cancelledMeters;
-          breakdownMap.cancelled.projectSet.add(p.id);
-        }
-      } else if (res) {
+      if (res && (res.totalLengthMeters > 0 || (res.items && res.items.length > 0))) {
         let projTotalMeters = res.totalLengthMeters || 0;
         if (projTotalMeters === 0 && res.items && res.items.length > 0) {
           projTotalMeters = res.items.reduce((sum, item) => sum + (item.lengthMeters || 0), 0);
@@ -359,24 +329,20 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
             breakdownMap[cat].projectSet.add(p.id);
           }
         });
-      }
 
-      // Aggregate Permit No and Segment ID values broken down by category from res (or fallback to metric lists)
-      if (res) {
-        const catKeyMap: Record<StatusCategory, 'executedWater' | 'executedSewage' | 'ongoing' | 'remaining' | 'cancelled'> = {
-          'executed_water': 'executedWater',
-          'executed_sewage': 'executedSewage',
-          'ongoing': 'ongoing',
-          'remaining': 'remaining',
-          'cancelled': 'cancelled'
-        };
-
+        // Aggregate Permit No and Segment ID values broken down by category from res
         const pNosByCat = (res.colorBreakdown as any)?.permitNosByStatus || res.permitNosByStatus;
         const sIdsByCat = (res.colorBreakdown as any)?.segmentIdsByStatus || res.segmentIdsByStatus;
 
         if (res.items && Array.isArray(res.items) && res.items.length > 0) {
           res.items.forEach(item => {
             const cat = item.statusCategory || 'ongoing';
+
+            if (isYellowItemWithoutPermit(item)) {
+              breakdownMap.ongoing.yellowNoPermitCount++;
+              breakdownMap.ongoing.yellowNoPermitMeters += (item.lengthMeters || 0);
+            }
+
             const pNo = item.permitNo || (item as any)['permitNo'] || (item as any)['Permit No'] || (item as any)['permit_no'];
             if (isValidIdentifier(pNo)) {
               const cleanP = String(pNo).trim();
@@ -437,9 +403,46 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
           const totalCatSegs = Object.values(breakdownMap).reduce((acc, b) => acc + b.segmentTotalCount, 0);
           globalSegmentTotalCount += Math.max(featCount, totalCatSegs);
         }
-      } else if (metric) {
-        metric.permitsList.forEach(pNo => globalPermitSet.add(pNo));
-        metric.segmentsList.forEach(sId => globalSegmentSet.add(sId));
+      } else if (metric && metric.totalLengthMeters > 0) {
+        totalMeters += metric.totalLengthMeters;
+
+        if (metric.executedWaterMeters > 0) {
+          breakdownMap.executed_water.totalMeters += metric.executedWaterMeters;
+          breakdownMap.executed_water.projectSet.add(p.id);
+        }
+        if (metric.executedSewageMeters > 0) {
+          breakdownMap.executed_sewage.totalMeters += metric.executedSewageMeters;
+          breakdownMap.executed_sewage.projectSet.add(p.id);
+        }
+        if (metric.ongoingMeters > 0) {
+          breakdownMap.ongoing.totalMeters += metric.ongoingMeters;
+          breakdownMap.ongoing.projectSet.add(p.id);
+        }
+        if (metric.remainingMeters > 0) {
+          breakdownMap.remaining.totalMeters += metric.remainingMeters;
+          breakdownMap.remaining.projectSet.add(p.id);
+        }
+        if (metric.cancelledMeters > 0) {
+          breakdownMap.cancelled.totalMeters += metric.cancelledMeters;
+          breakdownMap.cancelled.projectSet.add(p.id);
+        }
+
+        metric.permitsList.forEach(pNo => {
+          if (isValidIdentifier(pNo)) {
+            const cleanP = String(pNo).trim();
+            globalPermitSet.add(cleanP);
+            breakdownMap.ongoing.permitSet.add(cleanP);
+          }
+        });
+
+        metric.segmentsList.forEach(sId => {
+          if (isValidIdentifier(sId)) {
+            const cleanS = String(sId).trim();
+            globalSegmentSet.add(cleanS);
+            breakdownMap.ongoing.segmentSet.add(cleanS);
+          }
+        });
+
         globalSegmentTotalCount += metric.totalSegmentsCount;
       }
     });
@@ -479,7 +482,10 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
         permitCount: breakdownMap.ongoing.permitSet.size,
         segmentCount: breakdownMap.ongoing.segmentTotalCount > 0 ? breakdownMap.ongoing.segmentTotalCount : breakdownMap.ongoing.segmentSet.size,
         uniqueSegmentCount: breakdownMap.ongoing.segmentSet.size,
-        projectsCount: breakdownMap.ongoing.projectSet.size
+        projectsCount: breakdownMap.ongoing.projectSet.size,
+        yellowNoPermitCount: breakdownMap.ongoing.yellowNoPermitCount,
+        yellowNoPermitMeters: breakdownMap.ongoing.yellowNoPermitMeters,
+        yellowNoPermitKm: Number((breakdownMap.ongoing.yellowNoPermitMeters / 1000).toFixed(3))
       },
       remaining: {
         category: 'remaining',
@@ -1408,20 +1414,47 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-amber-200/80 dark:border-amber-800/60 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-amber-200/80 dark:border-amber-800/60 text-xs">
               <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800">
                 <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد السجمنت (Segment ID)</span>
                 <span className="text-base font-extrabold text-amber-900 dark:text-amber-200 block">
-                  {activeStats.statusBreakdown.ongoing.uniqueSegmentCount.toLocaleString('ar-SA')} فريد
+                  {formatVal(activeStats.statusBreakdown.ongoing.uniqueSegmentCount)} فريد
                 </span>
                 <span className="text-[10px] font-semibold text-slate-400 block">
-                  (من إجمالي {activeStats.statusBreakdown.ongoing.segmentCount.toLocaleString('ar-SA')} عنصر)
+                  (من إجمالي {formatVal(activeStats.statusBreakdown.ongoing.segmentCount)} عنصر)
                 </span>
               </div>
+
               <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-amber-200 dark:border-amber-800">
                 <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد الرخص (Permit No)</span>
-                <span className="text-base font-extrabold text-amber-900 dark:text-amber-200">
-                  {activeStats.statusBreakdown.ongoing.permitCount.toLocaleString('ar-SA')} Permit No
+                <span className="text-base font-extrabold text-amber-900 dark:text-amber-200 block">
+                  {formatVal(activeStats.statusBreakdown.ongoing.permitCount)} Permit No
+                </span>
+                <span className="text-[10px] font-semibold text-slate-400 block">
+                  رخصة مسجلة
+                </span>
+              </div>
+
+              <div className={`p-2.5 rounded-xl border transition-all ${
+                (activeStats.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0
+                  ? 'bg-rose-50/90 dark:bg-rose-950/80 border-rose-400 dark:border-rose-800 shadow-xs'
+                  : 'bg-white/80 dark:bg-slate-900/80 border-amber-200 dark:border-amber-800'
+              }`}>
+                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                  <span>قطاعات جارية بدون فسح 🚨</span>
+                  {(activeStats.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0 && (
+                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping inline-block"></span>
+                  )}
+                </span>
+                <span className={`text-base font-black block mt-0.5 ${
+                  (activeStats.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0
+                    ? 'text-rose-700 dark:text-rose-300 underline decoration-rose-500 font-mono'
+                    : 'text-amber-900 dark:text-amber-200 font-mono'
+                }`}>
+                  {formatVal(activeStats.statusBreakdown.ongoing.yellowNoPermitCount)} قطاع
+                </span>
+                <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block mt-0.5">
+                  {formatVal(activeStats.statusBreakdown.ongoing.yellowNoPermitKm)} كم ({formatVal(activeStats.statusBreakdown.ongoing.yellowNoPermitMeters)} م)
                 </span>
               </div>
             </div>
@@ -1452,16 +1485,16 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
               <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-rose-200 dark:border-rose-800">
                 <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد السجمنت (Segment ID)</span>
                 <span className="text-base font-extrabold text-rose-900 dark:text-rose-200 block">
-                  {activeStats.statusBreakdown.remaining.uniqueSegmentCount.toLocaleString('ar-SA')} فريد
+                  {formatVal(activeStats.statusBreakdown.remaining.uniqueSegmentCount)} فريد
                 </span>
                 <span className="text-[10px] font-semibold text-slate-400 block">
-                  (من إجمالي {activeStats.statusBreakdown.remaining.segmentCount.toLocaleString('ar-SA')} عنصر)
+                  (من إجمالي {formatVal(activeStats.statusBreakdown.remaining.segmentCount)} عنصر)
                 </span>
               </div>
               <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-rose-200 dark:border-rose-800">
                 <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد الرخص (Permit No)</span>
                 <span className="text-base font-extrabold text-rose-900 dark:text-rose-200">
-                  {activeStats.statusBreakdown.remaining.permitCount.toLocaleString('ar-SA')} Permit No
+                  {formatVal(activeStats.statusBreakdown.remaining.permitCount)} Permit No
                 </span>
               </div>
             </div>
@@ -1492,16 +1525,16 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
               <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-sky-200 dark:border-sky-800">
                 <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد السجمنت (Segment ID)</span>
                 <span className="text-base font-extrabold text-sky-900 dark:text-sky-200 block">
-                  {activeStats.statusBreakdown.executed_water.uniqueSegmentCount.toLocaleString('ar-SA')} فريد
+                  {formatVal(activeStats.statusBreakdown.executed_water.uniqueSegmentCount)} فريد
                 </span>
                 <span className="text-[10px] font-semibold text-slate-400 block">
-                  (من إجمالي {activeStats.statusBreakdown.executed_water.segmentCount.toLocaleString('ar-SA')} عنصر)
+                  (من إجمالي {formatVal(activeStats.statusBreakdown.executed_water.segmentCount)} عنصر)
                 </span>
               </div>
               <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-sky-200 dark:border-sky-800">
                 <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد الرخص (Permit No)</span>
                 <span className="text-base font-extrabold text-sky-900 dark:text-sky-200">
-                  {activeStats.statusBreakdown.executed_water.permitCount.toLocaleString('ar-SA')} Permit No
+                  {formatVal(activeStats.statusBreakdown.executed_water.permitCount)} Permit No
                 </span>
               </div>
             </div>
@@ -1532,16 +1565,16 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
               <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
                 <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد السجمنت (Segment ID)</span>
                 <span className="text-base font-extrabold text-emerald-900 dark:text-emerald-200 block">
-                  {activeStats.statusBreakdown.executed_sewage.uniqueSegmentCount.toLocaleString('ar-SA')} فريد
+                  {formatVal(activeStats.statusBreakdown.executed_sewage.uniqueSegmentCount)} فريد
                 </span>
                 <span className="text-[10px] font-semibold text-slate-400 block">
-                  (من إجمالي {activeStats.statusBreakdown.executed_sewage.segmentCount.toLocaleString('ar-SA')} عنصر)
+                  (من إجمالي {formatVal(activeStats.statusBreakdown.executed_sewage.segmentCount)} عنصر)
                 </span>
               </div>
               <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
                 <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد الرخص (Permit No)</span>
                 <span className="text-base font-extrabold text-emerald-900 dark:text-emerald-200">
-                  {activeStats.statusBreakdown.executed_sewage.permitCount.toLocaleString('ar-SA')} Permit No
+                  {formatVal(activeStats.statusBreakdown.executed_sewage.permitCount)} Permit No
                 </span>
               </div>
             </div>
@@ -1572,16 +1605,16 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
               <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-pink-200 dark:border-pink-800">
                 <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد السجمنت (Segment ID)</span>
                 <span className="text-base font-extrabold text-pink-900 dark:text-pink-200 block">
-                  {activeStats.statusBreakdown.cancelled.uniqueSegmentCount.toLocaleString('ar-SA')} فريد
+                  {formatVal(activeStats.statusBreakdown.cancelled.uniqueSegmentCount)} فريد
                 </span>
                 <span className="text-[10px] font-semibold text-slate-400 block">
-                  (من إجمالي {activeStats.statusBreakdown.cancelled.segmentCount.toLocaleString('ar-SA')} عنصر)
+                  (من إجمالي {formatVal(activeStats.statusBreakdown.cancelled.segmentCount)} عنصر)
                 </span>
               </div>
               <div className="bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-pink-200 dark:border-pink-800">
                 <span className="text-slate-500 dark:text-slate-400 text-[11px] block font-bold">أعداد الرخص (Permit No)</span>
                 <span className="text-base font-extrabold text-pink-900 dark:text-pink-200">
-                  {activeStats.statusBreakdown.cancelled.permitCount.toLocaleString('ar-SA')} Permit No
+                  {formatVal(activeStats.statusBreakdown.cancelled.permitCount)} Permit No
                 </span>
               </div>
             </div>
@@ -1810,27 +1843,21 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
               {searchedProjects.map((p) => {
                 const savedReport = findReportForProject(p, reportsMap);
                 const metric = getValidMetricForProject(p);
-                const res = savedReport?.analysisResult || getAnalysisForProject(p);
+                const res = savedReport?.analysisResult || null;
 
-                const totalKm = savedReport?.analysisResult?.totalLengthKm
-                  ?? (metric ? metric.totalLengthKm : (res ? res.totalLengthKm : 0));
+                const totalKm = res ? (res.totalLengthKm || 0) : (metric ? metric.totalLengthKm : 0);
+                const ongoingKm = res ? (res.colorBreakdown?.ongoing?.totalLengthKm || 0) : (metric ? Number((metric.ongoingMeters / 1000).toFixed(3)) : 0);
+                const remainingKm = res ? (res.colorBreakdown?.remaining?.totalLengthKm || 0) : (metric ? Number((metric.remainingMeters / 1000).toFixed(3)) : 0);
 
-                const ongoingKm = savedReport?.analysisResult?.colorBreakdown?.ongoing?.totalLengthKm
-                  ?? (metric ? Number((metric.ongoingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.ongoing?.totalLengthKm || 0) : 0));
+                const permitCount = res && res.permitNosByStatus
+                  ? new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier)).size
+                  : (metric ? metric.permitsCount : 0);
 
-                const remainingKm = savedReport?.analysisResult?.colorBreakdown?.remaining?.totalLengthKm
-                  ?? (metric ? Number((metric.remainingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.remaining?.totalLengthKm || 0) : 0));
+                const uniqueSegmentCount = res && res.segmentIdsByStatus
+                  ? new Set(Object.values(res.segmentIdsByStatus).flat().filter(isValidIdentifier)).size
+                  : (metric ? metric.uniqueSegmentsCount : 0);
 
-                const permitCount = savedReport?.analysisResult?.permitNosByStatus
-                  ? new Set(Object.values(savedReport.analysisResult.permitNosByStatus).flat().filter(isValidIdentifier)).size
-                  : (metric ? metric.permitsCount : (res && res.permitNosByStatus ? new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier)).size : 0));
-
-                const uniqueSegmentCount = savedReport?.analysisResult?.segmentIdsByStatus
-                  ? new Set(Object.values(savedReport.analysisResult.segmentIdsByStatus).flat().filter(isValidIdentifier)).size
-                  : (metric ? metric.uniqueSegmentsCount : (res && res.segmentIdsByStatus ? new Set(Object.values(res.segmentIdsByStatus).flat().filter(isValidIdentifier)).size : 0));
-
-                const totalSegmentCount = savedReport?.analysisResult?.totalFeaturesCount
-                  ?? (metric ? metric.totalSegmentsCount : (res ? (res.totalFeaturesCount || 0) : 0));
+                const totalSegmentCount = res ? (res.totalFeaturesCount || 0) : (metric ? metric.totalSegmentsCount : 0);
 
                 const reportDateRaw = savedReport?.createdAt || savedReport?.parsedAt || metric?.updatedAt;
                 let reportDateFormatted = '';
@@ -1908,7 +1935,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                         title="استدعاء وفتح آخر تقرير تم تحليله للمشروع مباشرة في قسم تحليل الخرائط الجغرافية"
                       >
                         <FileText className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                        <span className="whitespace-nowrap">{savedReport ? `تقرير ${reportDateFormatted || 'المعتمد'}` : (reportDateFormatted ? `تقرير ${reportDateFormatted}` : 'آخر تقرير مُحلل')}</span>
+                        <span className="whitespace-nowrap">{savedReport ? `تقرير ${reportDateFormatted || 'المعتمد'}` : 'لا يوجد تقرير'}</span>
                         <ExternalLink className="h-3 w-3 opacity-70 shrink-0" />
                       </button>
                     </td>
@@ -1925,7 +1952,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
         const p = selectedReportModalProject;
         const savedReport = findReportForProject(p, reportsMap);
         const metric = getValidMetricForProject(p);
-        const res = savedReport?.analysisResult || getAnalysisForProject(p);
+        const res = savedReport?.analysisResult || null;
 
         const reportDateRaw = savedReport?.createdAt || savedReport?.parsedAt || metric?.updatedAt;
         let reportDateFormatted = '';
@@ -1940,40 +1967,21 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
           }
         }
 
-        const totalKm = savedReport?.analysisResult?.totalLengthKm
-          ?? (metric ? metric.totalLengthKm : (res ? res.totalLengthKm : 0));
+        const totalKm = res ? (res.totalLengthKm || 0) : (metric ? metric.totalLengthKm : 0);
+        const totalMeters = res ? (res.totalLengthMeters || 0) : (metric ? metric.totalLengthMeters : 0);
+        const ongoingKm = res ? (res.colorBreakdown?.ongoing?.totalLengthKm || 0) : (metric ? Number((metric.ongoingMeters / 1000).toFixed(3)) : 0);
+        const remainingKm = res ? (res.colorBreakdown?.remaining?.totalLengthKm || 0) : (metric ? Number((metric.remainingMeters / 1000).toFixed(3)) : 0);
+        const executedWaterKm = res ? (res.colorBreakdown?.executed_water?.totalLengthKm || (res.colorBreakdown as any)?.executedWater?.totalLengthKm || 0) : (metric ? Number((metric.executedWaterMeters / 1000).toFixed(3)) : 0);
+        const executedSewageKm = res ? (res.colorBreakdown?.executed_sewage?.totalLengthKm || (res.colorBreakdown as any)?.executedSewage?.totalLengthKm || 0) : (metric ? Number((metric.executedSewageMeters / 1000).toFixed(3)) : 0);
+        const cancelledKm = res ? (res.colorBreakdown?.cancelled?.totalLengthKm || 0) : (metric ? Number((metric.cancelledMeters / 1000).toFixed(3)) : 0);
 
-        const totalMeters = savedReport?.analysisResult?.totalLengthMeters
-          ?? (metric ? metric.totalLengthMeters : (res ? res.totalLengthMeters : 0));
+        const permitsList: string[] = res && res.permitNosByStatus
+          ? Array.from(new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier)))
+          : (metric && metric.permitsList && metric.permitsList.length > 0 ? metric.permitsList : []);
 
-        const ongoingKm = savedReport?.analysisResult?.colorBreakdown?.ongoing?.totalLengthKm
-          ?? (metric ? Number((metric.ongoingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.ongoing?.totalLengthKm || 0) : 0));
-
-        const remainingKm = savedReport?.analysisResult?.colorBreakdown?.remaining?.totalLengthKm
-          ?? (metric ? Number((metric.remainingMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.remaining?.totalLengthKm || 0) : 0));
-
-        const executedWaterKm = savedReport?.analysisResult?.colorBreakdown?.executed_water?.totalLengthKm
-          ?? (savedReport?.analysisResult?.colorBreakdown as any)?.executedWater?.totalLengthKm
-          ?? (metric ? Number((metric.executedWaterMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.executed_water?.totalLengthKm || 0) : 0));
-
-        const executedSewageKm = savedReport?.analysisResult?.colorBreakdown?.executed_sewage?.totalLengthKm
-          ?? (savedReport?.analysisResult?.colorBreakdown as any)?.executedSewage?.totalLengthKm
-          ?? (metric ? Number((metric.executedSewageMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.executed_sewage?.totalLengthKm || 0) : 0));
-
-        const cancelledKm = savedReport?.analysisResult?.colorBreakdown?.cancelled?.totalLengthKm
-          ?? (metric ? Number((metric.cancelledMeters / 1000).toFixed(3)) : (res ? (res.colorBreakdown?.cancelled?.totalLengthKm || 0) : 0));
-
-        const permitsList: string[] = savedReport?.analysisResult?.permitNosByStatus
-          ? Array.from(new Set(Object.values(savedReport.analysisResult.permitNosByStatus).flat().filter(isValidIdentifier)))
-          : (metric && metric.permitsList && metric.permitsList.length > 0
-            ? metric.permitsList
-            : (res && res.permitNosByStatus ? Array.from(new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier))) : []));
-
-        const segmentsList: string[] = savedReport?.analysisResult?.segmentIdsByStatus
-          ? Array.from(new Set(Object.values(savedReport.analysisResult.segmentIdsByStatus).flat().filter(isValidIdentifier)))
-          : (metric && metric.segmentsList && metric.segmentsList.length > 0
-            ? metric.segmentsList
-            : (res && res.segmentIdsByStatus ? Array.from(new Set(Object.values(res.segmentIdsByStatus).flat().filter(isValidIdentifier))) : []));
+        const segmentsList: string[] = res && res.segmentIdsByStatus
+          ? Array.from(new Set(Object.values(res.segmentIdsByStatus).flat().filter(isValidIdentifier)))
+          : (metric && metric.segmentsList && metric.segmentsList.length > 0 ? metric.segmentsList : []);
 
         return (
           <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md overflow-y-auto">

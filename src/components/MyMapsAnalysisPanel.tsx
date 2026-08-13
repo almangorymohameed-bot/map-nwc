@@ -15,7 +15,8 @@ import {
   getStatusCategoryLabel,
   isValidIdentifier,
   cleanSegmentId,
-  cleanPermitNo
+  cleanPermitNo,
+  isYellowItemWithoutPermit
 } from '../utils/myMapsKmlParser';
 import { compareKMLAnalyses } from '../utils/diffEngine';
 import { ReportHistoryStore, getSupabaseClient } from '../utils/supabaseSetup';
@@ -90,12 +91,29 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   const [isRegionsMapModalOpen, setIsRegionsMapModalOpen] = useState<boolean>(false);
   const [regionsMapModalMode, setRegionsMapModalMode] = useState<'segment' | 'permit'>('segment');
   const [regionsMapModalFocusId, setRegionsMapModalFocusId] = useState<string>('');
+  const [regionsMapModalStatusFilter, setRegionsMapModalStatusFilter] = useState<string>('');
 
-  const handleOpenRegionsMapModal = (mode: 'segment' | 'permit', focusId: string = '') => {
+  const handleOpenRegionsMapModal = (mode: 'segment' | 'permit', focusId: string = '', statusFilter: string = '') => {
     setRegionsMapModalMode(mode);
     setRegionsMapModalFocusId(focusId);
+    setRegionsMapModalStatusFilter(statusFilter);
     setIsRegionsMapModalOpen(true);
   };
+
+  // Compute yellow items without permit stats
+  const yellowNoPermitStats = React.useMemo(() => {
+    if (!analysisResult || !analysisResult.items) {
+      return { count: 0, lengthMeters: 0, lengthKm: 0, items: [] };
+    }
+    const items = analysisResult.items.filter(it => isYellowItemWithoutPermit(it));
+    const lengthMeters = items.reduce((sum, it) => sum + (it.lengthMeters || 0), 0);
+    return {
+      count: items.length,
+      lengthMeters,
+      lengthKm: Number((lengthMeters / 1000).toFixed(3)),
+      items
+    };
+  }, [analysisResult]);
 
   // Handlers for Attribute Formatter & Segment Vault Pipeline
   const handleRunPermitInspection = () => {
@@ -720,14 +738,13 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                         setActiveProject(p);
                         setMapInputUrl(p.mapUrl || '');
                       }}
-                      className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1 ${
+                      className={`text-[11px] font-bold px-3 py-1.5 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 ${
                         activeProject?.id === p.id
                           ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                           : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-blue-400'
                       }`}
                     >
-                      <span className="font-mono text-[10px]">[{p.operationalNumber || p.id}]</span>
-                      <span className="truncate max-w-[200px]">{p.name}</span>
+                      <span className="truncate max-w-[350px]">{p.name}</span>
                     </button>
                   ))}
                 </div>
@@ -752,7 +769,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 <option value="" disabled>-- اختر مشروعاً من القائمة --</option>
                 {filteredProjects.map(proj => (
                   <option key={proj.id} value={proj.id}>
-                    [{proj.operationalNumber || proj.id}] {proj.name} ({proj.region || proj.businessUnit})
+                    {proj.name} {proj.region || proj.businessUnit ? `(${proj.region || proj.businessUnit})` : ''}
                   </option>
                 ))}
               </select>
@@ -1071,6 +1088,16 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                     <div>الطول: <strong>{analysisResult.colorBreakdown.ongoing.totalLengthMeters.toLocaleString('ar-SA')}</strong> متر</div>
                     <div>عدد القطاعات: <strong>{analysisResult.colorBreakdown.ongoing.segmentCount}</strong></div>
                     <div>عدد التصاريح: <strong>{analysisResult.colorBreakdown.ongoing.permitCount}</strong></div>
+                    {yellowNoPermitStats.count > 0 ? (
+                      <div className="text-rose-700 dark:text-rose-300 font-bold pt-1 border-t border-rose-300 dark:border-rose-900/60 mt-1 flex items-center justify-between">
+                        <span>قطاعات جارية بدون فسح:</span>
+                        <span className="font-mono font-black text-rose-800 dark:text-rose-200 underline">{yellowNoPermitStats.count} قطاع 🚨</span>
+                      </div>
+                    ) : (
+                      <div className="text-slate-500 dark:text-slate-400 pt-0.5 border-t border-amber-300/40 dark:border-amber-900/40 mt-1">
+                        قطاعات جارية بدون فسح: <strong>0 قطاع</strong>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1117,6 +1144,39 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
                 </div>
               </div>
             </div>
+
+            {/* Crimson Alert Card: Yellow Ongoing Items Lacking Permit Number (#ffea00) */}
+            {yellowNoPermitStats.count > 0 && (
+              <div className="p-4 rounded-2xl border-2 border-rose-500 bg-gradient-to-r from-rose-50 via-rose-100/70 to-amber-50 dark:from-rose-950/80 dark:via-rose-900/60 dark:to-slate-900 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in duration-300">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-rose-600/30 animate-pulse mt-0.5">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-2.5 py-0.5 bg-rose-600 text-white text-[11px] font-black rounded-full shadow-xs">
+                        تنبيه قرمزي - تدقيق تصاريح الحفر 🚨
+                      </span>
+                      <span className="text-xs font-bold text-rose-900 dark:text-rose-200">
+                        تم اكتشاف خطوط باللون الأصفر (#ffea00 - جاري) بدون رقم فسح مسجل!
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-800 dark:text-rose-300 font-semibold leading-relaxed">
+                      عدد العناصر بدون رقم فسح: <strong className="font-mono text-sm text-rose-950 dark:text-white font-black underline">{yellowNoPermitStats.count} قطعة</strong> | إجمالي طولها: <strong className="font-mono text-sm text-rose-950 dark:text-white font-black">{yellowNoPermitStats.lengthKm} كم</strong> ({yellowNoPermitStats.lengthMeters.toLocaleString('ar-SA')} متر)
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenRegionsMapModal('permit', '', 'yellow_no_permit')}
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs rounded-xl shadow-lg shadow-rose-600/20 transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer active:scale-95 border border-rose-400/30"
+                >
+                  <Globe className="h-4 w-4 text-rose-100" />
+                  <span>عكس على الخريطة التفاعلية 🗺️</span>
+                </button>
+              </div>
+            )}
 
             {/* Visual Multi-Color Progress Bar */}
             <div className="space-y-1.5 pt-2">
@@ -2143,6 +2203,7 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
         analysisResult={analysisResult}
         initialMode={regionsMapModalMode}
         initialFocusId={regionsMapModalFocusId}
+        initialStatusFilter={regionsMapModalStatusFilter}
         projectName={activeProject?.name}
       />
     </div>

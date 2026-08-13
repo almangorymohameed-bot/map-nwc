@@ -4,8 +4,8 @@
  */
 
 import { KMLAnalysisResult, Project, HistoricalReport } from '../types';
-import { getSupabaseClient } from './supabaseSetup';
-import { generateSyntheticProjectKMLData, isValidIdentifier } from './myMapsKmlParser';
+import { getSupabaseClient, findReportForProject, isReportMatchingProject } from './supabaseSetup';
+import { isValidIdentifier } from './myMapsKmlParser';
 
 export interface DashboardProjectMetric {
   projectId: number;
@@ -261,54 +261,68 @@ export const DashboardMetricsStore = {
     projects: Project[],
     reportsMap: Map<number, HistoricalReport>
   ): Promise<Map<number, DashboardProjectMetric>> {
-    const existingMap = await this.getAllMetricsMap();
+    // 1. Fetch existing metrics from Supabase / LocalStorage / Memory
+    const existingDbMetricsMap = await this.getAllMetricsMap();
     const updatedMap = new Map<number, DashboardProjectMetric>();
-
-    let needsSave = false;
+    const rowsToUpsert: DashboardProjectMetric[] = [];
 
     for (const p of projects) {
       const pId = Number(p.id);
       if (!pId) continue;
 
-      // STRICT AUDIT: Get report strictly by project ID
-      let savedRep = reportsMap.get(pId);
-      if (savedRep && Number(savedRep.projectId) !== pId) {
-        savedRep = undefined; // Reject mismatching project report
-      }
+      // STRICT MATCHING: Get saved report strictly matching project
+      const savedRep = findReportForProject(p, reportsMap);
+      const existingMetric = existingDbMetricsMap.get(pId);
 
-      let analysis: KMLAnalysisResult | null = null;
-      if (savedRep && savedRep.analysisResult) {
-        analysis = savedRep.analysisResult;
-      } else {
-        // Check if existing metric in database/memory matches this project ID AND project name strictly
-        const existingMetric = existingMap.get(pId);
-        if (existingMetric && existingMetric.projectId === pId && existingMetric.projectName === p.name) {
-          updatedMap.set(pId, existingMetric);
-          memoryMetricsMap.set(pId, existingMetric);
-          continue;
-        } else {
-          // Generate synthetic analysis strictly for THIS project
-          analysis = generateSyntheticProjectKMLData(p.name, p.mapUrl || '', p.scope);
-        }
-      }
-
-      if (analysis) {
-        const metric = computeMetricFromAnalysis(pId, p.name, analysis);
+      if (savedRep && savedRep.analysisResult && (savedRep.analysisResult.totalLengthMeters > 0 || (savedRep.analysisResult.items && savedRep.analysisResult.items.length > 0))) {
+        // Recompute metric from saved report
+        const metric = computeMetricFromAnalysis(pId, p.name, savedRep.analysisResult);
         updatedMap.set(pId, metric);
         memoryMetricsMap.set(pId, metric);
-        needsSave = true;
+        rowsToUpsert.push(metric);
+      } else if (existingMetric && (existingMetric.totalLengthMeters > 0 || existingMetric.totalSegmentsCount > 0 || existingMetric.permitsCount > 0)) {
+        // PRESERVE existing valid metric from Supabase/database!
+        updatedMap.set(pId, existingMetric);
+        memoryMetricsMap.set(pId, existingMetric);
+      } else if (savedRep && savedRep.analysisResult) {
+        const metric = computeMetricFromAnalysis(pId, p.name, savedRep.analysisResult);
+        updatedMap.set(pId, metric);
+        memoryMetricsMap.set(pId, metric);
+        rowsToUpsert.push(metric);
+      } else if (existingMetric) {
+        updatedMap.set(pId, existingMetric);
+        memoryMetricsMap.set(pId, existingMetric);
+      } else {
+        // Zero metric if no report and no existing database metric
+        const emptyMetric: DashboardProjectMetric = {
+          projectId: pId,
+          projectName: p.name,
+          totalLengthMeters: 0,
+          totalLengthKm: 0,
+          executedWaterMeters: 0,
+          executedSewageMeters: 0,
+          ongoingMeters: 0,
+          remainingMeters: 0,
+          cancelledMeters: 0,
+          permitsCount: 0,
+          uniqueSegmentsCount: 0,
+          totalSegmentsCount: 0,
+          permitsList: [],
+          segmentsList: [],
+          updatedAt: new Date().toISOString()
+        };
+        updatedMap.set(pId, emptyMetric);
+        memoryMetricsMap.set(pId, emptyMetric);
       }
     }
 
-    if (needsSave) {
-      saveLocalStorageMetrics(updatedMap);
-    }
+    saveLocalStorageMetrics(updatedMap);
 
-    // Bulk upsert all metrics into Supabase table if connected
+    // Bulk upsert ONLY updated non-zero project metrics into Supabase table if connected
     const supabase = getSupabaseClient();
-    if (supabase && updatedMap.size > 0) {
+    if (supabase && rowsToUpsert.length > 0) {
       try {
-        const rowsToUpsert = Array.from(updatedMap.values()).map(metric => ({
+        const payload = rowsToUpsert.map(metric => ({
           project_id: metric.projectId,
           project_name: metric.projectName,
           total_length_meters: metric.totalLengthMeters,
@@ -327,12 +341,12 @@ export const DashboardMetricsStore = {
         }));
 
         const { error } = await (supabase.from('dashboard_project_metrics') as any)
-          .upsert(rowsToUpsert, { onConflict: 'project_id' });
+          .upsert(payload, { onConflict: 'project_id' });
 
         if (error) {
           console.warn('Error bulk upserting dashboard_project_metrics to Supabase:', error.message);
         } else {
-          console.log(`✅ Automatically populated ${rowsToUpsert.length} rows into Supabase dashboard_project_metrics table.`);
+          console.log(`✅ Automatically populated/updated ${payload.length} rows in Supabase dashboard_project_metrics table.`);
         }
       } catch (err) {
         console.error('Exception bulk upserting dashboard metrics:', err);
