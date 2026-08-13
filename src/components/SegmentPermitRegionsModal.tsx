@@ -358,8 +358,8 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
               <div style="font-size: 11px; color: #334155; line-height: 1.6;">
                 <b>اسم الخط:</b> ${item.name || '-'}<br/>
                 <b>الطول:</b> ${item.lengthMeters} متر (${item.lengthKm} كم)<br/>
-                ${item.segmentId ? `<b>Segment ID:</b> ${item.segmentId}<br/>` : ''}
-                ${item.permitNo ? `<b>Permit No:</b> ${item.permitNo}<br/>` : ''}
+                ${item.segmentId && isValidIdentifier(item.segmentId) ? `<b>Segment ID:</b> ${cleanSegmentId(item.segmentId)}<br/>` : ''}
+                ${item.permitNo && isValidIdentifier(item.permitNo) ? `<b>Permit No:</b> ${cleanPermitNo(item.permitNo)}<br/>` : ''}
                 ${item.streetName ? `<b>الشارع:</b> ${item.streetName}<br/>` : ''}
                 ${item.district ? `<b>الحي:</b> ${item.district}<br/>` : ''}
                 ${item.stage ? `<b>المرحلة:</b> ${cleanStage(item.stage)}<br/>` : ''}

@@ -19,7 +19,7 @@ export function extractSegmentIdFromData(
   featureName: string = ''
 ): string {
   const targetKeys = [
-    'segment id', 'segment_id', 'segmentid', 'segment', 'seg_id', 'seg', 'sec_id', 'sec', 'id',
+    'segment id', 'segment_id', 'segmentid', 'segment', 'seg_id', 'seg', 'sec_id', 'sec',
     'معرف القطاع', 'رقم المقطع', 'رقم السجمنت', 'رقم القطاع', 'رمز القطاع', 'القطاع', 'السجمنت'
   ];
 
@@ -121,8 +121,9 @@ export function extractPermitNoFromText(
   const permitPatterns = [
     // Standard slashes/dashes permit numbers e.g. 24/19/2/02/0012/1 or 2024/0012/1 or 24-10-01-0012
     /\b([0-9]{2,4}[\/\\-][0-9]{1,4}[\/\\-][0-9]{1,4}[\/\\-][0-9]{1,4}(?:[\/\\-][0-9]{1,4})*)\b/i,
-    // Prefixed permit numbers e.g. PERM-2025-1092, P-99120, PER-44012, PRM-2024-101
-    /(?:P|PER|PERM|PRM|PERMIT|تصريح|رخصة|فسح)[\s_#-]*([A-Za-z0-9_-]{5,20})/i,
+    // Prefixed permit numbers e.g. PERM-2025-1092, PERMIT-99120, PRM-2024-101
+    /(?:PERMIT|PERM_NO|PERM|PRM|PER|تصريح|رخصة|فسح)\s*[:=#-]?\s*([A-Za-z0-9_-]{5,25})/i,
+    /\b(P[-_#\s]+[A-Za-z0-9_-]{5,20})\b/i,
     // Saudi national permit numbers starting with 44, 45, 46, 2024, 2025, 2026 (e.g. 4400123456)
     /\b((?:44|45|46|2024|2025|2026)[0-9]{6,8})\b/,
     // Contiguous 8 to 12 digit permit numbers

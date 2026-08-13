@@ -529,15 +529,20 @@ export function cleanSegmentId(val: any): string {
   let str = String(val).trim();
   if (!str) return '';
 
-  // 1. Remove common text label prefixes (case-insensitive)
-  // Matches "segment id:", "segment id", "segment_id", "segment-id", "segment:", "segment", "seg-", "seg_", "seg:", "sec-", "sec_", "sec", "معرف القطاع:", "معرف القطاع", "رقم القطاع:", "رقم القطاع", "رقم السجمنت:", "رقم السجمنت", "رمز القطاع:"
-  str = str.replace(/^(?:segment\s*id|segment_id|segment-id|segment|seg|sec|sec-|معرف\s*القطاع|رقم\s*القطاع|رقم\s*السجمنت|رمز\s*القطاع|القطاع|السجمنت)[\s_:#=-]+/i, '');
+  // 1. Remove common text label prefixes (case-insensitive) - longest first
+  str = str.replace(/^(?:segment\s*id|segment_id|segment-id|معرف\s*القطاع|رقم\s*القطاع|رقم\s*السجمنت|رمز\s*القطاع|القطاع|السجمنت|segment|seg_id|sec_id|seg|sec)[\s_:#=-]*/i, '');
 
   // 2. Strip standalone leading "SEG-" or "SEG_" or "SEG " or "SEC-" or "SEC_" if present
   str = str.replace(/^(?:SEG|SEC)[\s_#-]+/i, '');
 
   // 3. Strip any remaining leading colons, hashes, dashes, underscores, slashes or spaces
   str = str.replace(/^[\s_:#=-]+/, '').trim();
+
+  // If the resulting string is just "id" or "segment" or "seg" or "sec" or invalid keyword
+  const lower = str.toLowerCase();
+  if (['id', 'id:', 'segment', 'seg', 'sec', 'segment id', 'segment_id'].includes(lower)) {
+    return '';
+  }
 
   return str;
 }
@@ -551,10 +556,16 @@ export function cleanPermitNo(val: any): string {
   let str = String(val).trim();
   if (!str) return '';
 
-  // Remove prefixes like "permit no:", "permit_no:", "permit:", "permit no", "رقم الرخصة:", "رخصة الحفر:", "رقم التصريح:", "تصريح:", "فسح:"
-  str = str.replace(/^(?:permit\s*no|permit_no|permitno|permit|perm_no|perm|رقم\s*الرخصة|رخصة\s*الحفر|رخصة|رقم\s*التصريح|تصريح|رقم\s*الفسح|فسح)[\s_:#=-]+/i, '');
+  // Remove prefixes (longest keywords first!)
+  str = str.replace(/^(?:permit\s*no|permit_no|permitno|perm_no|رقم\s*الرخصة|رخصة\s*الحفر|رقم\s*التصريح|رقم\s*الفسح|رخصة|تصريح|فسح|permit|perm|prm)[\s_:#=-]*/i, '');
 
   str = str.replace(/^[\s_:#=-]+/, '').trim();
+
+  // If the resulting string is just "ermit" (from bad regex substring), "permit", "perm", "prm", "permit no", etc.
+  const lower = str.toLowerCase();
+  if (['ermit', 'permit', 'perm', 'prm', 'permit no', 'permit_no', 'permitno', 'no', 'num', 'number'].includes(lower)) {
+    return '';
+  }
 
   return str;
 }
@@ -618,7 +629,15 @@ export function isValidIdentifier(val: any): boolean {
   const rawStr = String(val).trim();
   if (rawStr.length === 0) return false;
 
-  const str = cleanSegmentId(rawStr);
+  const lowerRaw = rawStr.toLowerCase();
+  const invalidRawKeywords = [
+    'id', 'id:', 'segment id', 'segment_id', 'segment', 'seg', 'sec',
+    'permit', 'permit no', 'permit_no', 'permitno', 'ermit', 'perm', 'prm',
+    'رقم', 'تصريح', 'فسح', 'سجمنت', 'قطاع', 'معرف', 'اسم', 'رمز', 'القطاع', 'السجمنت'
+  ];
+  if (invalidRawKeywords.includes(lowerRaw)) return false;
+
+  const str = cleanSegmentId(cleanPermitNo(rawStr));
   if (str.length === 0) return false;
 
   // Check if string contains ONLY dashes, slashes, spaces, backslashes, dots, underscores, hashes, colons, or symbols
@@ -629,7 +648,7 @@ export function isValidIdentifier(val: any): boolean {
     '-', '/', '--', '//', '---', '///', '-/-', '- / -', '-/', '/-', '/ -', '- /', 'n/a', 'na', 'none', 'null', 
     'undefined', 'بدون', 'لا يوجد', 'لايوجد', 'غير محدد', 'غير متوفر', 'فراغ', 'بدون تصريح', 'بدون فسح', 'لا', 'لايوجد تصريح',
     'لا يوجد تصريح', 'لا يوجد فسح', 'لايوجد فسح', 'بدون سجمنت', 'لا يوجد سجمنت', '0', '00', '000', '0000', 'nan',
-    'segment id', 'segment_id', 'segment', 'seg', 'permit no', 'permit_no', 'permit'
+    'segment id', 'segment_id', 'segment', 'seg', 'sec', 'permit no', 'permit_no', 'permit', 'ermit', 'id', 'id:'
   ];
 
   if (invalidKeywords.includes(lower)) return false;
@@ -637,6 +656,10 @@ export function isValidIdentifier(val: any): boolean {
   // Strip all non-alphanumeric characters (letters/digits in English & Arabic)
   const alphanumericOnly = str.replace(/[^A-Za-z0-9\u0600-\u06FF]/g, '');
   if (alphanumericOnly.length === 0) return false;
+
+  if (['id', 'ermit', 'permit', 'segment', 'seg', 'sec', 'perm', 'prm'].includes(alphanumericOnly.toLowerCase())) {
+    return false;
+  }
 
   return true;
 }

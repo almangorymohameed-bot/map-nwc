@@ -191,42 +191,25 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
   const [projectHistoryReports, setProjectHistoryReports] = useState<HistoricalReport[]>([]);
   const [isLoadingProjectHistory, setIsLoadingProjectHistory] = useState<boolean>(false);
 
-  // Fetch project history and auto-load latest report whenever activeProject changes
+  // Fetch project history and load latest saved report if available whenever activeProject changes
   useEffect(() => {
     let isMounted = true;
     if (activeProject) {
       setIsLoadingProjectHistory(true);
-      setIsLoading(true);
 
       Promise.all([
         ReportHistoryStore.getHistoricalReports(activeProject.id, activeProject.name, activeProject.po),
         ReportHistoryStore.getLatestReport(activeProject.id, activeProject.name, activeProject.po)
       ])
-        .then(async ([reports, latest]) => {
+        .then(([reports, latest]) => {
           if (!isMounted) return;
           setProjectHistoryReports(reports || []);
           setIsLoadingProjectHistory(false);
 
           if (latest && latest.analysisResult && (latest.analysisResult.totalLengthMeters > 0 || (latest.analysisResult.items && latest.analysisResult.items.length > 0))) {
             setAnalysisResult(latest.analysisResult);
-            setIsLoading(false);
-          } else if (activeProject.mapUrl && activeProject.mapUrl.trim().length > 10) {
-            try {
-              const res = await handleLoadMyMapsLink(activeProject.mapUrl, activeProject.name, activeProject.scope);
-              if (!isMounted) return;
-              await processAndSaveAnalysis(res, activeProject);
-            } catch (err) {
-              console.error('Error auto-loading live map URL:', err);
-              if (!isMounted) return;
-              const synthetic = generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '', activeProject.scope);
-              setAnalysisResult(synthetic);
-            } finally {
-              if (isMounted) setIsLoading(false);
-            }
           } else {
-            const synthetic = generateSyntheticProjectKMLData(activeProject.name, activeProject.mapUrl || '', activeProject.scope);
-            setAnalysisResult(synthetic);
-            setIsLoading(false);
+            setAnalysisResult(null);
           }
         })
         .catch(err => {
@@ -234,12 +217,12 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
           if (!isMounted) return;
           setProjectHistoryReports([]);
           setIsLoadingProjectHistory(false);
-          setIsLoading(false);
+          setAnalysisResult(null);
         });
     } else {
       setProjectHistoryReports([]);
       setIsLoadingProjectHistory(false);
-      setIsLoading(false);
+      setAnalysisResult(null);
     }
 
     return () => {
@@ -440,15 +423,23 @@ export function MyMapsAnalysisPanel({ projects, selectedProject, onSelectProject
     }
   };
 
-  const triggerProjectAnalysis = (proj: Project) => {
+  const triggerProjectAnalysis = async (proj: Project) => {
     setActiveProject(proj);
     setMapInputUrl(proj.mapUrl || '');
-    if (proj.mapUrl) {
-      loadAnalysis(proj.mapUrl, proj.name);
+    if (proj.mapUrl && proj.mapUrl.trim().length > 10) {
+      await loadAnalysis(proj.mapUrl, proj.name);
     } else {
-      const res = generateSyntheticProjectKMLData(proj.name, proj.mapUrl || '', proj.scope);
-      processAndSaveAnalysis(res, proj);
-      showToast(`✨ تم إجراء التحليل الجغرافي لمشروع (${proj.name}) بنجاح!`);
+      setIsLoading(true);
+      try {
+        const res = generateSyntheticProjectKMLData(proj.name, proj.mapUrl || '', proj.scope);
+        await processAndSaveAnalysis(res, proj);
+        showToast(`✨ تم إجراء التحليل الجغرافي وحصر الأطوال لمشروع (${proj.name}) بنجاح!`);
+      } catch (err) {
+        console.error('Error during project analysis:', err);
+        showToast('⚠️ حدث خطأ أثناء إجراء التحليل الجغرافي.');
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
