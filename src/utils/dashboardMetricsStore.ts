@@ -5,7 +5,7 @@
 
 import { KMLAnalysisResult, Project, HistoricalReport } from '../types';
 import { getSupabaseClient, findReportForProject, isReportMatchingProject } from './supabaseSetup';
-import { isValidIdentifier } from './myMapsKmlParser';
+import { isValidIdentifier, isYellowItemWithoutPermit, cleanSegmentId } from './myMapsKmlParser';
 
 export interface DashboardProjectMetric {
   projectId: number;
@@ -22,6 +22,10 @@ export interface DashboardProjectMetric {
   totalSegmentsCount: number;
   permitsList: string[];
   segmentsList: string[];
+  yellowNoPermitCount?: number;
+  yellowNoPermitMeters?: number;
+  yellowNoPermitKm?: number;
+  yellowNoPermitSegments?: string[];
   updatedAt: string;
 }
 
@@ -91,9 +95,21 @@ export function computeMetricFromAnalysis(
   const permitSet = new Set<string>();
   const segmentSet = new Set<string>();
   let itemCount = 0;
+  let yellowNoPermitCount = 0;
+  let yellowNoPermitMeters = 0;
+  const yellowNoPermitSegments: string[] = [];
 
   if (analysis.items && Array.isArray(analysis.items) && analysis.items.length > 0) {
     analysis.items.forEach(item => {
+      if (isYellowItemWithoutPermit(item)) {
+        yellowNoPermitCount++;
+        yellowNoPermitMeters += (item.lengthMeters || 0);
+        const sId = item.segmentId || (item as any)['segmentId'] || (item as any)['Segment ID'] || (item as any)['segment_id'];
+        if (isValidIdentifier(sId)) {
+          yellowNoPermitSegments.push(cleanSegmentId(sId));
+        }
+      }
+
       const pNo = item.permitNo || (item as any)['permitNo'] || (item as any)['Permit No'] || (item as any)['permit_no'];
       if (isValidIdentifier(pNo)) {
         permitSet.add(String(pNo).trim());
@@ -153,6 +169,10 @@ export function computeMetricFromAnalysis(
     totalSegmentsCount,
     permitsList,
     segmentsList,
+    yellowNoPermitCount,
+    yellowNoPermitMeters,
+    yellowNoPermitKm: Number((yellowNoPermitMeters / 1000).toFixed(3)),
+    yellowNoPermitSegments,
     updatedAt: new Date().toISOString()
   };
 }

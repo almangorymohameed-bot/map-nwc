@@ -274,6 +274,21 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
     return groupedRegions.find(r => r.id === selectedId) || null;
   }, [selectedId, groupedRegions, filteredRegions]);
 
+  // Cleanup map instance whenever modal closes or unmounts
+  useEffect(() => {
+    if (!isOpen) {
+      if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.remove();
+        } catch (e) {
+          console.error('Error removing map on close:', e);
+        }
+        mapInstanceRef.current = null;
+        layerGroupRef.current = null;
+      }
+    }
+  }, [isOpen]);
+
   // Attach ResizeObserver to keep map container sized properly
   useEffect(() => {
     if (!isOpen || !mapContainerRef.current) return;
@@ -298,31 +313,48 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
     // Default Riyadh center
     const defaultCenter: [number, number] = [24.7136, 46.6753];
 
-    if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current, {
-        center: defaultCenter,
-        zoom: 13,
-        zoomControl: true
-      });
-
-      mapInstanceRef.current = map;
-      layerGroupRef.current = L.layerGroup().addTo(map);
+    // If mapInstance exists but is attached to a detached container or needs re-attachment
+    if (mapInstanceRef.current) {
+      try {
+        mapInstanceRef.current.remove();
+      } catch (e) {
+        console.error('Error removing previous map instance:', e);
+      }
+      mapInstanceRef.current = null;
+      layerGroupRef.current = null;
     }
 
-    const map = mapInstanceRef.current;
-    if (!map) return;
+    // Clear stale leaflet container id if any
+    if ((mapContainerRef.current as any)._leaflet_id) {
+      delete (mapContainerRef.current as any)._leaflet_id;
+    }
 
-    // Trigger invalidateSize to prevent black screen or un-rendered tiles
+    // Initialize fresh Leaflet map on current container
+    const map = L.map(mapContainerRef.current, {
+      center: defaultCenter,
+      zoom: 13,
+      zoomControl: true
+    });
+
+    mapInstanceRef.current = map;
+    layerGroupRef.current = L.layerGroup().addTo(map);
+
+    // Trigger multiple invalidateSize checks to prevent black/white screen or un-rendered tiles
     requestAnimationFrame(() => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.invalidateSize();
       }
     });
-    const timer = setTimeout(() => {
+    const timer1 = setTimeout(() => {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.invalidateSize();
       }
-    }, 200);
+    }, 100);
+    const timer2 = setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    }, 300);
 
     // Update tile layer
     map.eachLayer(layer => {
@@ -524,7 +556,17 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
     }
 
     return () => {
-      clearTimeout(timer);
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      if (mapInstanceRef.current) {
+        try {
+          mapInstanceRef.current.remove();
+        } catch (e) {
+          console.error('Error removing map on effect unmount:', e);
+        }
+        mapInstanceRef.current = null;
+        layerGroupRef.current = null;
+      }
     };
   }, [isOpen, groupedRegions, activeSelectedRegion, tileLayerType, showLabelsOnMap, mode]);
 

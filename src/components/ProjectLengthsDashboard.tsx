@@ -8,6 +8,7 @@ import { Project, StatusCategory, KMLAnalysisResult, HistoricalReport } from '..
 import { ReportHistoryStore, extractPoDigits, isReportMatchingProject, findReportForProject } from '../utils/supabaseSetup';
 import { DashboardMetricsStore, DashboardProjectMetric } from '../utils/dashboardMetricsStore';
 import { generateSyntheticProjectKMLData, getStatusCategoryLabel, isValidIdentifier, cleanSegmentId, cleanPermitNo, cleanStage, isYellowItemWithoutPermit } from '../utils/myMapsKmlParser';
+import { YellowNoPermitModal, YellowNoPermitItemDetail } from './YellowNoPermitModal';
 import * as XLSX from 'xlsx';
 import {
   Ruler,
@@ -51,6 +52,7 @@ interface CategoryStats {
   totalPermitsCount: number;
   totalSegmentsCount: number;
   uniqueSegmentsCount: number;
+  yellowNoPermitItems: YellowNoPermitItemDetail[];
   statusBreakdown: Record<StatusCategory, {
     category: StatusCategory;
     label: string;
@@ -78,6 +80,8 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [showComparisonTable, setShowComparisonTable] = useState<boolean>(true);
   const [selectedReportModalProject, setSelectedReportModalProject] = useState<Project | null>(null);
+  const [isYellowNoPermitModalOpen, setIsYellowNoPermitModalOpen] = useState<boolean>(false);
+  const [yellowModalProjectScope, setYellowModalProjectScope] = useState<string>('جميع المشاريع');
 
   // Dynamically compute list of available statuses from projects
   const availableStatuses = useMemo(() => {
@@ -273,6 +277,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
     const globalSegmentSet = new Set<string>();
 
     const categories: StatusCategory[] = ['executed_water', 'executed_sewage', 'ongoing', 'remaining', 'cancelled'];
+    const collectedYellowNoPermitItems: YellowNoPermitItemDetail[] = [];
 
     const breakdownMap: Record<StatusCategory, {
       category: StatusCategory;
@@ -341,6 +346,35 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
             if (isYellowItemWithoutPermit(item)) {
               breakdownMap.ongoing.yellowNoPermitCount++;
               breakdownMap.ongoing.yellowNoPermitMeters += (item.lengthMeters || 0);
+
+              collectedYellowNoPermitItems.push({
+                id: item.id || `yellow-${p.id}-${collectedYellowNoPermitItems.length + 1}`,
+                projectId: p.id,
+                projectName: p.name,
+                po: p.po,
+                contractor: item.contractor || p.contractor || 'غير محدد',
+                classification: p.classification,
+                region: p.region,
+                subProgram: p.subProgram,
+                scope: p.scope,
+                segmentId: item.segmentId || 'غير محدد',
+                permitNo: item.permitNo || '',
+                name: item.name || `قطاع ${item.segmentId || ''}`,
+                lengthMeters: item.lengthMeters || 0,
+                lengthKm: item.lengthKm || Number(((item.lengthMeters || 0) / 1000).toFixed(3)),
+                stage: item.stage || 'غير متوفر',
+                streetName: item.streetName || item.name,
+                district: item.district,
+                innerDiameter: item.innerDiameter,
+                zone: item.zone,
+                drillingType: item.drillingType,
+                centerLat: item.centerLat,
+                centerLng: item.centerLng,
+                googleMapsUrl: item.googleMapsUrl,
+                coordinates: item.coordinates,
+                featureItem: item,
+                projectObj: p
+              });
             }
 
             const pNo = item.permitNo || (item as any)['permitNo'] || (item as any)['Permit No'] || (item as any)['permit_no'];
@@ -425,6 +459,36 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
         if (metric.cancelledMeters > 0) {
           breakdownMap.cancelled.totalMeters += metric.cancelledMeters;
           breakdownMap.cancelled.projectSet.add(p.id);
+        }
+
+        // Add yellowNoPermit metrics if available from metric
+        if (metric.yellowNoPermitCount && metric.yellowNoPermitCount > 0) {
+          breakdownMap.ongoing.yellowNoPermitCount += metric.yellowNoPermitCount;
+          breakdownMap.ongoing.yellowNoPermitMeters += (metric.yellowNoPermitMeters || 0);
+
+          if (metric.yellowNoPermitSegments && metric.yellowNoPermitSegments.length > 0) {
+            metric.yellowNoPermitSegments.forEach((sId, sIdx) => {
+              collectedYellowNoPermitItems.push({
+                id: `yellow-metric-${p.id}-${sIdx + 1}`,
+                projectId: p.id,
+                projectName: p.name,
+                po: p.po,
+                contractor: p.contractor || 'غير محدد',
+                classification: p.classification,
+                region: p.region,
+                subProgram: p.subProgram,
+                scope: p.scope,
+                segmentId: sId,
+                permitNo: '',
+                name: `قطاع ${sId}`,
+                lengthMeters: Math.round((metric.yellowNoPermitMeters || 0) / (metric.yellowNoPermitSegments?.length || 1)),
+                lengthKm: Number(((metric.yellowNoPermitMeters || 0) / (metric.yellowNoPermitSegments?.length || 1) / 1000).toFixed(3)),
+                stage: 'جاري العمل',
+                streetName: p.name,
+                projectObj: p
+              });
+            });
+          }
         }
 
         metric.permitsList.forEach(pNo => {
@@ -520,6 +584,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
       totalPermitsCount: globalPermitSet.size,
       totalSegmentsCount: globalSegmentTotalCount > 0 ? globalSegmentTotalCount : globalSegmentSet.size,
       uniqueSegmentsCount: globalSegmentSet.size,
+      yellowNoPermitItems: collectedYellowNoPermitItems,
       statusBreakdown: statusBreakdownFinal
     };
   };
@@ -1435,17 +1500,38 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                 </span>
               </div>
 
-              <div className={`p-2.5 rounded-xl border transition-all ${
-                (activeStats.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0
-                  ? 'bg-rose-50/90 dark:bg-rose-950/80 border-rose-400 dark:border-rose-800 shadow-xs'
-                  : 'bg-white/80 dark:bg-slate-900/80 border-amber-200 dark:border-amber-800'
-              }`}>
-                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between">
-                  <span>قطاعات جارية بدون فسح 🚨</span>
-                  {(activeStats.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0 && (
-                    <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping inline-block"></span>
+              <button
+                type="button"
+                onClick={() => {
+                  const catTitleMap: Record<CategoryType, string> = {
+                    all: 'جميع المشاريع',
+                    riyadh: 'مشاريع الرياض',
+                    governorates: 'مشاريع المحافظات',
+                    central_sewage: 'مشاريع الصرف بالقطاع الأوسط',
+                    central_water: 'مشاريع المياه بالقطاع الأوسط'
+                  };
+                  setYellowModalProjectScope(catTitleMap[activeCategory] || 'جميع المشاريع');
+                  setIsYellowNoPermitModalOpen(true);
+                }}
+                className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer w-full group hover:scale-[1.02] active:scale-95 ${
+                  (activeStats.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0
+                    ? 'bg-rose-50/90 dark:bg-rose-950/80 border-rose-400 dark:border-rose-800 shadow-sm hover:bg-rose-100 dark:hover:bg-rose-900/60 ring-2 ring-rose-400/40'
+                    : 'bg-white/80 dark:bg-slate-900/80 border-amber-200 dark:border-amber-800 hover:bg-amber-100/50'
+                }`}
+                title="انقر لمعاينة وحصر قائمة القطاعات الجارية باللون الأصفر بدون رقم فسح وتصديرها"
+              >
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                  <span className="flex items-center gap-1.5">
+                    <span>قطاعات جارية بدون فسح 🚨</span>
+                  </span>
+                  {(activeStats.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0 ? (
+                    <span className="px-2 py-0.5 rounded-full bg-rose-600 text-white font-extrabold text-[10px] animate-pulse">
+                      معاينة الحصر 🔍
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-400 font-normal">عرض التفاصيل</span>
                   )}
-                </span>
+                </div>
                 <span className={`text-base font-black block mt-0.5 ${
                   (activeStats.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0
                     ? 'text-rose-700 dark:text-rose-300 underline decoration-rose-500 font-mono'
@@ -1456,7 +1542,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                 <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 block mt-0.5">
                   {formatVal(activeStats.statusBreakdown.ongoing.yellowNoPermitKm)} كم ({formatVal(activeStats.statusBreakdown.ongoing.yellowNoPermitMeters)} م)
                 </span>
-              </div>
+              </button>
             </div>
           </div>
 
@@ -2119,6 +2205,32 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                     </div>
                   </div>
                 </div>
+
+                {/* Yellow No Permit Notice for this specific project */}
+                {(res?.items?.some(it => isYellowItemWithoutPermit(it)) || (metric?.yellowNoPermitCount || 0) > 0) && (
+                  <div className="p-3.5 bg-rose-50 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
+                    <div className="flex items-center gap-2 text-rose-800 dark:text-rose-200 font-black">
+                      <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 animate-bounce" />
+                      <div>
+                        <div>يوجد قطاعات جارية باللون الأصفر بدون رقم فسح مسجل بهذا المشروع 🚨</div>
+                        <div className="text-[11px] font-normal text-rose-600 dark:text-rose-300">
+                          {metric?.yellowNoPermitCount ? `${metric.yellowNoPermitCount} قطاع - ${metric.yellowNoPermitKm || 0} كم` : 'يرجى مراجعة وتدقيق رخص الحفر'}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedReportModalProject(null);
+                        setYellowModalProjectScope(`مشروع: ${p.name}`);
+                        setIsYellowNoPermitModalOpen(true);
+                      }}
+                      className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-xs transition-all shadow-xs cursor-pointer shrink-0 flex items-center gap-1.5"
+                    >
+                      <span>معاينة القطاعات بدون فسح 🔍</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Modal Footer */}
@@ -2162,6 +2274,15 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
           </div>
         );
       })()}
+
+      {/* Yellow Items Without Permit Modal */}
+      <YellowNoPermitModal
+        isOpen={isYellowNoPermitModalOpen}
+        onClose={() => setIsYellowNoPermitModalOpen(false)}
+        items={activeStats.yellowNoPermitItems || []}
+        categoryTitle={yellowModalProjectScope || 'جميع المشاريع'}
+        onOpenMyMaps={onOpenMyMaps}
+      />
     </div>
   );
 }

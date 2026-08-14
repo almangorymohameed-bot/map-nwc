@@ -427,3 +427,381 @@ export async function exportAnalysisToPDF(result: KMLAnalysisResult, projectName
   pdf.save(`تقرير_حصر_الأطوال_${sanitizedName}.pdf`);
 }
 
+/**
+ * Interface for items passed to exportYellowNoPermitToPDF
+ */
+export interface YellowPdfItemData {
+  segmentId: string;
+  permitNo?: string;
+  projectName: string;
+  po?: string;
+  contractor?: string;
+  streetName?: string;
+  district?: string;
+  innerDiameter?: string;
+  stage?: string;
+  drillingType?: string;
+  lengthMeters: number;
+  lengthKm: number;
+}
+
+/**
+ * Generate a professional audit PDF report for Yellow LineString items without permit
+ */
+export async function exportYellowNoPermitToPDF(
+  items: YellowPdfItemData[],
+  categoryTitle: string = 'جميع المشاريع'
+): Promise<void> {
+  const currentDate = new Date().toLocaleDateString('ar-SA', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const width = 1240;
+  const height = 1754; // A4 standard high-res aspect ratio
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  const pdfWidth = pdf.internal.pageSize.getWidth();
+  const pdfHeight = pdf.internal.pageSize.getHeight();
+
+  // Summary statistics
+  const totalCount = items.length;
+  const totalMeters = items.reduce((acc, it) => acc + (it.lengthMeters || 0), 0);
+  const totalKm = Number((totalMeters / 1000).toFixed(3));
+  
+  const uniqueProjectsMap = new Map<string, { name: string; po?: string; contractor?: string; count: number; meters: number }>();
+  const contractorSet = new Set<string>();
+
+  items.forEach(it => {
+    const key = it.projectName || 'غير محدد';
+    if (!uniqueProjectsMap.has(key)) {
+      uniqueProjectsMap.set(key, {
+        name: key,
+        po: it.po,
+        contractor: it.contractor,
+        count: 0,
+        meters: 0
+      });
+    }
+    const rec = uniqueProjectsMap.get(key)!;
+    rec.count += 1;
+    rec.meters += (it.lengthMeters || 0);
+
+    if (it.contractor && it.contractor !== 'غير محدد') {
+      contractorSet.add(it.contractor);
+    }
+  });
+
+  const projectSummaryList = Array.from(uniqueProjectsMap.values());
+  const affectedProjectsCount = uniqueProjectsMap.size;
+  const contractorsCount = Math.max(1, contractorSet.size);
+
+  const itemsPerPage = 26;
+  const detailPagesCount = Math.max(1, Math.ceil(items.length / itemsPerPage));
+  const totalPages = 1 + detailPagesCount; // Page 1: Executive summary, Pages 2+: Details
+
+  const drawYellowHeader = (ctx: CanvasRenderingContext2D, pNum: number) => {
+    // Header gradient (Deep Amber/Dark Navy theme)
+    const headerGrad = ctx.createLinearGradient(0, 0, width, 0);
+    headerGrad.addColorStop(0, '#78350f'); // amber-900
+    headerGrad.addColorStop(0.5, '#92400e'); // amber-800
+    headerGrad.addColorStop(1, '#1e293b'); // slate-800
+    ctx.fillStyle = headerGrad;
+    ctx.fillRect(0, 0, width, 125);
+
+    // Title text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 24px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('تقرير حصر وتدقيق القطاعات الجارية (بدون رقم فسح)', width - 40, 48);
+
+    ctx.font = 'bold 15px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    ctx.fillStyle = '#fde68a';
+    ctx.fillText(`نطاق الحصر: ${categoryTitle} • عناصر باللون الأصفر جاري تنفيذها`, width - 40, 80);
+
+    ctx.font = '12px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    ctx.fillStyle = '#cbd5e1';
+    ctx.fillText(`تاريخ ووقت استخراج التقرير: ${currentDate}`, width - 40, 108);
+
+    // Left header branding
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.fillText('🚨 وحدة التدقيق والمطابقة المكانية', 40, 55);
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillStyle = '#f1f5f9';
+    ctx.fillText(`صفحة ${pNum} من ${totalPages}`, 40, 85);
+  };
+
+  const drawYellowFooter = (ctx: CanvasRenderingContext2D, pNum: number) => {
+    const footerY = height - 40;
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(40, footerY - 15);
+    ctx.lineTo(width - 40, footerY - 15);
+    ctx.stroke();
+
+    ctx.fillStyle = '#64748b';
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('تم توليد هذا التقرير تلقائياً للتدقيق والمطابقة الميدانية لرخص الحفر • منصة التحليل المكاني', width - 40, footerY);
+
+    ctx.textAlign = 'left';
+    ctx.fillText(`صفحة ${pNum} من ${totalPages}`, 40, footerY);
+  };
+
+  // ==========================================
+  // PAGE 1: Executive KPI & Projects Overview
+  // ==========================================
+  const page1Canvas = document.createElement('canvas');
+  page1Canvas.width = width;
+  page1Canvas.height = height;
+  const ctx1 = page1Canvas.getContext('2d');
+
+  if (ctx1) {
+    ctx1.fillStyle = '#ffffff';
+    ctx1.fillRect(0, 0, width, height);
+
+    drawYellowHeader(ctx1, 1);
+
+    // Warning Banner Box
+    ctx1.fillStyle = '#fffbeb'; // amber-50
+    ctx1.strokeStyle = '#f59e0b'; // amber-500
+    ctx1.lineWidth = 2;
+    ctx1.beginPath();
+    ctx1.roundRect(40, 145, width - 80, 80, 14);
+    ctx1.fill();
+    ctx1.stroke();
+
+    ctx1.textAlign = 'right';
+    ctx1.fillStyle = '#92400e';
+    ctx1.font = 'bold 18px system-ui, sans-serif';
+    ctx1.fillText('⚠️ بيان رقابي هام: قطاعات جاري تنفيذها بدون رخص/فسوح حفر مسجلة', width - 70, 180);
+
+    ctx1.fillStyle = '#78350f';
+    ctx1.font = '13px system-ui, sans-serif';
+    ctx1.fillText('يوثق هذا التقرير حصر القطاعات والمحاور الجغرافية ذات اللون الأصفر في المخططات المعتمدة والتي يظهر أنها قيد العمل والتنفيذ الميداني بدون رقم فسح مسجل في البيانات.', width - 70, 208);
+
+    // 4 KPI Summary Cards
+    const cardW = (width - 80 - 45) / 4;
+    const cardH = 110;
+    const cardY = 245;
+
+    const kpis = [
+      { label: 'إجمالي القطاعات بدون فسح', val: `${totalCount.toLocaleString()} قطاع`, sub: 'خطوط جاري العمل الصفراء', bg: '#fef2f2', border: '#fca5a5', valColor: '#b91c1c' },
+      { label: 'إجمالي الأطوال الكلية', val: `${totalKm.toLocaleString()} كم`, sub: `(${totalMeters.toLocaleString()} متر طولي)`, bg: '#fffbeb', border: '#fcd34d', valColor: '#b45309' },
+      { label: 'المشاريع المتأثرة', val: `${affectedProjectsCount} مشروع`, sub: 'تحتوي على قطاعات غير مرخصة', bg: '#f0fdf4', border: '#86efac', valColor: '#15803d' },
+      { label: 'شركات المقاولات', val: `${contractorsCount} شركة`, sub: 'المنفذة للقطاعات الجارية', bg: '#f8fafc', border: '#cbd5e1', valColor: '#334155' }
+    ];
+
+    kpis.forEach((kpi, idx) => {
+      const cX = width - 40 - (idx + 1) * cardW - idx * 15;
+      ctx1.fillStyle = kpi.bg;
+      ctx1.strokeStyle = kpi.border;
+      ctx1.lineWidth = 1.5;
+      ctx1.beginPath();
+      ctx1.roundRect(cX, cardY, cardW, cardH, 12);
+      ctx1.fill();
+      ctx1.stroke();
+
+      ctx1.textAlign = 'right';
+      ctx1.fillStyle = '#64748b';
+      ctx1.font = 'bold 12px system-ui, sans-serif';
+      ctx1.fillText(kpi.label, cX + cardW - 15, cardY + 30);
+
+      ctx1.fillStyle = kpi.valColor;
+      ctx1.font = 'bold 22px system-ui, sans-serif';
+      ctx1.fillText(kpi.val, cX + cardW - 15, cardY + 65);
+
+      ctx1.fillStyle = '#64748b';
+      ctx1.font = '11px system-ui, sans-serif';
+      ctx1.fillText(kpi.sub, cX + cardW - 15, cardY + 95);
+    });
+
+    // Section 2: Projects Breakdown Summary Table
+    ctx1.fillStyle = '#0f172a';
+    ctx1.font = 'bold 18px system-ui, sans-serif';
+    ctx1.textAlign = 'right';
+    ctx1.fillText('ملخص المشاريع والمقاولين المتأثرين بحالات عدم وجود الفسح', width - 40, 390);
+
+    const tblY = 410;
+    ctx1.fillStyle = '#1e293b';
+    ctx1.fillRect(40, tblY, width - 80, 38);
+
+    ctx1.fillStyle = '#ffffff';
+    ctx1.font = 'bold 13px system-ui, sans-serif';
+    ctx1.fillText('#', width - 60, tblY + 25);
+    ctx1.fillText('اسم المشروع', width - 120, tblY + 25);
+    ctx1.fillText('أمر الشراء (PO)', width - 470, tblY + 25);
+    ctx1.fillText('المقاول المنفذ', width - 620, tblY + 25);
+    ctx1.fillText('عدد القطاعات', width - 870, tblY + 25);
+    ctx1.fillText('إجمالي الأطوال', width - 1030, tblY + 25);
+
+    let rowY = tblY + 38;
+    const maxSummaryRows = 16;
+    const displayedSummary = projectSummaryList.slice(0, maxSummaryRows);
+
+    displayedSummary.forEach((pItem, sIdx) => {
+      ctx1.fillStyle = sIdx % 2 === 0 ? '#ffffff' : '#f8fafc';
+      ctx1.fillRect(40, rowY, width - 80, 34);
+
+      ctx1.strokeStyle = '#e2e8f0';
+      ctx1.lineWidth = 1;
+      ctx1.strokeRect(40, rowY, width - 80, 34);
+
+      ctx1.fillStyle = '#64748b';
+      ctx1.font = '12px system-ui, sans-serif';
+      ctx1.fillText(`${sIdx + 1}`, width - 60, rowY + 22);
+
+      ctx1.fillStyle = '#0f172a';
+      ctx1.font = 'bold 12px system-ui, sans-serif';
+      const truncName = pItem.name.length > 35 ? pItem.name.substring(0, 35) + '...' : pItem.name;
+      ctx1.fillText(truncName, width - 120, rowY + 22);
+
+      ctx1.fillStyle = '#475569';
+      ctx1.font = '12px font-mono, sans-serif';
+      ctx1.fillText(pItem.po || '-', width - 470, rowY + 22);
+
+      ctx1.fillStyle = '#334155';
+      ctx1.font = '12px system-ui, sans-serif';
+      const truncContractor = (pItem.contractor || '-').length > 25 ? (pItem.contractor || '-').substring(0, 25) + '...' : (pItem.contractor || '-');
+      ctx1.fillText(truncContractor, width - 620, rowY + 22);
+
+      ctx1.fillStyle = '#dc2626';
+      ctx1.font = 'bold 12px font-mono, sans-serif';
+      ctx1.fillText(`${pItem.count} قطاع`, width - 870, rowY + 22);
+
+      ctx1.fillStyle = '#d97706';
+      ctx1.font = 'bold 12px font-mono, sans-serif';
+      ctx1.fillText(`${pItem.meters.toLocaleString()} م (${(pItem.meters / 1000).toFixed(3)} كم)`, width - 1030, rowY + 22);
+
+      rowY += 34;
+    });
+
+    if (projectSummaryList.length > maxSummaryRows) {
+      ctx1.fillStyle = '#64748b';
+      ctx1.font = 'italic 12px system-ui, sans-serif';
+      ctx1.fillText(`... ويوجد ${projectSummaryList.length - maxSummaryRows} مشروع إضافي موضح بالتفصيل بالصفحات التالية`, width - 60, rowY + 25);
+    }
+
+    drawYellowFooter(ctx1, 1);
+
+    const page1Img = page1Canvas.toDataURL('image/png', 1.0);
+    pdf.addImage(page1Img, 'PNG', 0, 0, pdfWidth, pdfHeight);
+  }
+
+  // ==========================================
+  // PAGES 2+: Detailed Itemized Table
+  // ==========================================
+  for (let p = 0; p < detailPagesCount; p++) {
+    const pageNum = 2 + p;
+    const startIndex = p * itemsPerPage;
+    const endIndex = Math.min(startIndex + itemsPerPage, items.length);
+    const pageItems = items.slice(startIndex, endIndex);
+
+    const pageCanvas = document.createElement('canvas');
+    pageCanvas.width = width;
+    pageCanvas.height = height;
+    const ctxP = pageCanvas.getContext('2d');
+
+    if (ctxP) {
+      ctxP.fillStyle = '#ffffff';
+      ctxP.fillRect(0, 0, width, height);
+
+      drawYellowHeader(ctxP, pageNum);
+
+      // Section Title
+      const thY = 145;
+      ctxP.fillStyle = '#0f172a';
+      ctxP.font = 'bold 18px system-ui, sans-serif';
+      ctxP.textAlign = 'right';
+      ctxP.fillText(`جدول بيانات القطاعات الجارية بدون فسح (العناصر ${startIndex + 1} إلى ${endIndex} من ${items.length})`, width - 40, thY);
+
+      // Table Header Box
+      const thBoxY = thY + 15;
+      ctxP.fillStyle = '#1e293b';
+      ctxP.fillRect(40, thBoxY, width - 80, 38);
+
+      ctxP.fillStyle = '#ffffff';
+      ctxP.font = 'bold 12px system-ui, sans-serif';
+      ctxP.fillText('#', width - 55, thBoxY + 24);
+      ctxP.fillText('Segment ID (المعرف)', width - 110, thBoxY + 24);
+      ctxP.fillText('المشروع / أمر الشراء', width - 360, thBoxY + 24);
+      ctxP.fillText('المقاول المنفذ', width - 600, thBoxY + 24);
+      ctxP.fillText('الشارع / الحي', width - 780, thBoxY + 24);
+      ctxP.fillText('مرحلة الحفرية', width - 940, thBoxY + 24);
+      ctxP.fillText('الطول (متر / كم)', width - 1070, thBoxY + 24);
+
+      let trY = thBoxY + 38;
+      pageItems.forEach((item, idx) => {
+        const itemGlobalIndex = startIndex + idx + 1;
+
+        ctxP.fillStyle = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+        ctxP.fillRect(40, trY, width - 80, 36);
+
+        ctxP.strokeStyle = '#e2e8f0';
+        ctxP.lineWidth = 1;
+        ctxP.strokeRect(40, trY, width - 80, 36);
+
+        // Index
+        ctxP.fillStyle = '#64748b';
+        ctxP.font = '11px system-ui, sans-serif';
+        ctxP.fillText(`${itemGlobalIndex}`, width - 55, trY + 22);
+
+        // Segment ID badge
+        ctxP.fillStyle = '#b45309';
+        ctxP.font = 'bold 10px font-mono, sans-serif';
+        const truncSeg = item.segmentId.length > 25 ? item.segmentId.substring(0, 25) + '...' : item.segmentId;
+        ctxP.fillText(truncSeg, width - 110, trY + 22);
+
+        // Project Name
+        ctxP.fillStyle = '#0f172a';
+        ctxP.font = '11px system-ui, sans-serif';
+        const pNameTrunc = item.projectName.length > 26 ? item.projectName.substring(0, 26) + '...' : item.projectName;
+        ctxP.fillText(pNameTrunc, width - 360, trY + 22);
+
+        // Contractor
+        ctxP.fillStyle = '#334155';
+        ctxP.font = '11px system-ui, sans-serif';
+        const cNameTrunc = (item.contractor || '-').length > 18 ? (item.contractor || '-').substring(0, 18) + '...' : (item.contractor || '-');
+        ctxP.fillText(cNameTrunc, width - 600, trY + 22);
+
+        // Street / District
+        ctxP.fillStyle = '#475569';
+        ctxP.font = '10px system-ui, sans-serif';
+        const locStr = [item.streetName, item.district].filter(Boolean).join(' - ') || '-';
+        const locTrunc = locStr.length > 20 ? locStr.substring(0, 20) + '...' : locStr;
+        ctxP.fillText(locTrunc, width - 780, trY + 22);
+
+        // Stage
+        ctxP.fillStyle = '#7c2d12';
+        ctxP.font = 'bold 10px system-ui, sans-serif';
+        const stageTrunc = (item.stage || 'غير متوفر').length > 14 ? (item.stage || 'غير متوفر').substring(0, 14) + '...' : (item.stage || 'غير متوفر');
+        ctxP.fillText(stageTrunc, width - 940, trY + 22);
+
+        // Length (Meters / Km)
+        ctxP.fillStyle = '#b45309';
+        ctxP.font = 'bold 11px font-mono, sans-serif';
+        ctxP.fillText(`${item.lengthMeters} م (${item.lengthKm} كم)`, width - 1070, trY + 22);
+
+        trY += 36;
+      });
+
+      drawYellowFooter(ctxP, pageNum);
+
+      pdf.addPage();
+      const pageImg = pageCanvas.toDataURL('image/png', 1.0);
+      pdf.addImage(pageImg, 'PNG', 0, 0, pdfWidth, pdfHeight);
+    }
+  }
+
+  // Save PDF file
+  const dateStr = new Date().toISOString().split('T')[0];
+  const sanitizedTitle = categoryTitle.replace(/[/\\?%*:|"<>]/g, '_').trim();
+  pdf.save(`حصر_القطاعات_الصفراء_بدون_فسح_${sanitizedTitle}_${dateStr}.pdf`);
+}
+
+
