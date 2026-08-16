@@ -1,5 +1,12 @@
 import { KMLFeatureItem, StatusCategory, KMLAnalysisResult } from '../types';
-import { isValidIdentifier, getHaversineDistanceMeters, cleanSegmentId, cleanPermitNo } from './myMapsKmlParser';
+import {
+  isValidIdentifier,
+  getHaversineDistanceMeters,
+  cleanSegmentId,
+  cleanPermitNo,
+  extractStrictPermitNo,
+  extractStrictSegmentId
+} from './myMapsKmlParser';
 
 export interface PermitBoundaryPolygon {
   permitNo: string;
@@ -10,7 +17,8 @@ export interface PermitBoundaryPolygon {
 
 /**
  * 1️⃣ Header Matching & Property Extraction for Segment ID
- * Searches properties, XML tags, layer names, and text for explicit Segment ID keywords.
+ * Strictly searches properties, XML tags, and text for explicit Segment ID keywords and statements only.
+ * Preserves all numbers, letters, and symbols/marks (e.g. SEG-101, 12/A, #44-B, 400-W-01, 24/19/01).
  */
 export function extractSegmentIdFromData(
   properties: Record<string, any> | Array<{ name: string; value: string }>,
@@ -19,8 +27,8 @@ export function extractSegmentIdFromData(
   featureName: string = ''
 ): string {
   const targetKeys = [
-    'segment id', 'segment_id', 'segmentid', 'segment', 'seg_id', 'seg', 'sec_id', 'sec',
-    'معرف القطاع', 'رقم المقطع', 'رقم السجمنت', 'رقم القطاع', 'رمز القطاع', 'القطاع', 'السجمنت'
+    'segment id', 'segment_id', 'segmentid', 'segment-id', 'segment_no', 'segment no', 'segment number', 'segment #',
+    'seg_id', 'seg id', 'segid'
   ];
 
   // 1. Check direct properties array or object
@@ -28,7 +36,7 @@ export function extractSegmentIdFromData(
     for (const p of properties) {
       const k = (p.name || '').trim().toLowerCase();
       const val = (p.value || '').trim();
-      if (targetKeys.some(tk => k === tk || k.includes(tk)) && isValidIdentifier(val)) {
+      if (targetKeys.some(tk => k === tk || k.replace(/[\s_-]+/g, '') === tk.replace(/[\s_-]+/g, '')) && isValidIdentifier(val)) {
         const cleaned = cleanSegmentId(val);
         if (cleaned && isValidIdentifier(cleaned)) return cleaned;
       }
@@ -37,51 +45,26 @@ export function extractSegmentIdFromData(
     for (const [k, v] of Object.entries(properties)) {
       const keyLower = k.trim().toLowerCase();
       const val = String(v || '').trim();
-      if (targetKeys.some(tk => keyLower === tk || keyLower.includes(tk)) && isValidIdentifier(val)) {
+      if (targetKeys.some(tk => keyLower === tk || keyLower.replace(/[\s_-]+/g, '') === tk.replace(/[\s_-]+/g, '')) && isValidIdentifier(val)) {
         const cleaned = cleanSegmentId(val);
         if (cleaned && isValidIdentifier(cleaned)) return cleaned;
       }
     }
   }
 
-  // 2. Check CAD / GIS Layer name (e.g., Layer_SEG-204_Water or Segment_ID_102)
-  if (layerName) {
-    const layerMatch = layerName.match(/(?:SEG|SEGMENT|SEC|SEC-|قطاع|سجمنت)[\s_#-]*([A-Za-z0-9_-]+)/i);
-    if (layerMatch) {
-      const cleaned = cleanSegmentId(layerMatch[1] || layerMatch[0]);
-      if (cleaned && isValidIdentifier(cleaned)) {
-        return cleaned;
-      }
-    }
-  }
-
-  // 3. Regex search in description & feature name
-  const combinedText = `${featureName} ${descriptionText}`.replace(/<[^>]+>/g, ' ');
-  const segRegexes = [
-    /(?:Segment\s*ID|Segment_ID|SegmentID|Segment|معرف\s*القطاع|رقم\s*المقطع|رقم\s*السجمنت|رقم\s*القطاع|رمز\s*القطاع)\s*[:=#-]?\s*([A-Za-z0-9_/-]+)/i,
-    /\b(SEG-[A-Za-z0-9_/-]+)\b/i,
-    /\b(SEG_[A-Za-z0-9_/-]+)\b/i,
-    /\b(SEG[0-9]{3,8})\b/i,
-    /\b(SEC-[A-Za-z0-9_/-]+)\b/i
-  ];
-
-  for (const rx of segRegexes) {
-    const m = combinedText.match(rx);
-    if (m) {
-      const extracted = m[1] || m[0];
-      const cleaned = cleanSegmentId(extracted);
-      if (cleaned && isValidIdentifier(cleaned)) {
-        return cleaned;
-      }
-    }
+  // 2. Strict description & text extractor
+  const fromStrictText = extractStrictSegmentId(null, descriptionText, descriptionText, featureName);
+  if (fromStrictText && isValidIdentifier(fromStrictText)) {
+    return fromStrictText;
   }
 
   return '';
 }
 
 /**
- * 2️⃣ Pattern Extraction for Permit No (تصريح الحفر)
- * Searches text properties, descriptions, notes, and layer names for standard national permit patterns.
+ * 2️⃣ Strict Pattern Extraction for Permit No (تصريح الحفر)
+ * Strictly searches for the explicit "Permit No" statement/header and brings only its corresponding content.
+ * Returns empty string if not present or placeholder, keeping yellow lines without permit accurately identified.
  */
 export function extractPermitNoFromText(
   properties: Record<string, any> | Array<{ name: string; value: string }>,
@@ -90,8 +73,9 @@ export function extractPermitNoFromText(
   layerName: string = ''
 ): string {
   const targetKeys = [
-    'permit no', 'permit_no', 'permitno', 'permit', 'perm_no', 'perm',
-    'تصريح', 'رقم التصريح', 'رخصة الحفر', 'رقم الرخصة', 'فسح', 'رقم الفسح', 'إذن حفر', 'اذن حفر'
+    'permit no', 'permit_no', 'permitno', 'permit-no', 'permit number', 'permit_number', 'permit num', 'permit_num', 'permit #', 'permit_id',
+    'رقم التصريح', 'رقم الرخصة', 'رقم الفسح', 'تصريح الحفر', 'رخصة الحفر', 'إذن الحفر', 'اذن الحفر', 'بيان الفسح', 'بيان التصريح', 'بيان الرخصة',
+    'رقم تصريح الحفر', 'رقم رخصة الحفر', 'permit', 'perm_no', 'permno', 'perm no', 'تصريح', 'رخصة', 'فسح'
   ];
 
   // 1. Check direct properties array or object
@@ -99,7 +83,7 @@ export function extractPermitNoFromText(
     for (const p of properties) {
       const k = (p.name || '').trim().toLowerCase();
       const val = (p.value || '').trim();
-      if (targetKeys.some(tk => k === tk || k.includes(tk)) && isValidIdentifier(val)) {
+      if (targetKeys.some(tk => k === tk || k.replace(/[\s_-]+/g, '') === tk.replace(/[\s_-]+/g, '')) && isValidIdentifier(val)) {
         const cleaned = cleanPermitNo(val);
         if (cleaned && isValidIdentifier(cleaned)) return cleaned;
       }
@@ -108,33 +92,32 @@ export function extractPermitNoFromText(
     for (const [k, v] of Object.entries(properties)) {
       const keyLower = k.trim().toLowerCase();
       const val = String(v || '').trim();
-      if (targetKeys.some(tk => keyLower === tk || keyLower.includes(tk)) && isValidIdentifier(val)) {
+      if (targetKeys.some(tk => keyLower === tk || keyLower.replace(/[\s_-]+/g, '') === tk.replace(/[\s_-]+/g, '')) && isValidIdentifier(val)) {
         const cleaned = cleanPermitNo(val);
         if (cleaned && isValidIdentifier(cleaned)) return cleaned;
       }
     }
   }
 
-  const combinedText = `${featureName} ${descriptionText} ${layerName}`.replace(/<[^>]+>/g, ' ');
+  // 2. Strict description & text extractor
+  const fromStrictText = extractStrictPermitNo(null, descriptionText, descriptionText, featureName);
+  if (fromStrictText && isValidIdentifier(fromStrictText)) {
+    return fromStrictText;
+  }
 
-  // 2. Pattern Matching for National Digging Permits (Amanah, Balady, NWC, Ministry)
-  const permitPatterns = [
-    // Standard slashes/dashes permit numbers e.g. 24/19/2/02/0012/1 or 2024/0012/1 or 24-10-01-0012
-    /\b([0-9]{2,4}[\/\\-][0-9]{1,4}[\/\\-][0-9]{1,4}[\/\\-][0-9]{1,4}(?:[\/\\-][0-9]{1,4})*)\b/i,
-    // Prefixed permit numbers e.g. PERM-2025-1092, PERMIT-99120, PRM-2024-101, PERMIT_NO_9921
-    /(?:PERMIT|PERM_NO|PERM|PRM|PER)\s*[:=#-]?\s*([A-Za-z0-9_-]{5,25})/i,
-    /\b(P[-_#\s]+[A-Za-z0-9_-]{5,20})\b/i,
-    // Arabic keywords followed explicitly by permit numbers e.g. "تصريح 4400123456" or "رقم الفسح: 20251092"
-    /(?:تصريح|رخصة|فسح)\s*(?:حفر|عمل|رمزي|رقم|مشاريع)?\s*[:=#-]?\s*([A-Za-z0-9_-]{5,25})/i
+  // 3. Strict regex searching ONLY for explicit Permit No labels / keywords followed by content
+  const combinedText = `${featureName} ${descriptionText} ${layerName}`.replace(/<[^>]+>/g, ' ');
+  const strictPermitPatterns = [
+    /(?:PERMIT\s*NO|PERMIT_NO|PERMITNO|PERMIT\s*NUMBER|PERMIT\s*#|PERMIT_ID|PERM_NO|PERMNO|PERM\s*NO|PRM_NO)\s*[:=–—#-]\s*([^\n\r<,;|]+)/i,
+    /(?:رقم\s*التصريح|رقم\s*الرخصة|رقم\s*الفسح|تصريح\s*الحفر|رخصة\s*الحفر|بيان\s*الفسح|بيان\s*التصريح|بيان\s*الرخصة|إذن\s*الحفر|اذن\s*الحفر)\s*[:=–—#-]\s*([^\n\r<,;|]+)/i,
+    /(?:PERMIT|تصريح|رخصة|فسح)\s*[:=–—#-]\s*([A-Za-z0-9_/-]{4,30})/i
   ];
 
-  for (const rx of permitPatterns) {
+  for (const rx of strictPermitPatterns) {
     const m = combinedText.match(rx);
-    if (m) {
-      const candidate = (m[1] || m[0]).trim();
-      const cleaned = cleanPermitNo(candidate);
-      // Ensure candidate isn't a date like 20260811 or year 2025 or pure length like 1500
-      if (cleaned && isValidIdentifier(cleaned) && cleaned.length >= 5 && !/^(19|20)\d{2}$/.test(cleaned)) {
+    if (m && m[1]) {
+      const cleaned = cleanPermitNo(m[1]);
+      if (cleaned && isValidIdentifier(cleaned)) {
         return cleaned;
       }
     }

@@ -5,7 +5,7 @@
 
 import { KMLAnalysisResult, Project, HistoricalReport } from '../types';
 import { getSupabaseClient, findReportForProject, isReportMatchingProject } from './supabaseSetup';
-import { isValidIdentifier, isYellowItemWithoutPermit, cleanSegmentId } from './myMapsKmlParser';
+import { isValidIdentifier, isYellowItemWithoutPermit, cleanSegmentId, cleanPermitNo } from './myMapsKmlParser';
 
 export interface DashboardProjectMetric {
   projectId: number;
@@ -111,13 +111,15 @@ export function computeMetricFromAnalysis(
       }
 
       const pNo = item.permitNo || (item as any)['permitNo'] || (item as any)['Permit No'] || (item as any)['permit_no'];
-      if (isValidIdentifier(pNo)) {
-        permitSet.add(String(pNo).trim());
+      const cleanedPermit = cleanPermitNo(pNo);
+      if (isValidIdentifier(cleanedPermit)) {
+        permitSet.add(cleanedPermit);
       }
 
       const sId = item.segmentId || (item as any)['segmentId'] || (item as any)['Segment ID'] || (item as any)['segment_id'];
-      if (isValidIdentifier(sId)) {
-        segmentSet.add(String(sId).trim());
+      const cleanedSegment = cleanSegmentId(sId);
+      if (isValidIdentifier(cleanedSegment)) {
+        segmentSet.add(cleanedSegment);
       }
       itemCount++;
     });
@@ -129,8 +131,9 @@ export function computeMetricFromAnalysis(
     Object.values(pNosByStatus).forEach((arr: any) => {
       if (Array.isArray(arr)) {
         arr.forEach((pNo: any) => {
-          if (isValidIdentifier(pNo)) {
-            permitSet.add(String(pNo).trim());
+          const cleanedPermit = cleanPermitNo(pNo);
+          if (isValidIdentifier(cleanedPermit)) {
+            permitSet.add(cleanedPermit);
           }
         });
       }
@@ -142,8 +145,9 @@ export function computeMetricFromAnalysis(
     Object.values(sIdsByStatus).forEach((arr: any) => {
       if (Array.isArray(arr)) {
         arr.forEach((sId: any) => {
-          if (isValidIdentifier(sId)) {
-            segmentSet.add(String(sId).trim());
+          const cleanedSegment = cleanSegmentId(sId);
+          if (isValidIdentifier(cleanedSegment)) {
+            segmentSet.add(cleanedSegment);
           }
         });
       }
