@@ -103,10 +103,13 @@ export function computeMetricFromAnalysis(
     analysis.items.forEach(item => {
       if (isYellowItemWithoutPermit(item)) {
         yellowNoPermitCount++;
-        yellowNoPermitMeters += (item.lengthMeters || 0);
+        yellowNoPermitMeters += (item.lengthMeters || (item as any)['length_meters'] || (item as any)['length'] || 0);
         const sId = item.segmentId || (item as any)['segmentId'] || (item as any)['Segment ID'] || (item as any)['segment_id'];
-        if (isValidIdentifier(sId)) {
-          yellowNoPermitSegments.push(cleanSegmentId(sId));
+        const cleanS = cleanSegmentId(sId);
+        if (isValidIdentifier(cleanS)) {
+          yellowNoPermitSegments.push(cleanS);
+        } else {
+          yellowNoPermitSegments.push(item.name || `قطاع جاري ${yellowNoPermitCount}`);
         }
       }
 
@@ -200,6 +203,13 @@ export const DashboardMetricsStore = {
 
         if (!error && data && data.length > 0) {
           for (const row of data) {
+            const rawPermits = Array.isArray(row.permits_list) ? row.permits_list : [];
+            const rawSegments = Array.isArray(row.segments_list) ? row.segments_list : [];
+            const cleanPermits: string[] = Array.from(new Set(rawPermits.map((p: any) => cleanPermitNo(p)).filter(isValidIdentifier)));
+            const cleanSegments: string[] = Array.from(new Set(rawSegments.map((s: any) => cleanSegmentId(s)).filter(isValidIdentifier)));
+            const rawYellowSegments = Array.isArray(row.yellow_no_permit_segments) ? row.yellow_no_permit_segments : [];
+            const cleanYellowSegments: string[] = rawYellowSegments.map((s: any) => cleanSegmentId(s)).filter(isValidIdentifier);
+
             const metric: DashboardProjectMetric = {
               projectId: Number(row.project_id),
               projectName: row.project_name || '',
@@ -210,15 +220,15 @@ export const DashboardMetricsStore = {
               ongoingMeters: Number(row.ongoing_meters || 0),
               remainingMeters: Number(row.remaining_meters || 0),
               cancelledMeters: Number(row.cancelled_meters || 0),
-              permitsCount: Number(row.permits_count || 0),
-              uniqueSegmentsCount: Number(row.unique_segments_count || 0),
-              totalSegmentsCount: Number(row.total_segments_count || 0),
-              permitsList: Array.isArray(row.permits_list) ? row.permits_list : [],
-              segmentsList: Array.isArray(row.segments_list) ? row.segments_list : [],
+              permitsCount: cleanPermits.length,
+              uniqueSegmentsCount: cleanSegments.length,
+              totalSegmentsCount: Number(row.total_segments_count || cleanSegments.length || 0),
+              permitsList: cleanPermits,
+              segmentsList: cleanSegments,
               yellowNoPermitCount: Number(row.yellow_no_permit_count || 0),
               yellowNoPermitMeters: Number(row.yellow_no_permit_meters || 0),
               yellowNoPermitKm: Number(row.yellow_no_permit_km || (row.yellow_no_permit_meters ? (Number(row.yellow_no_permit_meters) / 1000).toFixed(3) : 0)),
-              yellowNoPermitSegments: Array.isArray(row.yellow_no_permit_segments) ? row.yellow_no_permit_segments : [],
+              yellowNoPermitSegments: cleanYellowSegments,
               updatedAt: row.updated_at || new Date().toISOString()
             };
             map.set(metric.projectId, metric);

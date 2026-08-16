@@ -6,7 +6,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { HistoricalReport, ProjectChangelogRecord, KMLAnalysisResult, ProjectDiffResult } from '../types';
 import { getSharedSupabaseClient } from '../supabase';
-import { isValidIdentifier } from './myMapsKmlParser';
+import { isValidIdentifier, cleanPermitNo, cleanSegmentId } from './myMapsKmlParser';
 
 export function getSupabaseConfig() {
   const metaEnv = (import.meta as any).env || {};
@@ -284,7 +284,27 @@ const memoryChangelogs: ProjectChangelogRecord[] = [];
 
 function mapRowToHistoricalReport(row: any): HistoricalReport {
   const colorBreakdown = row.color_breakdown || {};
-  const items = Array.isArray(row.items) ? row.items : [];
+  const rawItems = Array.isArray(row.items) ? row.items : [];
+
+  // Sanitize each item strictly using the latest parsing & cleaning rules
+  const sanitizedItems = rawItems.map((item: any) => {
+    if (!item || typeof item !== 'object') return item;
+    const cleanPerm = cleanPermitNo(item.permitNo || item.permit_no || item['Permit No']);
+    const cleanSeg = cleanSegmentId(item.segmentId || item.segment_id || item['Segment ID']);
+    const statusCat = item.statusCategory || item.status_category || (item.colorHex === '#ffea00' || item.color_hex === '#ffea00' ? 'ongoing' : 'ongoing');
+    const colHex = item.colorHex || item.color_hex || item.color || '#ffea00';
+    const lenMeters = Number(item.lengthMeters || item.length_meters || item.length || 0);
+    const lenKm = Number(item.lengthKm || item.length_km || (lenMeters / 1000).toFixed(3));
+    return {
+      ...item,
+      permitNo: cleanPerm,
+      segmentId: cleanSeg,
+      statusCategory: statusCat,
+      colorHex: colHex,
+      lengthMeters: lenMeters,
+      lengthKm: lenKm
+    };
+  });
 
   const permitNosByStatus = colorBreakdown.permitNosByStatus || {
     executedWater: [],
@@ -302,10 +322,26 @@ function mapRowToHistoricalReport(row: any): HistoricalReport {
     cancelled: []
   };
 
-  // Reconstruct permitNosByStatus and segmentIdsByStatus from items if missing in colorBreakdown
-  if (items.length > 0 && Object.values(permitNosByStatus).every((arr: any) => !arr || arr.length === 0)) {
-    items.forEach((item: any) => {
-      const cat = item.statusCategory;
+  // Reconstruct permitNosByStatus and segmentIdsByStatus from sanitizedItems if missing or if containing dirty identifiers
+  if (sanitizedItems.length > 0) {
+    // Reset or ensure arrays exist
+    const rebuiltPermits: Record<string, string[]> = {
+      executedWater: [],
+      executedSewage: [],
+      ongoing: [],
+      remaining: [],
+      cancelled: []
+    };
+    const rebuiltSegments: Record<string, string[]> = {
+      executedWater: [],
+      executedSewage: [],
+      ongoing: [],
+      remaining: [],
+      cancelled: []
+    };
+
+    sanitizedItems.forEach((item: any) => {
+      const cat = item.statusCategory || 'ongoing';
       const catKeyMap: Record<string, 'executedWater' | 'executedSewage' | 'ongoing' | 'remaining' | 'cancelled'> = {
         'executed_water': 'executedWater',
         'executed_sewage': 'executedSewage',
@@ -313,36 +349,49 @@ function mapRowToHistoricalReport(row: any): HistoricalReport {
         'remaining': 'remaining',
         'cancelled': 'cancelled'
       };
-      const key = catKeyMap[cat];
-      if (key) {
-        if (isValidIdentifier(item.permitNo)) {
-          if (!permitNosByStatus[key].includes(item.permitNo.trim())) {
-            permitNosByStatus[key].push(item.permitNo.trim());
-          }
+      const key = catKeyMap[cat] || 'ongoing';
+      const cleanPerm = item.permitNo;
+      const cleanSeg = item.segmentId;
+      if (isValidIdentifier(cleanPerm)) {
+        if (!rebuiltPermits[key].includes(cleanPerm)) {
+          rebuiltPermits[key].push(cleanPerm);
         }
-        if (isValidIdentifier(item.segmentId)) {
-          if (!segmentIdsByStatus[key].includes(item.segmentId.trim())) {
-            segmentIdsByStatus[key].push(item.segmentId.trim());
-          }
+      }
+      if (isValidIdentifier(cleanSeg)) {
+        if (!rebuiltSegments[key].includes(cleanSeg)) {
+          rebuiltSegments[key].push(cleanSeg);
         }
       }
     });
+
+    // If existing breakdown had items, use the rebuilt clean ones
+    permitNosByStatus.executedWater = rebuiltPermits.executedWater;
+    permitNosByStatus.executedSewage = rebuiltPermits.executedSewage;
+    permitNosByStatus.ongoing = rebuiltPermits.ongoing;
+    permitNosByStatus.remaining = rebuiltPermits.remaining;
+    permitNosByStatus.cancelled = rebuiltPermits.cancelled;
+
+    segmentIdsByStatus.executedWater = rebuiltSegments.executedWater;
+    segmentIdsByStatus.executedSewage = rebuiltSegments.executedSewage;
+    segmentIdsByStatus.ongoing = rebuiltSegments.ongoing;
+    segmentIdsByStatus.remaining = rebuiltSegments.remaining;
+    segmentIdsByStatus.cancelled = rebuiltSegments.cancelled;
   }
 
   const cleanedPermitNosByStatus = {
-    executedWater: (permitNosByStatus.executedWater || []).filter(isValidIdentifier),
-    executedSewage: (permitNosByStatus.executedSewage || []).filter(isValidIdentifier),
-    ongoing: (permitNosByStatus.ongoing || []).filter(isValidIdentifier),
-    remaining: (permitNosByStatus.remaining || []).filter(isValidIdentifier),
-    cancelled: (permitNosByStatus.cancelled || []).filter(isValidIdentifier),
+    executedWater: (permitNosByStatus.executedWater || []).map(cleanPermitNo).filter(isValidIdentifier),
+    executedSewage: (permitNosByStatus.executedSewage || []).map(cleanPermitNo).filter(isValidIdentifier),
+    ongoing: (permitNosByStatus.ongoing || []).map(cleanPermitNo).filter(isValidIdentifier),
+    remaining: (permitNosByStatus.remaining || []).map(cleanPermitNo).filter(isValidIdentifier),
+    cancelled: (permitNosByStatus.cancelled || []).map(cleanPermitNo).filter(isValidIdentifier),
   };
 
   const cleanedSegmentIdsByStatus = {
-    executedWater: (segmentIdsByStatus.executedWater || []).filter(isValidIdentifier),
-    executedSewage: (segmentIdsByStatus.executedSewage || []).filter(isValidIdentifier),
-    ongoing: (segmentIdsByStatus.ongoing || []).filter(isValidIdentifier),
-    remaining: (segmentIdsByStatus.remaining || []).filter(isValidIdentifier),
-    cancelled: (segmentIdsByStatus.cancelled || []).filter(isValidIdentifier),
+    executedWater: (segmentIdsByStatus.executedWater || []).map(cleanSegmentId).filter(isValidIdentifier),
+    executedSewage: (segmentIdsByStatus.executedSewage || []).map(cleanSegmentId).filter(isValidIdentifier),
+    ongoing: (segmentIdsByStatus.ongoing || []).map(cleanSegmentId).filter(isValidIdentifier),
+    remaining: (segmentIdsByStatus.remaining || []).map(cleanSegmentId).filter(isValidIdentifier),
+    cancelled: (segmentIdsByStatus.cancelled || []).map(cleanSegmentId).filter(isValidIdentifier),
   };
 
   return {
@@ -359,10 +408,14 @@ function mapRowToHistoricalReport(row: any): HistoricalReport {
       totalLengthMeters: Number(row.total_length_meters || 0),
       totalLengthKm: Number(row.total_length_km || 0),
       totalFeaturesCount: Number(row.total_features_count || 0),
-      colorBreakdown: colorBreakdown,
+      colorBreakdown: {
+        ...colorBreakdown,
+        permitNosByStatus: cleanedPermitNosByStatus,
+        segmentIdsByStatus: cleanedSegmentIdsByStatus
+      },
       permitNosByStatus: cleanedPermitNosByStatus,
       segmentIdsByStatus: cleanedSegmentIdsByStatus,
-      items: items,
+      items: sanitizedItems,
       parsedAt: row.parsed_at || (row.created_at ? new Date(row.created_at).toLocaleString('ar-SA') : new Date().toLocaleString('ar-SA'))
     }
   };

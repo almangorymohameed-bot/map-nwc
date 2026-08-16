@@ -572,9 +572,9 @@ export function cleanSegmentId(val: any): string {
 }
 
 /**
- * Strips label prefixes like "Permit No:", "permit_no:", "رقم الرخصة:", "تصريح:", etc.
+ * Strips label prefixes like "Permit No:", "permit_no:", etc.
  * Returns only the pure permit number/code strictly corresponding to the Permit No statement.
- * Truncates before any concatenated downstream field headers (like Segment ID:, Stage:, etc.).
+ * Truncates before any concatenated downstream field headers (like ZONE:, Stage:, CONTRACTOR:, etc.).
  * Returns empty string ('') if value is empty, dashes (-), slashes (/), placeholders (- / -), or lacks explicit alphanumeric characters.
  */
 export function cleanPermitNo(val: any): string {
@@ -582,42 +582,60 @@ export function cleanPermitNo(val: any): string {
   let str = String(val).trim();
   if (!str) return '';
 
-  // 1. Remove prefixes (longest keywords first!)
-  str = str.replace(/^(?:permit\s*no|permit_no|permitno|permit-no|permit\s*number|permit_number|permit\s*num|permit_num|permit\s*#|permit_id|perm_no|permno|perm\s*no|perm\s*num|رقم\s*الرخصة|رخصة\s*الحفر|رقم\s*التصريح|رقم\s*الفسح|تصريح\s*الحفر|إذن\s*الحفر|اذن\s*الحفر|بيان\s*الفسح|بيان\s*التصريح|بيان\s*الرخصة|رخصة|تصريح|فسح|permit|perm|prm)\s*[:=–—#=-]\s*/i, '');
+  // 1. If string contains or begins with other known GIS/CAD field names, reject immediately (NOT a permit number)
+  const otherFields = [
+    'zone', 'zone_no', 'drilling', 'drilling_type', 'drillingtype', 'stage',
+    'contractor', 'contractor_name', 'projectname', 'project_name', 'projectid',
+    'project_id', 'shape_length', 'shape_len', 'streetname', 'street_name',
+    'district', 'innerdiameter', 'inner_diameter', 'diameter', 'objectid',
+    'fid', 'layer', 'length', 'latitude', 'longitude', 'x', 'y'
+  ];
 
-  // If the string starts with standalone label followed by space
-  str = str.replace(/^(?:permit\s*no|permit_no|رقم\s*الرخصة|رقم\s*التصريح|رقم\s*الفسح|تصريح\s*الحفر|رخصة\s*الحفر|بيان\s*الفسح)\s+/i, '');
+  // 2. Remove Permit No prefixes strictly (longest keywords first)
+  str = str.replace(/^(?:permit\s*no|permit_no|permitno|permit-no|permit\s*number|permit_number|permit\s*num|permit_num|permit\s*#|permit_id|perm_no|permno|perm\s*no|perm\s*num)\s*[:=–—#=-]\s*/i, '');
+  str = str.replace(/^(?:permit\s*no|permit_no|permitno|perm_no)\s+/i, '');
 
-  // 2. Truncate before any downstream joined field labels if concatenated
-  const downstreamRegex = /(?:^|\s+)(?:-|–|—)?\s*(?:SEGMENT|SEGMENTID|SEGMENT_ID|SEG_ID|STAGE|CONTRACTOR|PROJECTNAME|PROJECTID|STREETNAME|STREET_NAME|DISTRICT|SHAPE_Length|SHAPE_LENGTH|ZONE|ZONE_NO|INNERDIAMETER|DRILLING|سجمنت|قطاع|معرف\s*القطاع|مرحلة|المقاول|اسم\s*المشروع|رقم\s*المشروع|اسم\s*الشارع|الحي|القطر|المنطقة)\s*[:=]/i;
+  // 3. Truncate before any downstream joined field labels if concatenated
+  const downstreamRegex = /(?:^|\s+)(?:-|–|—)?\s*(?:ZONE|ZONE_NO|DRILLING|DRILLING_TYPE|DRILLINGTYPE|STAGE|CONTRACTOR|CONTRACTOR_NAME|PROJECTNAME|PROJECT_NAME|PROJECTID|PROJECT_ID|SHAPE_LENGTH|SHAPE_Length|SHAPE_LEN|STREETNAME|STREET_NAME|DISTRICT|INNERDIAMETER|INNER_DIAMETER|SEGMENT|SEGMENTID|SEGMENT_ID|SEG_ID|OBJECTID|FID)\s*[:=]/i;
   const match = str.match(downstreamRegex);
-  if (match && match.index !== undefined && match.index > 0) {
+  if (match && match.index !== undefined) {
+    if (match.index === 0) {
+      return '';
+    }
     str = str.substring(0, match.index).trim();
   }
 
-  // 3. Clean leading/trailing quotes, colons, equals, dashes, slashes, spaces
+  // 4. Clean leading/trailing quotes, colons, equals, dashes, slashes, spaces
   str = str.replace(/^["'`\s:=–—_#/\\;,.]+|["'`\s:=–—_#/\\;,.]+$/g, '').trim();
 
   if (!str) return '';
 
-  // 4. Check for invalid placeholder words, dashes, slashes, or symbols
+  // 5. Check if remaining string starts with or is entirely another field header or contains colons for other fields
+  for (const f of otherFields) {
+    if (new RegExp(`^${f}\\b`, 'i').test(str) || new RegExp(`\\b${f}\\s*:`, 'i').test(str)) {
+      return '';
+    }
+  }
+
+  // 6. Check for invalid placeholder words, dashes, slashes, or symbols
   const lower = str.toLowerCase();
   const invalidKeywords = [
     '-', '/', '--', '//', '---', '///', '-/-', '- / -', '-/', '/-', '/ -', '- /', 'n/a', 'na', 'none', 'null',
     'undefined', 'بدون', 'لا يوجد', 'لايوجد', 'غير محدد', 'غير متوفر', 'فراغ', 'بدون تصريح', 'بدون فسح', 'لا', 'لايوجد تصريح',
     'لا يوجد تصريح', 'لا يوجد فسح', 'لايوجد فسح', 'بدون سجمنت', 'لا يوجد سجمنت', '0', '00', '000', '0000', 'nan',
-    'ermit', 'permit', 'perm', 'prm', 'permit no', 'permit_no', 'permitno', 'no', 'num', 'number', 'id', 'id:'
+    'ermit', 'permit', 'perm', 'prm', 'permit no', 'permit_no', 'permitno', 'no', 'num', 'number', 'id', 'id:',
+    'zone', 'drilling', 'drilling type', 'stage', 'contractor', 'projectname', 'projectid', 'shape_length', 'streetname', 'innerdiameter', 'objectid', 'fid'
   ];
 
   if (invalidKeywords.includes(lower) || /^[-–—_#/\\:;.\s]+$/.test(str)) {
     return '';
   }
 
-  // 5. Must contain at least one alphanumeric character (Arabic/English digit or letter)
+  // 7. Must contain at least one alphanumeric character (Arabic/English digit or letter)
   const alphanumericOnly = str.replace(/[^A-Za-z0-9\u0600-\u06FF]/g, '');
   if (alphanumericOnly.length === 0) return '';
 
-  if (['id', 'ermit', 'permit', 'segment', 'seg', 'sec', 'perm', 'prm', 'no', 'num', 'null', 'undefined', 'none', 'nan'].includes(alphanumericOnly.toLowerCase())) {
+  if (['id', 'ermit', 'permit', 'segment', 'seg', 'sec', 'perm', 'prm', 'no', 'num', 'null', 'undefined', 'none', 'nan', 'zone', 'stage', 'objectid', 'fid'].includes(alphanumericOnly.toLowerCase())) {
     return '';
   }
 
@@ -626,7 +644,8 @@ export function cleanPermitNo(val: any): string {
 
 /**
  * Strict Extraction of Permit No from Placemark elements, HTML description table rows, or structured text.
- * Strictly searches for the "Permit No" header/statement and retrieves only its corresponding value.
+ * Strictly searches for the "Permit No" header/statement only (Permit No, Permit_No, PermitNo, Permit Number, Perm_No)
+ * and retrieves only its corresponding value.
  */
 export function extractStrictPermitNo(
   pm?: Element | null,
@@ -636,8 +655,7 @@ export function extractStrictPermitNo(
 ): string {
   const permitKeys = [
     'permit no', 'permit_no', 'permitno', 'permit-no', 'permit number', 'permit_number', 'permit num', 'permit_num', 'permit #', 'permit_id',
-    'رقم التصريح', 'رقم الرخصة', 'رقم الفسح', 'تصريح الحفر', 'رخصة الحفر', 'إذن الحفر', 'اذن الحفر', 'بيان الفسح', 'بيان التصريح', 'بيان الرخصة',
-    'رقم تصريح الحفر', 'رقم رخصة الحفر', 'permit', 'perm_no', 'permno', 'perm no', 'تصريح', 'رخصة', 'فسح'
+    'perm_no', 'permno', 'perm no'
   ];
 
   // 1. Check Data and SimpleData elements in Placemark (ExtendedData)
@@ -658,25 +676,24 @@ export function extractStrictPermitNo(
     }
   }
 
-  // 2. Check HTML Description Table rows (<tr><td>Permit No</td><td>2024-554</td></tr>)
+  // 2. Check HTML Description Table rows (<tr><td>Permit No</td><td>2206604</td></tr>)
   if (rawDescription && rawDescription.includes('<')) {
-    // Regex match <tr>...<td>key</td>...<td>value</td>...</tr>
     const rowRegex = /<tr[^>]*>\s*<(?:td|th)[^>]*>(.*?)<\/(?:td|th)>\s*<(?:td|th)[^>]*>(.*?)<\/(?:td|th)>\s*<\/tr>/gi;
     let match;
     while ((match = rowRegex.exec(rawDescription)) !== null) {
       const cell1Text = match[1].replace(/<[^>]+>/g, '').trim().toLowerCase();
-      const cell2Text = match[2].replace(/<[^>]+>/g, '').trim();
+      const cell2Raw = match[2].replace(/<[^>]+>/g, '').trim();
 
       const isCell1Key = permitKeys.some(k => cell1Text === k || cell1Text.replace(/[\s_:-]+/g, '') === k.replace(/[\s_:-]+/g, ''));
       if (isCell1Key) {
-        const cleaned = cleanPermitNo(cell2Text);
+        const cleaned = cleanPermitNo(cell2Raw);
         if (cleaned && isValidIdentifier(cleaned)) {
           return cleaned;
         }
       }
 
-      // Check if inverted (cell 2 is key, cell 1 is value)
-      const isCell2Key = permitKeys.some(k => cell2Text.toLowerCase() === k || cell2Text.toLowerCase().replace(/[\s_:-]+/g, '') === k.replace(/[\s_:-]+/g, ''));
+      // Check if inverted (cell 2 is key e.g. 'Permit No', cell 1 is value e.g. '2206604')
+      const isCell2Key = permitKeys.some(k => cell2Raw.toLowerCase() === k || cell2Raw.toLowerCase().replace(/[\s_:-]+/g, '') === k.replace(/[\s_:-]+/g, ''));
       if (isCell2Key) {
         const cleaned = cleanPermitNo(match[1].replace(/<[^>]+>/g, '').trim());
         if (cleaned && isValidIdentifier(cleaned)) {
@@ -685,8 +702,8 @@ export function extractStrictPermitNo(
       }
     }
 
-    // Check HTML bold / span labels e.g. <b>Permit No:</b> 2024-554 or <span class="atr-name">Permit No:</span>
-    const htmlLabelRegex = /(?:<b>|<strong>|<span[^>]*>)?\s*(?:Permit\s*No|Permit_No|PermitNo|Permit\s*Number|Permit\s*#|رقم\s*التصريح|رقم\s*الرخصة|رقم\s*الفسح|تصريح\s*الحفر|رخصة\s*الحفر|بيان\s*الفسح|بيان\s*التصريح|بيان\s*الرخصة)\s*(?:<\/b>|<\/strong>|<\/span>)?\s*[:=#-]\s*([^<\n\r]+)/i;
+    // Check HTML bold / span labels e.g. <b>Permit No:</b> 2206604 or <span class="atr-name">Permit No:</span> 2206604
+    const htmlLabelRegex = /(?:<b>|<strong>|<span[^>]*>)?\s*(?:Permit\s*No|Permit_No|PermitNo|Permit\s*Number|Permit\s*#|Perm_No)\s*(?:<\/b>|<\/strong>|<\/span>)?\s*[:=]\s*([^<\n\r]+)/i;
     const htmlMatch = rawDescription.match(htmlLabelRegex);
     if (htmlMatch && htmlMatch[1]) {
       const cleaned = cleanPermitNo(htmlMatch[1]);
@@ -696,9 +713,33 @@ export function extractStrictPermitNo(
     }
   }
 
-  // 3. Check plain text lines with strict Permit No label
-  const plainText = `${descText} ${featureName}`.replace(/<[^>]+>/g, ' ');
-  const textLineRegex = /(?:^|[\n\r;|,])\s*(?:Permit\s*No|Permit_No|PermitNo|Permit\s*Number|PERMIT\s*NO|رقم\s*التصريح|رقم\s*الرخصة|رقم\s*الفسح|تصريح\s*الحفر|رخصة\s*الحفر|بيان\s*الفسح|بيان\s*التصريح)\s*[:=#-]\s*([^\n\r<,;|]+)/i;
+  // 3. Multi-line inspection for Google My Maps formats (Strict single-line matches only)
+  const fullText = `${rawDescription}\n${descText}`.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>|<\/div>/gi, '\n');
+  const lines = fullText.split(/\r?\n/).map(l => l.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+
+  for (const line of lines) {
+    // Format 1: "Permit No: 2206604" or "Permit_No = 2206604"
+    const colonMatch = line.match(/^(?:Permit\s*No|Permit_No|PermitNo|Perm_No)\s*[:=–—#-]\s*([^\s,;]+)/i);
+    if (colonMatch && colonMatch[1]) {
+      const cleaned = cleanPermitNo(colonMatch[1]);
+      if (cleaned && isValidIdentifier(cleaned)) {
+        return cleaned;
+      }
+    }
+
+    // Format 2: Suffix format on same line: "2206604 Permit No"
+    const suffixMatch = line.match(/^([A-Za-z0-9_/-]{3,30})\s+(?:Permit\s*No|Permit_No|PermitNo|Perm_No)$/i);
+    if (suffixMatch && suffixMatch[1]) {
+      const cleaned = cleanPermitNo(suffixMatch[1]);
+      if (cleaned && isValidIdentifier(cleaned)) {
+        return cleaned;
+      }
+    }
+  }
+
+  // 4. Check plain text with strict Permit No label followed by colon/equals
+  const plainText = `${descText}`.replace(/<[^>]+>/g, ' ');
+  const textLineRegex = /(?:^|[\n\r;|,])\s*(?:Permit\s*No|Permit_No|PermitNo|Permit\s*Number|PERMIT\s*NO|PERM_NO)\s*[:=]\s*([^\n\r<,;|]+)/i;
   const textMatch = plainText.match(textLineRegex);
   if (textMatch && textMatch[1]) {
     const cleaned = cleanPermitNo(textMatch[1]);
@@ -893,22 +934,28 @@ export function isValidIdentifier(val: any): boolean {
 /**
  * Checks if a KML feature item is in yellow color (#ffea00 / ongoing status) AND lacks a valid permit number.
  */
-export function isYellowItemWithoutPermit(item: KMLFeatureItem): boolean {
-  if (!item) return false;
+export function isYellowItemWithoutPermit(item: KMLFeatureItem | any): boolean {
+  if (!item || typeof item !== 'object') return false;
 
   // 1. Check if color or status category is yellow / ongoing
-  const color = (item.colorHex || '').toLowerCase();
+  const color = (item.colorHex || item.color_hex || item.color || item.hex || '').toLowerCase();
+  const statusCat = (item.statusCategory || item.status_category || '').toLowerCase();
+  const statusLbl = (item.statusLabel || item.status_label || item.label || '').toLowerCase();
+  const stage = (item.stage || item.itemStage || '').toLowerCase();
+
   const isYellow = color === '#ffea00' || color === '#ffeb3b' || color === '#ffff00' ||
                    color === '#f59e0b' || color === '#eab308' || color === '#facc15' ||
                    color === '#ffd600' || color === '#ffee58' || color === '#fff176' ||
                    color === '#fbc02d' || color === '#f57f17' || color.includes('yellow') ||
-                   item.statusCategory === 'ongoing';
+                   color.includes('amber') || color.includes('gold') ||
+                   statusCat === 'ongoing' || statusCat === 'جاري' || statusCat === 'جاري العمل' ||
+                   statusLbl.includes('جاري') || statusLbl.includes('ongoing');
 
   if (!isYellow) return false;
 
   // 2. Check if permitNo is missing or invalid
-  const rawPerm = item.permitNo ? String(item.permitNo).trim() : '';
-  if (!rawPerm) return true;
+  const rawPerm = item.permitNo !== undefined ? item.permitNo : (item.permit_no !== undefined ? item.permit_no : (item as any)['Permit No']);
+  if (rawPerm === null || rawPerm === undefined || String(rawPerm).trim() === '') return true;
 
   const cleanPerm = cleanPermitNo(rawPerm);
   const hasNoPermit = !cleanPerm || !isValidIdentifier(cleanPerm);

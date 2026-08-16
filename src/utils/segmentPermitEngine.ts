@@ -74,8 +74,7 @@ export function extractPermitNoFromText(
 ): string {
   const targetKeys = [
     'permit no', 'permit_no', 'permitno', 'permit-no', 'permit number', 'permit_number', 'permit num', 'permit_num', 'permit #', 'permit_id',
-    'رقم التصريح', 'رقم الرخصة', 'رقم الفسح', 'تصريح الحفر', 'رخصة الحفر', 'إذن الحفر', 'اذن الحفر', 'بيان الفسح', 'بيان التصريح', 'بيان الرخصة',
-    'رقم تصريح الحفر', 'رقم رخصة الحفر', 'permit', 'perm_no', 'permno', 'perm no', 'تصريح', 'رخصة', 'فسح'
+    'perm_no', 'permno', 'perm no'
   ];
 
   // 1. Check direct properties array or object
@@ -103,24 +102,6 @@ export function extractPermitNoFromText(
   const fromStrictText = extractStrictPermitNo(null, descriptionText, descriptionText, featureName);
   if (fromStrictText && isValidIdentifier(fromStrictText)) {
     return fromStrictText;
-  }
-
-  // 3. Strict regex searching ONLY for explicit Permit No labels / keywords followed by content
-  const combinedText = `${featureName} ${descriptionText} ${layerName}`.replace(/<[^>]+>/g, ' ');
-  const strictPermitPatterns = [
-    /(?:PERMIT\s*NO|PERMIT_NO|PERMITNO|PERMIT\s*NUMBER|PERMIT\s*#|PERMIT_ID|PERM_NO|PERMNO|PERM\s*NO|PRM_NO)\s*[:=–—#-]\s*([^\n\r<,;|]+)/i,
-    /(?:رقم\s*التصريح|رقم\s*الرخصة|رقم\s*الفسح|تصريح\s*الحفر|رخصة\s*الحفر|بيان\s*الفسح|بيان\s*التصريح|بيان\s*الرخصة|إذن\s*الحفر|اذن\s*الحفر)\s*[:=–—#-]\s*([^\n\r<,;|]+)/i,
-    /(?:PERMIT|تصريح|رخصة|فسح)\s*[:=–—#-]\s*([A-Za-z0-9_/-]{4,30})/i
-  ];
-
-  for (const rx of strictPermitPatterns) {
-    const m = combinedText.match(rx);
-    if (m && m[1]) {
-      const cleaned = cleanPermitNo(m[1]);
-      if (cleaned && isValidIdentifier(cleaned)) {
-        return cleaned;
-      }
-    }
   }
 
   return '';
@@ -152,37 +133,6 @@ export function processSpatialPermitOverlay(
   permitBoundaries: PermitBoundaryPolygon[] = []
 ): { items: KMLFeatureItem[]; matchedCount: number } {
   let matchedCount = 0;
-  if (!permitBoundaries || permitBoundaries.length === 0) {
-    // Construct permit boundaries ONLY from closed polygon features that have permitNo and at least 4 coordinates
-    const extractedBoundaries: PermitBoundaryPolygon[] = [];
-    items.forEach(it => {
-      if (it.permitNo && isValidIdentifier(it.permitNo) && it.coordinates && it.coordinates.length >= 4) {
-        const first = it.coordinates[0];
-        const last = it.coordinates[it.coordinates.length - 1];
-        // Check if closed polygon ring (distance between first and last point < 20 meters)
-        const isClosed = getHaversineDistanceMeters(first[1], first[0], last[1], last[0]) < 20;
-        if (isClosed) {
-          let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
-          it.coordinates.forEach(([lng, lat]) => {
-            if (lat < minLat) minLat = lat;
-            if (lat > maxLat) maxLat = lat;
-            if (lng < minLng) minLng = lng;
-            if (lng > maxLng) maxLng = lng;
-          });
-          extractedBoundaries.push({
-            permitNo: it.permitNo,
-            bounds: { minLat, maxLat, minLng, maxLng },
-            coordinates: it.coordinates
-          });
-        }
-      }
-    });
-
-    if (extractedBoundaries.length > 0) {
-      permitBoundaries = extractedBoundaries;
-    }
-  }
-
   if (!permitBoundaries || permitBoundaries.length === 0) {
     return { items, matchedCount: 0 };
   }

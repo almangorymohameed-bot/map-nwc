@@ -379,8 +379,8 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
             }
 
             const pNo = item.permitNo || (item as any)['permitNo'] || (item as any)['Permit No'] || (item as any)['permit_no'];
-            if (isValidIdentifier(pNo)) {
-              const cleanP = String(pNo).trim();
+            const cleanP = cleanPermitNo(pNo);
+            if (isValidIdentifier(cleanP)) {
               globalPermitSet.add(cleanP);
               if (breakdownMap[cat]) {
                 breakdownMap[cat].permitSet.add(cleanP);
@@ -388,8 +388,8 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
             }
 
             const sId = item.segmentId || (item as any)['segmentId'] || (item as any)['Segment ID'] || (item as any)['segment_id'];
-            if (isValidIdentifier(sId)) {
-              const cleanS = String(sId).trim();
+            const cleanS = cleanSegmentId(sId);
+            if (isValidIdentifier(cleanS)) {
               globalSegmentSet.add(cleanS);
               if (breakdownMap[cat]) {
                 breakdownMap[cat].segmentSet.add(cleanS);
@@ -404,8 +404,8 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
             const pList = pNosByCat ? (pNosByCat[key] || pNosByCat[cat]) : null;
             if (Array.isArray(pList)) {
               pList.forEach((pNo: any) => {
-                if (isValidIdentifier(pNo)) {
-                  const cleanP = String(pNo).trim();
+                const cleanP = cleanPermitNo(pNo);
+                if (isValidIdentifier(cleanP)) {
                   globalPermitSet.add(cleanP);
                   if (breakdownMap[cat]) {
                     breakdownMap[cat].permitSet.add(cleanP);
@@ -417,8 +417,8 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
             const sList = sIdsByCat ? (sIdsByCat[key] || sIdsByCat[cat]) : null;
             if (Array.isArray(sList)) {
               sList.forEach((sId: any) => {
-                if (isValidIdentifier(sId)) {
-                  const cleanS = String(sId).trim();
+                const cleanS = cleanSegmentId(sId);
+                if (isValidIdentifier(cleanS)) {
                   globalSegmentSet.add(cleanS);
                   if (breakdownMap[cat]) {
                     breakdownMap[cat].segmentSet.add(cleanS);
@@ -437,6 +437,36 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
           const featCount = res.totalFeaturesCount || 0;
           const totalCatSegs = Object.values(breakdownMap).reduce((acc, b) => acc + b.segmentTotalCount, 0);
           globalSegmentTotalCount += Math.max(featCount, totalCatSegs);
+
+          // Add yellowNoPermit metrics if available in metric when res.items is absent
+          if (metric && metric.yellowNoPermitCount && metric.yellowNoPermitCount > 0) {
+            breakdownMap.ongoing.yellowNoPermitCount += metric.yellowNoPermitCount;
+            breakdownMap.ongoing.yellowNoPermitMeters += (metric.yellowNoPermitMeters || 0);
+
+            if (metric.yellowNoPermitSegments && metric.yellowNoPermitSegments.length > 0) {
+              metric.yellowNoPermitSegments.forEach((sId, sIdx) => {
+                collectedYellowNoPermitItems.push({
+                  id: `yellow-metric-${p.id}-${sIdx + 1}`,
+                  projectId: p.id,
+                  projectName: p.name,
+                  po: p.po,
+                  contractor: p.contractor || 'غير محدد',
+                  classification: p.classification,
+                  region: p.region,
+                  subProgram: p.subProgram,
+                  scope: p.scope,
+                  segmentId: sId,
+                  permitNo: '',
+                  name: `قطاع ${sId}`,
+                  lengthMeters: Math.round((metric.yellowNoPermitMeters || 0) / (metric.yellowNoPermitSegments?.length || 1)),
+                  lengthKm: Number(((metric.yellowNoPermitMeters || 0) / (metric.yellowNoPermitSegments?.length || 1) / 1000).toFixed(3)),
+                  stage: 'جاري العمل',
+                  streetName: p.name,
+                  projectObj: p
+                });
+              });
+            }
+          }
         }
       } else if (metric && metric.totalLengthMeters > 0) {
         totalMeters += metric.totalLengthMeters;
@@ -493,16 +523,16 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
         }
 
         metric.permitsList.forEach(pNo => {
-          if (isValidIdentifier(pNo)) {
-            const cleanP = String(pNo).trim();
+          const cleanP = cleanPermitNo(pNo);
+          if (isValidIdentifier(cleanP)) {
             globalPermitSet.add(cleanP);
             breakdownMap.ongoing.permitSet.add(cleanP);
           }
         });
 
         metric.segmentsList.forEach(sId => {
-          if (isValidIdentifier(sId)) {
-            const cleanS = String(sId).trim();
+          const cleanS = cleanSegmentId(sId);
+          if (isValidIdentifier(cleanS)) {
             globalSegmentSet.add(cleanS);
             breakdownMap.ongoing.segmentSet.add(cleanS);
           }
@@ -612,7 +642,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
   // Calculated stats for active tab
   const activeStats = useMemo(() => {
     return computeCategoryStats(activeCategoryProjects);
-  }, [activeCategoryProjects, reportsMap]);
+  }, [activeCategoryProjects, reportsMap, metricsMap]);
 
   // Calculated stats for all 5 categories for the side-by-side comparison table
   const allCategoryStatsMap = useMemo(() => {
@@ -623,7 +653,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
       central_sewage: computeCategoryStats(filterProjectsByStatus(selectedStatus, filterProjectsByCategory('central_sewage', projects))),
       central_water: computeCategoryStats(filterProjectsByStatus(selectedStatus, filterProjectsByCategory('central_water', projects)))
     };
-  }, [projects, reportsMap, selectedStatus]);
+  }, [projects, reportsMap, metricsMap, selectedStatus]);
 
   // Project list table search filter
   const searchedProjects = useMemo(() => {
@@ -881,8 +911,8 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
       const res = savedReport?.analysisResult || getAnalysisForProject(p);
       const items = res?.items || [];
 
-      // Filter items with valid permitNo
-      const validItems = items.filter(it => it && isValidIdentifier(it.permitNo));
+      // Filter items with valid clean permitNo
+      const validItems = items.filter(it => it && isValidIdentifier(cleanPermitNo(it.permitNo)));
 
       if (validItems.length > 0) {
         validItems.forEach(item => {
@@ -971,9 +1001,9 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
       } else {
         // Fallback: Check permitNosByStatus or metric.permitsList
         const permitsList: string[] = res?.permitNosByStatus
-          ? Array.from(new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier)))
+          ? Array.from(new Set(Object.values(res.permitNosByStatus).flat().map(cleanPermitNo).filter(isValidIdentifier)))
           : (metric && metric.permitsList && metric.permitsList.length > 0
-            ? metric.permitsList.filter(isValidIdentifier)
+            ? Array.from(new Set(metric.permitsList.map(cleanPermitNo).filter(isValidIdentifier)))
             : []);
 
         permitsList.forEach(pNo => {
