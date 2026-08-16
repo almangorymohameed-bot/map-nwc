@@ -6,7 +6,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { HistoricalReport, ProjectChangelogRecord, KMLAnalysisResult, ProjectDiffResult } from '../types';
 import { getSharedSupabaseClient } from '../supabase';
-import { isValidIdentifier, cleanPermitNo, cleanSegmentId } from './myMapsKmlParser';
+import { isValidIdentifier, cleanPermitNo, cleanSegmentId, isYellowItemWithoutPermit } from './myMapsKmlParser';
 
 export function getSupabaseConfig() {
   const metaEnv = (import.meta as any).env || {};
@@ -394,6 +394,32 @@ function mapRowToHistoricalReport(row: any): HistoricalReport {
     cancelled: (segmentIdsByStatus.cancelled || []).map(cleanSegmentId).filter(isValidIdentifier),
   };
 
+  // Reconstruct yellow items without permit stats
+  const yellowItems = sanitizedItems.filter(it => isYellowItemWithoutPermit(it));
+  const yellowNoPermitCount = yellowItems.length > 0
+    ? yellowItems.length
+    : Number(colorBreakdown?.ongoing?.yellowNoPermitCount || colorBreakdown?.yellowNoPermitCount || (colorBreakdown as any)?.yellowNoPermitStats?.count || row.yellow_no_permit_count || 0);
+  const yellowNoPermitMeters = yellowItems.length > 0
+    ? yellowItems.reduce((sum: number, it: any) => sum + (it.lengthMeters || 0), 0)
+    : Number(colorBreakdown?.ongoing?.yellowNoPermitMeters || colorBreakdown?.yellowNoPermitMeters || (colorBreakdown as any)?.yellowNoPermitStats?.lengthMeters || row.yellow_no_permit_meters || 0);
+  const yellowNoPermitKm = Number((yellowNoPermitMeters / 1000).toFixed(3));
+  const yellowNoPermitSegments = yellowItems.length > 0
+    ? yellowItems.map((it: any) => it.segmentId || it.name).filter(Boolean)
+    : (colorBreakdown?.ongoing?.yellowNoPermitSegments || (colorBreakdown as any)?.yellowNoPermitStats?.segments || []);
+
+  const enrichedColorBreakdown = {
+    ...colorBreakdown,
+    ongoing: {
+      ...(colorBreakdown.ongoing || {}),
+      yellowNoPermitCount,
+      yellowNoPermitMeters,
+      yellowNoPermitKm,
+      yellowNoPermitSegments
+    },
+    permitNosByStatus: cleanedPermitNosByStatus,
+    segmentIdsByStatus: cleanedSegmentIdsByStatus
+  };
+
   return {
     id: String(row.id),
     projectId: Number(row.project_id),
@@ -408,10 +434,12 @@ function mapRowToHistoricalReport(row: any): HistoricalReport {
       totalLengthMeters: Number(row.total_length_meters || 0),
       totalLengthKm: Number(row.total_length_km || 0),
       totalFeaturesCount: Number(row.total_features_count || 0),
-      colorBreakdown: {
-        ...colorBreakdown,
-        permitNosByStatus: cleanedPermitNosByStatus,
-        segmentIdsByStatus: cleanedSegmentIdsByStatus
+      colorBreakdown: enrichedColorBreakdown,
+      yellowNoPermitStats: {
+        count: yellowNoPermitCount,
+        lengthMeters: yellowNoPermitMeters,
+        lengthKm: yellowNoPermitKm,
+        segments: yellowNoPermitSegments
       },
       permitNosByStatus: cleanedPermitNosByStatus,
       segmentIdsByStatus: cleanedSegmentIdsByStatus,
@@ -544,14 +572,15 @@ export const ReportHistoryStore = {
         console.error('Supabase getAllLatestReportsMap exception:', err);
       }
     }
+    // Prioritize latest in-memory session reports over Supabase stale cached rows
     for (const mem of memoryReports) {
       const mId = Number(mem.projectId);
-      if (mId > 0 && !map.has(mId)) {
+      if (mId > 0) {
         map.set(mId, mem);
       }
       if (projects && Array.isArray(projects) && projects.length > 0) {
         for (const proj of projects) {
-          if (!map.has(proj.id) && isReportMatchingProject(mem.projectId, mem.projectName, proj.id, proj.name, proj.po)) {
+          if (isReportMatchingProject(mem.projectId, mem.projectName, proj.id, proj.name, proj.po)) {
             map.set(proj.id, mem);
           }
         }

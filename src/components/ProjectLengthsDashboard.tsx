@@ -340,11 +340,16 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
         const pNosByCat = (res.colorBreakdown as any)?.permitNosByStatus || res.permitNosByStatus;
         const sIdsByCat = (res.colorBreakdown as any)?.segmentIdsByStatus || res.segmentIdsByStatus;
 
+        let projYellowCount = 0;
+        let projYellowMeters = 0;
+
         if (res.items && Array.isArray(res.items) && res.items.length > 0) {
           res.items.forEach(item => {
             const cat = item.statusCategory || 'ongoing';
 
             if (isYellowItemWithoutPermit(item)) {
+              projYellowCount++;
+              projYellowMeters += (item.lengthMeters || 0);
               breakdownMap.ongoing.yellowNoPermitCount++;
               breakdownMap.ongoing.yellowNoPermitMeters += (item.lengthMeters || 0);
 
@@ -398,7 +403,67 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
               globalSegmentTotalCount++;
             }
           });
-        } else {
+        }
+
+        // If items loop did not yield yellow without permit, check res.yellowNoPermitStats or colorBreakdown or metric
+        if (projYellowCount === 0) {
+          const ynResCount = res.yellowNoPermitStats?.count || (res.colorBreakdown?.ongoing as any)?.yellowNoPermitCount || (res.colorBreakdown as any)?.yellowNoPermitStats?.count || metric?.yellowNoPermitCount || 0;
+          const ynResMeters = res.yellowNoPermitStats?.lengthMeters || (res.colorBreakdown?.ongoing as any)?.yellowNoPermitMeters || (res.colorBreakdown as any)?.yellowNoPermitStats?.lengthMeters || metric?.yellowNoPermitMeters || 0;
+          const ynSegments = res.yellowNoPermitStats?.segments || (res.colorBreakdown?.ongoing as any)?.yellowNoPermitSegments || (res.colorBreakdown as any)?.yellowNoPermitStats?.segments || metric?.yellowNoPermitSegments || [];
+
+          if (ynResCount > 0) {
+            breakdownMap.ongoing.yellowNoPermitCount += ynResCount;
+            breakdownMap.ongoing.yellowNoPermitMeters += ynResMeters;
+
+            if (ynSegments && ynSegments.length > 0) {
+              ynSegments.forEach((sId: string, sIdx: number) => {
+                collectedYellowNoPermitItems.push({
+                  id: `yellow-res-${p.id}-${sIdx + 1}`,
+                  projectId: p.id,
+                  projectName: p.name,
+                  po: p.po,
+                  contractor: p.contractor || 'غير محدد',
+                  classification: p.classification,
+                  region: p.region,
+                  subProgram: p.subProgram,
+                  scope: p.scope,
+                  segmentId: sId,
+                  permitNo: '',
+                  name: `قطاع ${sId}`,
+                  lengthMeters: Math.round(ynResMeters / (ynSegments.length || 1)),
+                  lengthKm: Number((ynResMeters / (ynSegments.length || 1) / 1000).toFixed(3)),
+                  stage: 'جاري العمل',
+                  streetName: p.name,
+                  projectObj: p
+                });
+              });
+            } else {
+              for (let i = 0; i < ynResCount; i++) {
+                collectedYellowNoPermitItems.push({
+                  id: `yellow-res-${p.id}-${i + 1}`,
+                  projectId: p.id,
+                  projectName: p.name,
+                  po: p.po,
+                  contractor: p.contractor || 'غير محدد',
+                  classification: p.classification,
+                  region: p.region,
+                  subProgram: p.subProgram,
+                  scope: p.scope,
+                  segmentId: `قطاع ${i + 1}`,
+                  permitNo: '',
+                  name: `قطاع جاري بدون فسح ${i + 1}`,
+                  lengthMeters: Math.round(ynResMeters / ynResCount),
+                  lengthKm: Number((ynResMeters / ynResCount / 1000).toFixed(3)),
+                  stage: 'جاري العمل',
+                  streetName: p.name,
+                  projectObj: p
+                });
+              }
+            }
+          }
+        }
+
+        if (!res.items || !Array.isArray(res.items) || res.items.length === 0) {
           categories.forEach(cat => {
             const key = catKeyMap[cat];
             const pList = pNosByCat ? (pNosByCat[key] || pNosByCat[cat]) : null;
@@ -437,36 +502,6 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
           const featCount = res.totalFeaturesCount || 0;
           const totalCatSegs = Object.values(breakdownMap).reduce((acc, b) => acc + b.segmentTotalCount, 0);
           globalSegmentTotalCount += Math.max(featCount, totalCatSegs);
-
-          // Add yellowNoPermit metrics if available in metric when res.items is absent
-          if (metric && metric.yellowNoPermitCount && metric.yellowNoPermitCount > 0) {
-            breakdownMap.ongoing.yellowNoPermitCount += metric.yellowNoPermitCount;
-            breakdownMap.ongoing.yellowNoPermitMeters += (metric.yellowNoPermitMeters || 0);
-
-            if (metric.yellowNoPermitSegments && metric.yellowNoPermitSegments.length > 0) {
-              metric.yellowNoPermitSegments.forEach((sId, sIdx) => {
-                collectedYellowNoPermitItems.push({
-                  id: `yellow-metric-${p.id}-${sIdx + 1}`,
-                  projectId: p.id,
-                  projectName: p.name,
-                  po: p.po,
-                  contractor: p.contractor || 'غير محدد',
-                  classification: p.classification,
-                  region: p.region,
-                  subProgram: p.subProgram,
-                  scope: p.scope,
-                  segmentId: sId,
-                  permitNo: '',
-                  name: `قطاع ${sId}`,
-                  lengthMeters: Math.round((metric.yellowNoPermitMeters || 0) / (metric.yellowNoPermitSegments?.length || 1)),
-                  lengthKm: Number(((metric.yellowNoPermitMeters || 0) / (metric.yellowNoPermitSegments?.length || 1) / 1000).toFixed(3)),
-                  stage: 'جاري العمل',
-                  streetName: p.name,
-                  projectObj: p
-                });
-              });
-            }
-          }
         }
       } else if (metric && metric.totalLengthMeters > 0) {
         totalMeters += metric.totalLengthMeters;

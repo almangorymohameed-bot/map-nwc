@@ -109,6 +109,10 @@ export interface ColorStatsSummary {
   segmentCount: number;
   permitCount: number;
   percentage: number;
+  yellowNoPermitCount?: number;
+  yellowNoPermitMeters?: number;
+  yellowNoPermitKm?: number;
+  yellowNoPermitSegments?: string[];
 }
 
 export interface KMLAnalysisResult {
@@ -132,6 +136,12 @@ export interface KMLAnalysisResult {
     ongoing: string[];
     remaining: string[];
     cancelled: string[];
+  };
+  yellowNoPermitStats?: {
+    count: number;
+    lengthMeters: number;
+    lengthKm: number;
+    segments: string[];
   };
   items: KMLFeatureItem[];
   parsedAt: string;

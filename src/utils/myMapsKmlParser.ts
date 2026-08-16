@@ -1485,6 +1485,16 @@ function generateFinalAnalysisResult(
     cb.percentage = totalMeters > 0 ? Number(((cb.totalLengthMeters / totalMeters) * 100).toFixed(1)) : 0;
   });
 
+  const yellowNoPermitItems = items.filter(isYellowItemWithoutPermit);
+  const yellowNoPermitMeters = yellowNoPermitItems.reduce((sum, it) => sum + (it.lengthMeters || 0), 0);
+  const yellowNoPermitKm = Number((yellowNoPermitMeters / 1000).toFixed(3));
+  const yellowNoPermitSegments = yellowNoPermitItems.map(it => it.segmentId || it.name).filter(Boolean);
+
+  colorBreakdown.ongoing.yellowNoPermitCount = yellowNoPermitItems.length;
+  colorBreakdown.ongoing.yellowNoPermitMeters = yellowNoPermitMeters;
+  colorBreakdown.ongoing.yellowNoPermitKm = yellowNoPermitKm;
+  colorBreakdown.ongoing.yellowNoPermitSegments = yellowNoPermitSegments;
+
   return {
     projectName,
     projectScope,
@@ -1493,6 +1503,12 @@ function generateFinalAnalysisResult(
     totalLengthKm: Number((totalMeters / 1000).toFixed(3)),
     totalFeaturesCount: items.length,
     colorBreakdown,
+    yellowNoPermitStats: {
+      count: yellowNoPermitItems.length,
+      lengthMeters: yellowNoPermitMeters,
+      lengthKm: yellowNoPermitKm,
+      segments: yellowNoPermitSegments
+    },
     segmentIdsByStatus: {
       executedWater: Array.from(segmentSetMap.executed_water),
       executedSewage: Array.from(segmentSetMap.executed_sewage),

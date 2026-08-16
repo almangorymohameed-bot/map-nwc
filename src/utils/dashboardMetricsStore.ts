@@ -143,6 +143,25 @@ export function computeMetricFromAnalysis(
     });
   }
 
+  // Fallback to extract yellowNoPermit metrics if items array is absent
+  if (yellowNoPermitCount === 0) {
+    const cbOngoing = cb.ongoing || (cb as any)['ongoing'];
+    const ynStats = analysis.yellowNoPermitStats || cbOngoing?.yellowNoPermitStats;
+    if (ynStats && ynStats.count > 0) {
+      yellowNoPermitCount = ynStats.count;
+      yellowNoPermitMeters = ynStats.lengthMeters || 0;
+      if (Array.isArray(ynStats.segments)) {
+        yellowNoPermitSegments.push(...ynStats.segments);
+      }
+    } else if (cbOngoing && cbOngoing.yellowNoPermitCount > 0) {
+      yellowNoPermitCount = cbOngoing.yellowNoPermitCount;
+      yellowNoPermitMeters = cbOngoing.yellowNoPermitMeters || 0;
+      if (Array.isArray(cbOngoing.yellowNoPermitSegments)) {
+        yellowNoPermitSegments.push(...cbOngoing.yellowNoPermitSegments);
+      }
+    }
+  }
+
   const sIdsByStatus = cb.segmentIdsByStatus || analysis.segmentIdsByStatus;
   if (sIdsByStatus && typeof sIdsByStatus === 'object') {
     Object.values(sIdsByStatus).forEach((arr: any) => {
