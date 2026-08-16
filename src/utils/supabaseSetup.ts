@@ -128,8 +128,19 @@ CREATE TABLE IF NOT EXISTS public.dashboard_project_metrics (
   total_segments_count INT NOT NULL DEFAULT 0,
   permits_list JSONB DEFAULT '[]'::jsonb,
   segments_list JSONB DEFAULT '[]'::jsonb,
+  yellow_no_permit_count INT NOT NULL DEFAULT 0,
+  yellow_no_permit_meters NUMERIC NOT NULL DEFAULT 0,
+  yellow_no_permit_km NUMERIC NOT NULL DEFAULT 0,
+  yellow_no_permit_segments JSONB DEFAULT '[]'::jsonb,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- تحديث وإضافة الأعمدة في حال كان الجدول منشأ مسبقاً
+ALTER TABLE public.dashboard_project_metrics 
+  ADD COLUMN IF NOT EXISTS yellow_no_permit_count INT NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS yellow_no_permit_meters NUMERIC NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS yellow_no_permit_km NUMERIC NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS yellow_no_permit_segments JSONB DEFAULT '[]'::jsonb;
 
 -- ==========================================
 -- 6. تفعيل سياسات الأمان Row Level Security (RLS)

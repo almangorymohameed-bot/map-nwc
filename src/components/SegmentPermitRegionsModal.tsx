@@ -14,6 +14,7 @@ import {
   isValidIdentifier,
   isYellowItemWithoutPermit
 } from '../utils/myMapsKmlParser';
+import * as XLSX from 'xlsx';
 import { 
   X, 
   MapPin, 
@@ -35,7 +36,8 @@ import {
   HardHat,
   ChevronRight,
   ShieldCheck,
-  AlertTriangle
+  AlertTriangle,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface SegmentPermitRegionsModalProps {
@@ -587,6 +589,67 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleExportToExcel = () => {
+    if (!groupedRegions || groupedRegions.length === 0) {
+      alert('لا توجد بيانات متاحة للتصدير حالياً');
+      return;
+    }
+
+    const rows = groupedRegions.map(reg => {
+      const lat = reg.centerLat !== undefined && reg.centerLat !== null ? Number(reg.centerLat.toFixed(6)) : '';
+      const lng = reg.centerLng !== undefined && reg.centerLng !== null ? Number(reg.centerLng.toFixed(6)) : '';
+      const mapLink = lat !== '' && lng !== '' ? `https://www.google.com/maps?q=${lat},${lng}` : 'غير متوفر';
+
+      if (mode === 'permit') {
+        return {
+          'رقم الرخصة (Permit No)': reg.id,
+          'اسم المشروع': projectName || 'غير محدد',
+          'عدد القطاعات والعناصر': reg.items.length,
+          'أطوال الرخصة (متر)': reg.totalLengthMeters,
+          'أطوال الرخصة (كم)': reg.totalLengthKm,
+          'معرفات السجمنت المرتبطة (Segment IDs)': Array.from(reg.associatedSegments).join(', ') || 'غير محدد',
+          'المقاول المنفذ': Array.from(reg.contractors).join(' - ') || 'غير محدد',
+          'المراحل والحالات': Array.from(reg.stages).join(' / ') || 'معتمد',
+          'الأحياء والمناطق': Array.from(reg.districts).join(' - ') || 'غير محدد',
+          'الشوارع والمواقع': Array.from(reg.streets).join(' - ') || 'غير محدد',
+          'خط العرض (Latitude)': lat || 'غير متوفر',
+          'خط الطول (Longitude)': lng || 'غير متوفر',
+          'رابط الموقع على الخريطة': mapLink
+        };
+      } else {
+        return {
+          'Segment ID (معرف القطاع)': reg.id,
+          'اسم المشروع': projectName || 'غير محدد',
+          'عدد العناصر': reg.items.length,
+          'إجمالي الطول (متر)': reg.totalLengthMeters,
+          'إجمالي الطول (كم)': reg.totalLengthKm,
+          'أرقام الفسوحات المرتبطة (Permit No)': Array.from(reg.associatedPermits).join(', ') || 'غير محدد',
+          'المقاول المنفذ': Array.from(reg.contractors).join(' - ') || 'غير محدد',
+          'المراحل والحالات': Array.from(reg.stages).join(' / ') || 'معتمد',
+          'الأحياء والمناطق': Array.from(reg.districts).join(' - ') || 'غير محدد',
+          'الشوارع والمواقع': Array.from(reg.streets).join(' - ') || 'غير محدد',
+          'خط العرض (Latitude)': lat || 'غير متوفر',
+          'خط الطول (Longitude)': lng || 'غير متوفر',
+          'رابط الموقع على الخريطة': mapLink
+        };
+      }
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet['!views'] = [{ RTL: true }];
+    worksheet['!cols'] = Object.keys(rows[0] || {}).map(key => ({
+      wch: Math.max(key.length * 2.2, 18)
+    }));
+
+    const workbook = XLSX.utils.book_new();
+    const sheetName = mode === 'permit' ? 'بيانات_رخص_Permit_No' : 'بيانات_سجمنت_Segment_ID';
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const filePrefix = mode === 'permit' ? 'حصر_الرخص_Permit_No' : 'حصر_السجمنت_Segment_ID';
+    XLSX.writeFile(workbook, `${filePrefix}_${dateStr}.xlsx`);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-2 sm:p-4 animate-in fade-in duration-200">
       <div className="bg-white dark:bg-slate-900 w-full max-w-7xl h-[92vh] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden text-slate-900 dark:text-slate-100">
@@ -612,37 +675,50 @@ export const SegmentPermitRegionsModal: React.FC<SegmentPermitRegionsModalProps>
             </div>
           </div>
 
-          {/* Mode Switcher Tabs */}
-          <div className="flex items-center gap-2 bg-slate-200/70 dark:bg-slate-800 p-1 rounded-2xl border border-slate-300/60 dark:border-slate-700">
+          {/* Actions and Mode Switcher */}
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => {
-                setMode('segment');
-                setSelectedId('');
-              }}
-              className={`px-3.5 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                mode === 'segment'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-300/50 dark:hover:bg-slate-700'
-              }`}
+              type="button"
+              onClick={handleExportToExcel}
+              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer whitespace-nowrap"
+              title={`تصدير بيانات ${mode === 'permit' ? 'الرخص (Permit No)' : 'السجمنت (Segment ID)'} إلى ملف إكسل`}
             >
-              <Hash className="w-3.5 h-3.5" />
-              <span>مناطق السجمنت (Segment ID)</span>
+              <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+              <span>تصدير إكسل</span>
             </button>
 
-            <button
-              onClick={() => {
-                setMode('permit');
-                setSelectedId('');
-              }}
-              className={`px-3.5 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                mode === 'permit'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-300/50 dark:hover:bg-slate-700'
-              }`}
-            >
-              <FileCheck className="w-3.5 h-3.5" />
-              <span>مناطق الفسوح (Permit No)</span>
-            </button>
+            {/* Mode Switcher Tabs */}
+            <div className="flex items-center gap-2 bg-slate-200/70 dark:bg-slate-800 p-1 rounded-2xl border border-slate-300/60 dark:border-slate-700">
+              <button
+                onClick={() => {
+                  setMode('segment');
+                  setSelectedId('');
+                }}
+                className={`px-3.5 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  mode === 'segment'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-300/50 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Hash className="w-3.5 h-3.5" />
+                <span>مناطق السجمنت (Segment ID)</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setMode('permit');
+                  setSelectedId('');
+                }}
+                className={`px-3.5 py-1.5 text-xs font-black rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                  mode === 'permit'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-300/50 dark:hover:bg-slate-700'
+                }`}
+              >
+                <FileCheck className="w-3.5 h-3.5" />
+                <span>مناطق الفسوح (Permit No)</span>
+              </button>
+            </div>
           </div>
 
           <button

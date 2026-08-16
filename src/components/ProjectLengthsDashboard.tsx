@@ -82,6 +82,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
   const [selectedReportModalProject, setSelectedReportModalProject] = useState<Project | null>(null);
   const [isYellowNoPermitModalOpen, setIsYellowNoPermitModalOpen] = useState<boolean>(false);
   const [yellowModalProjectScope, setYellowModalProjectScope] = useState<string>('جميع المشاريع');
+  const [selectedYellowModalItems, setSelectedYellowModalItems] = useState<YellowNoPermitItemDetail[] | null>(null);
 
   // Dynamically compute list of available statuses from projects
   const availableStatuses = useMemo(() => {
@@ -854,6 +855,243 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
     XLSX.writeFile(workbook, `بيانات_Segment_ID_${fileNameSuffix}_${dateStr}.xlsx`);
   };
 
+  // Excel Export Handler for Permit No detailed data
+  const handleExportPermitsToExcel = (targetProjects?: Project[]) => {
+    const projectsToExport = targetProjects || searchedProjects;
+    const detailRows: any[] = [];
+    const summaryMap = new Map<string, {
+      permitNo: string;
+      projectName: string;
+      po: string;
+      contractor: string;
+      subProgram: string;
+      statusLabels: Set<string>;
+      segments: Set<string>;
+      totalMeters: number;
+      districts: Set<string>;
+      streets: Set<string>;
+      firstLat?: number | string;
+      firstLng?: number | string;
+      firstMapLink?: string;
+    }>();
+
+    projectsToExport.forEach(p => {
+      const savedReport = findReportForProject(p, reportsMap);
+      const metric = getValidMetricForProject(p);
+      const res = savedReport?.analysisResult || getAnalysisForProject(p);
+      const items = res?.items || [];
+
+      // Filter items with valid permitNo
+      const validItems = items.filter(it => it && isValidIdentifier(it.permitNo));
+
+      if (validItems.length > 0) {
+        validItems.forEach(item => {
+          let lat: number | string = '';
+          let lng: number | string = '';
+
+          if (item.centerLat !== undefined && item.centerLat !== null && !isNaN(Number(item.centerLat))) {
+            lat = Number(item.centerLat);
+          } else if (item.coordinates && item.coordinates.length > 0 && item.coordinates[0] && item.coordinates[0].length >= 2) {
+            lat = Number(item.coordinates[0][1]);
+          }
+
+          if (item.centerLng !== undefined && item.centerLng !== null && !isNaN(Number(item.centerLng))) {
+            lng = Number(item.centerLng);
+          } else if (item.coordinates && item.coordinates.length > 0 && item.coordinates[0] && item.coordinates[0].length >= 2) {
+            lng = Number(item.coordinates[0][0]);
+          }
+
+          let mapLink = item.googleMapsUrl || '';
+          if (!mapLink && item.description) {
+            const descUrlMatch = item.description.match(/href=["'](https?:\/\/[^"'>]+)["']/i)
+                              || item.description.match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps|earth\.google\.com|maps\.google\.com)[^\s"'<>]+)/i)
+                              || item.description.match(/(https?:\/\/[^\s"'<>]+)/i);
+            if (descUrlMatch && descUrlMatch[1]) {
+              mapLink = descUrlMatch[1];
+            }
+          }
+
+          if (!mapLink && lat !== '' && lng !== '') {
+            mapLink = `https://www.google.com/maps?q=${lat},${lng}`;
+          }
+
+          const cPermit = cleanPermitNo(item.permitNo);
+          const cSeg = cleanSegmentId(item.segmentId);
+          const stageLabel = cleanStage(item.stage) !== 'غير متوفر' ? cleanStage(item.stage) : (item.statusLabel || 'غير متوفر');
+          const categoryLabel = item.statusCategory ? getStatusCategoryLabel(item.statusCategory) : 'غير محدد';
+          const meters = item.lengthMeters ? Number(item.lengthMeters.toFixed(2)) : 0;
+          const km = item.lengthKm ? Number(item.lengthKm.toFixed(3)) : (meters > 0 ? Number((meters / 1000).toFixed(3)) : 0);
+
+          detailRows.push({
+            'رقم الرخصة (Permit No)': cPermit,
+            'اسم المشروع': p.name || item.kmlProjectName || 'غير محدد',
+            'أمر الشراء (PO)': p.po || 'غير محدد',
+            'البرنامج / القطاع': p.subProgram || p.scope || p.classification || 'غير محدد',
+            'اسم المقاول': item.contractor || p.contractor || 'غير محدد',
+            'Segment ID (معرف القطاع)': isValidIdentifier(cSeg) ? cSeg : 'غير محدد',
+            'حالة العنصر / المرحلة': stageLabel,
+            'تصنيف الحالة': categoryLabel,
+            'الطول (متر)': meters,
+            'الطول (كم)': km,
+            'القطر (مم)': item.innerDiameter || 'غير محدد',
+            'نوع الحفرية': item.drillingType || 'غير متوفر',
+            'الحي / المنطقة': item.district || p.region || 'غير محدد',
+            'اسم الشارع / الموقع': item.streetName || item.name || 'غير محدد',
+            'خط العرض (Latitude)': lat !== '' ? lat : 'غير متوفر',
+            'خط الطول (Longitude)': lng !== '' ? lng : 'غير متوفر',
+            'رابط الموقع على الخريطة': mapLink || 'غير متوفر',
+          });
+
+          // Build summary aggregation
+          const summaryKey = `${p.id}_${cPermit}`;
+          if (!summaryMap.has(summaryKey)) {
+            summaryMap.set(summaryKey, {
+              permitNo: cPermit,
+              projectName: p.name || 'غير محدد',
+              po: p.po || 'غير محدد',
+              contractor: item.contractor || p.contractor || 'غير محدد',
+              subProgram: p.subProgram || p.scope || p.classification || 'غير محدد',
+              statusLabels: new Set(),
+              segments: new Set(),
+              totalMeters: 0,
+              districts: new Set(),
+              streets: new Set(),
+              firstLat: lat !== '' ? lat : undefined,
+              firstLng: lng !== '' ? lng : undefined,
+              firstMapLink: mapLink || undefined
+            });
+          }
+          const sum = summaryMap.get(summaryKey)!;
+          if (stageLabel && stageLabel !== 'غير متوفر') sum.statusLabels.add(stageLabel);
+          if (isValidIdentifier(cSeg)) sum.segments.add(cSeg);
+          sum.totalMeters += meters;
+          if (item.district) sum.districts.add(item.district);
+          if (item.streetName) sum.streets.add(item.streetName);
+        });
+      } else {
+        // Fallback: Check permitNosByStatus or metric.permitsList
+        const permitsList: string[] = res?.permitNosByStatus
+          ? Array.from(new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier)))
+          : (metric && metric.permitsList && metric.permitsList.length > 0
+            ? metric.permitsList.filter(isValidIdentifier)
+            : []);
+
+        permitsList.forEach(pNo => {
+          const cPermit = cleanPermitNo(pNo);
+          const matchingItems = res?.items?.filter(it => cleanPermitNo(it.permitNo) === cPermit) || [];
+          const firstMatching = matchingItems[0];
+
+          let lat: number | string = firstMatching?.centerLat ?? (p.y ? Number(p.y) : '');
+          let lng: number | string = firstMatching?.centerLng ?? (p.x ? Number(p.x) : '');
+          let mapLink = firstMatching?.googleMapsUrl || '';
+
+          if (!mapLink && firstMatching?.description) {
+            const descUrlMatch = firstMatching.description.match(/href=["'](https?:\/\/[^"'>]+)["']/i)
+                              || firstMatching.description.match(/(https?:\/\/(?:www\.)?(?:google\.com\/maps|maps\.app\.goo\.gl|goo\.gl\/maps|earth\.google\.com|maps\.google\.com)[^\s"'<>]+)/i)
+                              || firstMatching.description.match(/(https?:\/\/[^\s"'<>]+)/i);
+            if (descUrlMatch && descUrlMatch[1]) {
+              mapLink = descUrlMatch[1];
+            }
+          }
+
+          if (!mapLink && lat !== '' && lng !== '') {
+            mapLink = `https://www.google.com/maps?q=${lat},${lng}`;
+          }
+
+          const associatedSegments = matchingItems
+            .map(it => cleanSegmentId(it.segmentId))
+            .filter(isValidIdentifier);
+          const totalPermitMeters = matchingItems.reduce((s, it) => s + (it.lengthMeters || 0), 0);
+          const stageLabel = firstMatching ? (cleanStage(firstMatching.stage) !== 'غير متوفر' ? cleanStage(firstMatching.stage) : (firstMatching.statusLabel || 'غير متوفر')) : 'معتمد';
+          const categoryLabel = firstMatching?.statusCategory ? getStatusCategoryLabel(firstMatching.statusCategory) : 'غير محدد';
+
+          detailRows.push({
+            'رقم الرخصة (Permit No)': cPermit,
+            'اسم المشروع': p.name || 'غير محدد',
+            'أمر الشراء (PO)': p.po || 'غير محدد',
+            'البرنامج / القطاع': p.subProgram || p.scope || p.classification || 'غير محدد',
+            'اسم المقاول': firstMatching?.contractor || p.contractor || 'غير محدد',
+            'Segment ID (معرف القطاع)': associatedSegments.length > 0 ? Array.from(new Set(associatedSegments)).join(', ') : 'غير محدد',
+            'حالة العنصر / المرحلة': stageLabel,
+            'تصنيف الحالة': categoryLabel,
+            'الطول (متر)': totalPermitMeters > 0 ? Number(totalPermitMeters.toFixed(2)) : 0,
+            'الطول (كم)': totalPermitMeters > 0 ? Number((totalPermitMeters / 1000).toFixed(3)) : 0,
+            'القطر (مم)': firstMatching?.innerDiameter || 'غير محدد',
+            'نوع الحفرية': firstMatching?.drillingType || 'غير متوفر',
+            'الحي / المنطقة': firstMatching?.district || p.region || 'غير محدد',
+            'اسم الشارع / الموقع': firstMatching?.streetName || firstMatching?.name || 'غير محدد',
+            'خط العرض (Latitude)': lat !== '' ? lat : 'غير متوفر',
+            'خط الطول (Longitude)': lng !== '' ? lng : 'غير متوفر',
+            'رابط الموقع على الخريطة': mapLink || 'غير متوفر',
+          });
+
+          // Summary Map
+          const summaryKey = `${p.id}_${cPermit}`;
+          summaryMap.set(summaryKey, {
+            permitNo: cPermit,
+            projectName: p.name || 'غير محدد',
+            po: p.po || 'غير محدد',
+            contractor: firstMatching?.contractor || p.contractor || 'غير محدد',
+            subProgram: p.subProgram || p.scope || p.classification || 'غير محدد',
+            statusLabels: new Set([stageLabel]),
+            segments: new Set(associatedSegments),
+            totalMeters: totalPermitMeters,
+            districts: new Set(firstMatching?.district ? [firstMatching.district] : (p.region ? [p.region] : [])),
+            streets: new Set(firstMatching?.streetName ? [firstMatching.streetName] : []),
+            firstLat: lat !== '' ? lat : undefined,
+            firstLng: lng !== '' ? lng : undefined,
+            firstMapLink: mapLink || undefined
+          });
+        });
+      }
+    });
+
+    if (detailRows.length === 0) {
+      alert('لا توجد بيانات Permit No محللة أو معرفة حالياً في المشاريع المحددة للتصدير.');
+      return;
+    }
+
+    const summaryRows = Array.from(summaryMap.values()).map(s => ({
+      'رقم الرخصة (Permit No)': s.permitNo,
+      'اسم المشروع': s.projectName,
+      'أمر الشراء (PO)': s.po,
+      'اسم المقاول': s.contractor,
+      'البرنامج / القطاع': s.subProgram,
+      'حالة الأعمال المعتمدة': Array.from(s.statusLabels).join(' / ') || 'معتمد',
+      'أعداد السجمنت المرتبطة': s.segments.size,
+      'معرفات السجمنت (Segment IDs)': Array.from(s.segments).join(', ') || 'غير محدد',
+      'إجمالي طول الرخصة (متر)': Number(s.totalMeters.toFixed(2)),
+      'إجمالي طول الرخصة (كم)': Number((s.totalMeters / 1000).toFixed(3)),
+      'الأحياء والمناطق': Array.from(s.districts).join(' - ') || 'غير محدد',
+      'الشوارع والمواقع': Array.from(s.streets).join(' - ') || 'غير محدد',
+      'رابط الموقع على الخريطة': s.firstMapLink || 'غير متوفر'
+    }));
+
+    const workbook = XLSX.utils.book_new();
+
+    // Summary Sheet
+    const summaryWorksheet = XLSX.utils.json_to_sheet(summaryRows);
+    summaryWorksheet['!views'] = [{ RTL: true }];
+    summaryWorksheet['!cols'] = Object.keys(summaryRows[0] || {}).map(key => ({
+      wch: Math.max(key.length * 2.2, 18)
+    }));
+    XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'ملخص_رخص_Permit_No');
+
+    // Details Sheet
+    const detailWorksheet = XLSX.utils.json_to_sheet(detailRows);
+    detailWorksheet['!views'] = [{ RTL: true }];
+    detailWorksheet['!cols'] = Object.keys(detailRows[0] || {}).map(key => ({
+      wch: Math.max(key.length * 2.2, 18)
+    }));
+    XLSX.utils.book_append_sheet(workbook, detailWorksheet, 'تفاصيل_العناصر_لكل_رخصة');
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const fileNameSuffix = targetProjects && targetProjects.length === 1 
+      ? `مشروع_${targetProjects[0].id}`
+      : 'جميع_المشاريع';
+    XLSX.writeFile(workbook, `بيانات_الرخص_Permit_No_${fileNameSuffix}_${dateStr}.xlsx`);
+  };
+
   // Excel Export Handler for Sector Comparison Table
   const handleExportComparisonToExcel = () => {
     const rows = [
@@ -1310,12 +1548,18 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
         </div>
 
         {/* Total Permits Count */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between group hover:border-emerald-300 dark:hover:border-emerald-700/60 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400">إجمالي أعداد الرخص (Permit No)</span>
-            <div className="p-2 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-xl">
-              <FileCheck className="h-5 w-5" />
-            </div>
+            <button
+              type="button"
+              onClick={() => handleExportPermitsToExcel()}
+              className="p-1.5 px-2.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 text-emerald-700 dark:text-emerald-300 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 border border-emerald-200 dark:border-emerald-800 shadow-3xs hover:scale-105"
+              title="تصدير كافة تفاصيل رخص الحفر (Permit No) المعتمدة إلى إكسل"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-[10px] font-black">تصدير إكسل</span>
+            </button>
           </div>
           <div className="mt-3">
             <div className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
@@ -1742,13 +1986,14 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
 
         {showComparisonTable && (
           <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs border-collapse min-w-[750px]">
+            <table className="w-full text-right text-xs border-collapse min-w-[850px]">
               <thead>
                 <tr className="bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-extrabold border-b border-slate-200 dark:border-slate-700">
                   <th className="p-3 rounded-r-xl">التصنيف / القطاع</th>
                   <th className="p-3 text-center">عدد المشاريع</th>
                   <th className="p-3 text-center">إجمالي الأطوال بالعقد (كم)</th>
                   <th className="p-3 text-center bg-amber-100/50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200">الجاري (كم)</th>
+                  <th className="p-3 text-center bg-amber-500/10 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300">جاري بدون بيان فسح (كم / عدد)</th>
                   <th className="p-3 text-center bg-rose-100/50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200">المتبقي (كم)</th>
                   <th className="p-3 text-center bg-emerald-100/50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200">المنفذ (كم)</th>
                   <th className="p-3 text-center">أعداد الرخص (Permit No)</th>
@@ -1765,6 +2010,26 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                   <td className="p-3 text-center">{allCategoryStatsMap.all.projectsCount}</td>
                   <td className="p-3 text-center font-bold text-slate-900 dark:text-white">{allCategoryStatsMap.all.totalContractKm.toLocaleString('ar-SA')}</td>
                   <td className="p-3 text-center font-bold text-amber-700 dark:text-amber-300">{allCategoryStatsMap.all.statusBreakdown.ongoing.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-amber-800 dark:text-amber-300">
+                    {(allCategoryStatsMap.all.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setYellowModalProjectScope('جميع المشاريع');
+                          setSelectedYellowModalItems(allCategoryStatsMap.all.yellowNoPermitItems || null);
+                          setIsYellowNoPermitModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/60 hover:bg-amber-200 text-amber-900 dark:text-amber-200 rounded-lg text-[11px] font-black border border-amber-300 dark:border-amber-700 shadow-3xs transition-all cursor-pointer hover:scale-105"
+                        title="انقر لمعاينة حصر القطاعات الجارية بدون فسح لجميع المشاريع"
+                      >
+                        <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                        <span>{Number(((allCategoryStatsMap.all.statusBreakdown.ongoing.yellowNoPermitMeters || 0) / 1000).toFixed(3))} كم</span>
+                        <span className="font-mono text-[10px]">({allCategoryStatsMap.all.statusBreakdown.ongoing.yellowNoPermitCount})</span>
+                      </button>
+                    ) : (
+                      <span className="text-slate-400 font-normal">0 كم</span>
+                    )}
+                  </td>
                   <td className="p-3 text-center font-bold text-rose-700 dark:text-rose-300">{allCategoryStatsMap.all.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')}</td>
                   <td className="p-3 text-center font-bold text-emerald-700 dark:text-emerald-300">
                     {(allCategoryStatsMap.all.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.all.statusBreakdown.executed_sewage.totalKm).toFixed(3)}
@@ -1785,6 +2050,26 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                   <td className="p-3 text-center">{allCategoryStatsMap.riyadh.projectsCount}</td>
                   <td className="p-3 text-center font-bold text-slate-900 dark:text-white">{allCategoryStatsMap.riyadh.totalContractKm.toLocaleString('ar-SA')}</td>
                   <td className="p-3 text-center font-bold text-amber-700 dark:text-amber-300">{allCategoryStatsMap.riyadh.statusBreakdown.ongoing.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-amber-800 dark:text-amber-300">
+                    {(allCategoryStatsMap.riyadh.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setYellowModalProjectScope('مشاريع الرياض');
+                          setSelectedYellowModalItems(allCategoryStatsMap.riyadh.yellowNoPermitItems || null);
+                          setIsYellowNoPermitModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/60 hover:bg-amber-200 text-amber-900 dark:text-amber-200 rounded-lg text-[11px] font-black border border-amber-300 dark:border-amber-700 shadow-3xs transition-all cursor-pointer hover:scale-105"
+                        title="انقر لمعاينة حصر القطاعات الجارية بدون فسح لمشاريع الرياض"
+                      >
+                        <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                        <span>{Number(((allCategoryStatsMap.riyadh.statusBreakdown.ongoing.yellowNoPermitMeters || 0) / 1000).toFixed(3))} كم</span>
+                        <span className="font-mono text-[10px]">({allCategoryStatsMap.riyadh.statusBreakdown.ongoing.yellowNoPermitCount})</span>
+                      </button>
+                    ) : (
+                      <span className="text-slate-400 font-normal">0 كم</span>
+                    )}
+                  </td>
                   <td className="p-3 text-center font-bold text-rose-700 dark:text-rose-300">{allCategoryStatsMap.riyadh.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')}</td>
                   <td className="p-3 text-center font-bold text-emerald-700 dark:text-emerald-300">
                     {(allCategoryStatsMap.riyadh.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.riyadh.statusBreakdown.executed_sewage.totalKm).toFixed(3)}
@@ -1805,6 +2090,26 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                   <td className="p-3 text-center">{allCategoryStatsMap.governorates.projectsCount}</td>
                   <td className="p-3 text-center font-bold text-slate-900 dark:text-white">{allCategoryStatsMap.governorates.totalContractKm.toLocaleString('ar-SA')}</td>
                   <td className="p-3 text-center font-bold text-amber-700 dark:text-amber-300">{allCategoryStatsMap.governorates.statusBreakdown.ongoing.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-amber-800 dark:text-amber-300">
+                    {(allCategoryStatsMap.governorates.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setYellowModalProjectScope('مشاريع المحافظات');
+                          setSelectedYellowModalItems(allCategoryStatsMap.governorates.yellowNoPermitItems || null);
+                          setIsYellowNoPermitModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/60 hover:bg-amber-200 text-amber-900 dark:text-amber-200 rounded-lg text-[11px] font-black border border-amber-300 dark:border-amber-700 shadow-3xs transition-all cursor-pointer hover:scale-105"
+                        title="انقر لمعاينة حصر القطاعات الجارية بدون فسح لمشاريع المحافظات"
+                      >
+                        <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                        <span>{Number(((allCategoryStatsMap.governorates.statusBreakdown.ongoing.yellowNoPermitMeters || 0) / 1000).toFixed(3))} كم</span>
+                        <span className="font-mono text-[10px]">({allCategoryStatsMap.governorates.statusBreakdown.ongoing.yellowNoPermitCount})</span>
+                      </button>
+                    ) : (
+                      <span className="text-slate-400 font-normal">0 كم</span>
+                    )}
+                  </td>
                   <td className="p-3 text-center font-bold text-rose-700 dark:text-rose-300">{allCategoryStatsMap.governorates.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')}</td>
                   <td className="p-3 text-center font-bold text-emerald-700 dark:text-emerald-300">
                     {(allCategoryStatsMap.governorates.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.governorates.statusBreakdown.executed_sewage.totalKm).toFixed(3)}
@@ -1825,6 +2130,26 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                   <td className="p-3 text-center">{allCategoryStatsMap.central_sewage.projectsCount}</td>
                   <td className="p-3 text-center font-bold text-slate-900 dark:text-white">{allCategoryStatsMap.central_sewage.totalContractKm.toLocaleString('ar-SA')}</td>
                   <td className="p-3 text-center font-bold text-amber-700 dark:text-amber-300">{allCategoryStatsMap.central_sewage.statusBreakdown.ongoing.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-amber-800 dark:text-amber-300">
+                    {(allCategoryStatsMap.central_sewage.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setYellowModalProjectScope('مشاريع الصرف بالقطاع الأوسط');
+                          setSelectedYellowModalItems(allCategoryStatsMap.central_sewage.yellowNoPermitItems || null);
+                          setIsYellowNoPermitModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/60 hover:bg-amber-200 text-amber-900 dark:text-amber-200 rounded-lg text-[11px] font-black border border-amber-300 dark:border-amber-700 shadow-3xs transition-all cursor-pointer hover:scale-105"
+                        title="انقر لمعاينة حصر القطاعات الجارية بدون فسح لمشاريع الصرف"
+                      >
+                        <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                        <span>{Number(((allCategoryStatsMap.central_sewage.statusBreakdown.ongoing.yellowNoPermitMeters || 0) / 1000).toFixed(3))} كم</span>
+                        <span className="font-mono text-[10px]">({allCategoryStatsMap.central_sewage.statusBreakdown.ongoing.yellowNoPermitCount})</span>
+                      </button>
+                    ) : (
+                      <span className="text-slate-400 font-normal">0 كم</span>
+                    )}
+                  </td>
                   <td className="p-3 text-center font-bold text-rose-700 dark:text-rose-300">{allCategoryStatsMap.central_sewage.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')}</td>
                   <td className="p-3 text-center font-bold text-emerald-700 dark:text-emerald-300">
                     {(allCategoryStatsMap.central_sewage.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.central_sewage.statusBreakdown.executed_sewage.totalKm).toFixed(3)}
@@ -1845,6 +2170,26 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                   <td className="p-3 text-center">{allCategoryStatsMap.central_water.projectsCount}</td>
                   <td className="p-3 text-center font-bold text-slate-900 dark:text-white">{allCategoryStatsMap.central_water.totalContractKm.toLocaleString('ar-SA')}</td>
                   <td className="p-3 text-center font-bold text-amber-700 dark:text-amber-300">{allCategoryStatsMap.central_water.statusBreakdown.ongoing.totalKm.toLocaleString('ar-SA')}</td>
+                  <td className="p-3 text-center font-bold text-amber-800 dark:text-amber-300">
+                    {(allCategoryStatsMap.central_water.statusBreakdown.ongoing.yellowNoPermitCount || 0) > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setYellowModalProjectScope('مشاريع المياه بالقطاع الأوسط');
+                          setSelectedYellowModalItems(allCategoryStatsMap.central_water.yellowNoPermitItems || null);
+                          setIsYellowNoPermitModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-100 dark:bg-amber-900/60 hover:bg-amber-200 text-amber-900 dark:text-amber-200 rounded-lg text-[11px] font-black border border-amber-300 dark:border-amber-700 shadow-3xs transition-all cursor-pointer hover:scale-105"
+                        title="انقر لمعاينة حصر القطاعات الجارية بدون فسح لمشاريع المياه"
+                      >
+                        <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                        <span>{Number(((allCategoryStatsMap.central_water.statusBreakdown.ongoing.yellowNoPermitMeters || 0) / 1000).toFixed(3))} كم</span>
+                        <span className="font-mono text-[10px]">({allCategoryStatsMap.central_water.statusBreakdown.ongoing.yellowNoPermitCount})</span>
+                      </button>
+                    ) : (
+                      <span className="text-slate-400 font-normal">0 كم</span>
+                    )}
+                  </td>
                   <td className="p-3 text-center font-bold text-rose-700 dark:text-rose-300">{allCategoryStatsMap.central_water.statusBreakdown.remaining.totalKm.toLocaleString('ar-SA')}</td>
                   <td className="p-3 text-center font-bold text-emerald-700 dark:text-emerald-300">
                     {(allCategoryStatsMap.central_water.statusBreakdown.executed_water.totalKm + allCategoryStatsMap.central_water.statusBreakdown.executed_sewage.totalKm).toFixed(3)}
@@ -1895,6 +2240,16 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
               <span>تصدير بيانات Segment ID (إكسل)</span>
             </button>
 
+            <button
+              type="button"
+              onClick={() => handleExportPermitsToExcel()}
+              className="px-4 py-2 bg-teal-700 hover:bg-teal-800 active:scale-95 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer whitespace-nowrap"
+              title="تصدير تفاصيل بيانات رخص وتصاريح الحفر (Permit No) لجميع المشاريع إلى ملف إكسل"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-200" />
+              <span>تصدير بيانات Permit No (إكسل)</span>
+            </button>
+
             <div className="relative w-full sm:w-64">
               <Search className="absolute right-3 top-2.5 h-4 w-4 text-slate-400" />
               <input
@@ -1909,7 +2264,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs border-collapse min-w-[1150px]">
+          <table className="w-full text-right text-xs border-collapse min-w-[1250px]">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-extrabold border-b border-slate-200 dark:border-slate-700">
                 <th className="p-3">اسم المشروع / أمر الشراء</th>
@@ -1919,6 +2274,7 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                 <th className="p-3">حالة العقد</th>
                 <th className="p-3 text-center">إجمالي الأطوال بالعقد (كم)</th>
                 <th className="p-3 text-center text-amber-700 dark:text-amber-300">الجاري (كم)</th>
+                <th className="p-3 text-center bg-amber-500/10 dark:bg-amber-500/20 text-amber-900 dark:text-amber-300 font-black whitespace-nowrap">جاري بدون بيان فسح (أصفر)</th>
                 <th className="p-3 text-center text-rose-700 dark:text-rose-300">المتبقي (كم)</th>
                 <th className="p-3 text-center text-indigo-600 dark:text-indigo-400">الرخص (Permit No)</th>
                 <th className="p-3 text-center text-purple-600 dark:text-purple-400">السجمنت (الفريد / الإجمالي)</th>
@@ -1934,6 +2290,71 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                 const totalKm = res ? (res.totalLengthKm || 0) : (metric ? metric.totalLengthKm : 0);
                 const ongoingKm = res ? (res.colorBreakdown?.ongoing?.totalLengthKm || 0) : (metric ? Number((metric.ongoingMeters / 1000).toFixed(3)) : 0);
                 const remainingKm = res ? (res.colorBreakdown?.remaining?.totalLengthKm || 0) : (metric ? Number((metric.remainingMeters / 1000).toFixed(3)) : 0);
+
+                const yellowKm = res && res.items && res.items.length > 0
+                  ? Number((res.items.filter(isYellowItemWithoutPermit).reduce((s, it) => s + (it.lengthMeters || 0), 0) / 1000).toFixed(3))
+                  : (metric ? (metric.yellowNoPermitKm || (metric.yellowNoPermitMeters ? Number((metric.yellowNoPermitMeters / 1000).toFixed(3)) : 0)) : 0);
+
+                const yellowCount = res && res.items && res.items.length > 0
+                  ? res.items.filter(isYellowItemWithoutPermit).length
+                  : (metric ? (metric.yellowNoPermitCount || 0) : 0);
+
+                const getProjectYellowItems = (): YellowNoPermitItemDetail[] => {
+                  if (res && res.items && res.items.length > 0) {
+                    return res.items
+                      .filter(isYellowItemWithoutPermit)
+                      .map((item, idx) => ({
+                        id: item.id || `yellow-${p.id}-${idx + 1}`,
+                        projectId: p.id,
+                        projectName: p.name,
+                        po: p.po,
+                        contractor: item.contractor || p.contractor || 'غير محدد',
+                        classification: p.classification,
+                        region: p.region,
+                        subProgram: p.subProgram,
+                        scope: p.scope,
+                        segmentId: item.segmentId || 'غير محدد',
+                        permitNo: item.permitNo || '',
+                        name: item.name || `قطاع ${item.segmentId || ''}`,
+                        lengthMeters: item.lengthMeters || 0,
+                        lengthKm: item.lengthKm || Number(((item.lengthMeters || 0) / 1000).toFixed(3)),
+                        stage: item.stage || 'غير متوفر',
+                        streetName: item.streetName || item.name,
+                        district: item.district,
+                        innerDiameter: item.innerDiameter,
+                        zone: item.zone,
+                        drillingType: item.drillingType,
+                        centerLat: item.centerLat,
+                        centerLng: item.centerLng,
+                        googleMapsUrl: item.googleMapsUrl,
+                        coordinates: item.coordinates,
+                        featureItem: item,
+                        projectObj: p
+                      }));
+                  }
+                  if (metric && metric.yellowNoPermitSegments && metric.yellowNoPermitSegments.length > 0) {
+                    return metric.yellowNoPermitSegments.map((sId, sIdx) => ({
+                      id: `yellow-metric-${p.id}-${sIdx + 1}`,
+                      projectId: p.id,
+                      projectName: p.name,
+                      po: p.po,
+                      contractor: p.contractor || 'غير محدد',
+                      classification: p.classification,
+                      region: p.region,
+                      subProgram: p.subProgram,
+                      scope: p.scope,
+                      segmentId: sId,
+                      permitNo: '',
+                      name: `قطاع ${sId}`,
+                      lengthMeters: Math.round((metric.yellowNoPermitMeters || 0) / (metric.yellowNoPermitSegments?.length || 1)),
+                      lengthKm: Number(((metric.yellowNoPermitMeters || 0) / (metric.yellowNoPermitSegments?.length || 1) / 1000).toFixed(3)),
+                      stage: 'جاري العمل',
+                      streetName: p.name,
+                      projectObj: p
+                    }));
+                  }
+                  return [];
+                };
 
                 const permitCount = res && res.permitNosByStatus
                   ? new Set(Object.values(res.permitNosByStatus).flat().filter(isValidIdentifier)).size
@@ -1993,6 +2414,27 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                     </td>
                     <td className="p-3 text-center font-extrabold text-amber-700 dark:text-amber-300">
                       {ongoingKm} كم
+                    </td>
+                    <td className="p-3 text-center bg-amber-50/40 dark:bg-amber-950/20 border-x border-amber-200/40 dark:border-amber-800/40">
+                      {yellowCount > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const items = getProjectYellowItems();
+                            setSelectedYellowModalItems(items);
+                            setYellowModalProjectScope(`مشروع: ${p.name}`);
+                            setIsYellowNoPermitModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-100/90 dark:bg-amber-900/60 hover:bg-amber-200 text-amber-900 dark:text-amber-200 rounded-lg text-[11px] font-black border border-amber-300 dark:border-amber-700 shadow-3xs cursor-pointer transition-all hover:scale-105"
+                          title="انقر لمعاينة وحصر القطاعات الجارية باللون الأصفر بدون رقم فسح لهذا المشروع"
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <span>{yellowKm} كم</span>
+                          <span className="text-[10px] px-1.5 py-0.2 bg-amber-200 dark:bg-amber-800 rounded font-mono">({yellowCount})</span>
+                        </button>
+                      ) : (
+                        <span className="text-slate-400 dark:text-slate-500 font-medium text-[11px]">0 كم (0 قطاع)</span>
+                      )}
                     </td>
                     <td className="p-3 text-center font-extrabold text-rose-700 dark:text-rose-300">
                       {remainingKm} كم
@@ -2260,6 +2702,16 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
                     <FileSpreadsheet className="h-4 w-4 text-cyan-300" />
                     <span>تصدير Segment ID لإكسل</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleExportPermitsToExcel([p])}
+                    className="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white font-extrabold text-xs rounded-xl transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+                    title="تصدير تفاصيل رخص Permit No لهذا المشروع إلى إكسل"
+                  >
+                    <FileSpreadsheet className="h-4 w-4 text-emerald-200" />
+                    <span>تصدير Permit No لإكسل</span>
+                  </button>
                 </div>
 
                 <button
@@ -2278,8 +2730,11 @@ export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMap
       {/* Yellow Items Without Permit Modal */}
       <YellowNoPermitModal
         isOpen={isYellowNoPermitModalOpen}
-        onClose={() => setIsYellowNoPermitModalOpen(false)}
-        items={activeStats.yellowNoPermitItems || []}
+        onClose={() => {
+          setIsYellowNoPermitModalOpen(false);
+          setSelectedYellowModalItems(null);
+        }}
+        items={selectedYellowModalItems !== null ? selectedYellowModalItems : (activeStats.yellowNoPermitItems || [])}
         categoryTitle={yellowModalProjectScope || 'جميع المشاريع'}
         onOpenMyMaps={onOpenMyMaps}
       />
