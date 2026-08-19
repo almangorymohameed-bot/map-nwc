@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { cleanStage, cleanPermitNo, isYellowItemWithoutPermit } from '../utils/myMapsKmlParser';
+import { useLanguage } from '../utils/i18n';
 import { 
   X, 
   MapPin, 
@@ -47,6 +48,7 @@ interface FeatureDetailsModalProps {
 }
 
 export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ feature, onClose }) => {
+  const { t, isRtl, translateDynamic } = useLanguage();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const [copied, setCopied] = useState(false);
@@ -112,7 +114,7 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
 
       L.marker([finalLat, finalLng], { icon: customIcon })
         .addTo(map)
-        .bindPopup(`<b>${feature.name || feature.streetName || 'العنصر'}</b><br/>${feature.segmentId ? `قطاع: ${feature.segmentId}` : ''}`)
+        .bindPopup(`<b>${feature.name || feature.streetName || t('common.details', 'العنصر')}</b><br/>${feature.segmentId ? `Segment: ${feature.segmentId}` : ''}`)
         .openPopup();
 
       // Render line polyline if coordinates available
@@ -140,7 +142,7 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
         mapInstanceRef.current = null;
       }
     };
-  }, [feature, finalLat, finalLng]);
+  }, [feature, finalLat, finalLng, t]);
 
   const handleCopyCoords = () => {
     navigator.clipboard.writeText(coordString);
@@ -149,7 +151,7 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/75 backdrop-blur-sm animate-fade-in dir-rtl">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/75 backdrop-blur-sm animate-fade-in ${isRtl ? 'dir-rtl' : 'dir-ltr'}`}>
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
         
         {/* Header */}
@@ -163,10 +165,10 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
             </div>
             <div>
               <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                تفاصيل القطاع وموقع الشارع
+                {t('feature.title', 'تفاصيل القطاع وموقع الشارع')}
               </h3>
               <p className="text-xs text-slate-600 dark:text-slate-400">
-                {feature.streetName || feature.name || 'عنصر حفرية'}
+                {feature.streetName || feature.name || t('common.details', 'عنصر حفرية')}
                 {feature.segmentId ? ` • ${feature.segmentId}` : ''}
               </p>
             </div>
@@ -195,7 +197,7 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
                 className="absolute top-3 left-3 z-10 bg-white/90 dark:bg-slate-900/90 hover:bg-white dark:hover:bg-slate-900 text-slate-800 dark:text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-md border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-all"
               >
                 <ExternalLink className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                توسيع في خرائط Google
+                {t('feature.openGoogleMaps', 'توسيع في خرائط Google')}
               </a>
             </div>
 
@@ -203,25 +205,25 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
             <div className="lg:col-span-5 flex flex-col justify-between bg-gradient-to-br from-slate-50 to-blue-50/30 dark:from-slate-800/60 dark:to-slate-800/30 p-5 rounded-xl border border-slate-200 dark:border-slate-700">
               <div className="space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700">
-                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">حالة القطاع والبيان:</span>
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">{t('feature.statusLabel', 'حالة القطاع والبيان:')}</span>
                   <span 
                     className="px-2.5 py-1 rounded-full text-xs font-bold text-slate-900 shadow-sm"
                     style={{ backgroundColor: feature.colorHex || '#ffea00' }}
                   >
-                    {feature.statusLabel || 'جاري العمل'}
+                    {translateDynamic(feature.statusLabel || 'جاري العمل')}
                   </span>
                 </div>
 
                 <div className="space-y-2">
-                  <div className="text-xs text-slate-600 dark:text-slate-400">مرحلة الحفرية والعمل:</div>
+                  <div className="text-xs text-slate-600 dark:text-slate-400">{t('feature.stage', 'مرحلة الحفرية والعمل:')}</div>
                   <div className="text-sm font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-900 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-2">
                     <HardHat className="w-4 h-4 text-amber-500" />
-                    {cleanStage(feature.stage)}
+                    {translateDynamic(cleanStage(feature.stage))}
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <div className="text-xs text-slate-600 dark:text-slate-400">الإحداثيات الجغرافية:</div>
+                  <div className="text-xs text-slate-600 dark:text-slate-400">{t('feature.coords', 'الإحداثيات الجغرافية:')}</div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-mono font-bold bg-slate-200 dark:bg-slate-900 px-3 py-2 rounded-lg text-slate-800 dark:text-slate-200 flex-1 border border-slate-300 dark:border-slate-800 text-center">
                       {coordString}
@@ -229,7 +231,7 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
                     <button
                       onClick={handleCopyCoords}
                       className="p-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg border border-slate-300 dark:border-slate-800 transition-colors cursor-pointer"
-                      title="نسخ الإحداثيات"
+                      title={t('feature.copyCoords', 'نسخ الإحداثيات')}
                     >
                       {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                     </button>
@@ -245,7 +247,7 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
                   className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 text-sm"
                 >
                   <Navigation className="w-4 h-4" />
-                  إظهار موقعه على خريطة Google
+                  {t('feature.showOnMap', 'إظهار موقعه على خريطة Google')}
                   <ExternalLink className="w-4 h-4 opacity-80" />
                 </a>
               </div>
@@ -256,39 +258,39 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
           <div className="space-y-3">
             <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
               <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              جميع بيانات وعناصر القطاع (البيانات المستخرجة من الفسح والطبقات)
+              {t('feature.allData', 'جميع بيانات وعناصر القطاع (البيانات المستخرجة من الفسح والطبقات)')}
             </h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               
               {/* השارع / STREETNAME */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">اسم الشارع (STREETNAME)</div>
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feature.streetName', 'اسم الشارع (STREETNAME)')}</div>
                 <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{feature.streetName || '-'}</div>
               </div>
 
               {/* الحي / District */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">الحي (District)</div>
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feature.district', 'الحي (District)')}</div>
                 <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{feature.district || '-'}</div>
               </div>
 
               {/* رقم القطاع / SEGMENTID */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">رقم القطاع (SEGMENTID)</div>
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feature.segmentId', 'رقم القطاع (SEGMENTID)')}</div>
                 <div className="text-xs font-bold text-blue-600 dark:text-blue-400 mt-0.5">{feature.segmentId || '-'}</div>
               </div>
 
               {/* رقم التصريح / الفسح PERMITNO */}
               <div className={`p-3 rounded-xl border ${isYellowItemWithoutPermit(feature) ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/80'}`}>
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">رقم التصريح / الفسح (PERMITNO)</div>
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feature.permitNo', 'رقم التصريح / الفسح (PERMITNO)')}</div>
                 <div className="text-xs font-bold mt-0.5">
                   {cleanPermitNo(feature.permitNo) ? (
                     <span className="text-emerald-700 dark:text-emerald-400 font-mono text-sm">{cleanPermitNo(feature.permitNo)}</span>
                   ) : (
                     <span className="text-rose-700 dark:text-rose-300 font-extrabold flex items-center gap-1.5 leading-relaxed">
                       <AlertTriangle className="w-4 h-4 inline shrink-0 text-rose-600 animate-bounce" />
-                      🚨 الأعمال جارية ولا يوجد رقم فسح/تصريح صريح للقطاع (يحتوي على - أو / أو فارغ)
+                      {t('feature.noPermitAlert', '🚨 الأعمال جارية ولا يوجد رقم فسح/تصريح صريح للقطاع (يحتوي على - أو / أو فارغ)')}
                     </span>
                   )}
                 </div>
@@ -296,45 +298,45 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
 
               {/* القطر الداخلي / INNERDIAMETER */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">القطر الداخلي (INNERDIAMETER)</div>
-                <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{feature.innerDiameter ? `${feature.innerDiameter} مم` : '-'}</div>
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feature.innerDiameter', 'القطر الداخلي (INNERDIAMETER)')}</div>
+                <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{feature.innerDiameter ? `${feature.innerDiameter} ${t('feature.mm', 'مم')}` : '-'}</div>
               </div>
 
               {/* المنطقة / ZONE */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">المنطقة (ZONE)</div>
-                <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{feature.zone || '-'}</div>
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feature.zone', 'المنطقة (ZONE)')}</div>
+                <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{translateDynamic(feature.zone || '') || '-'}</div>
               </div>
 
               {/* نوع الحفر / Drilling type */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">نوع الحفر (Drilling type)</div>
-                <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{feature.drillingType || '-'}</div>
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feature.drillingType', 'نوع الحفر (Drilling type)')}</div>
+                <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{translateDynamic(feature.drillingType || '') || '-'}</div>
               </div>
 
               {/* المقاول / CONTRACTOR */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">المقاول (CONTRACTOR)</div>
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feature.contractor', 'المقاول (CONTRACTOR)')}</div>
                 <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{feature.contractor || '-'}</div>
               </div>
 
               {/* طول القطاع / SHAPE_Length */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">الطول الميداني (SHAPE_Length)</div>
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feature.length', 'الطول الميداني (SHAPE_Length)')}</div>
                 <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">
-                  {feature.lengthMeters !== undefined ? `${feature.lengthMeters} متر` : '-'}
+                  {feature.lengthMeters !== undefined ? `${feature.lengthMeters} ${t('dash.meters', 'متر')}` : '-'}
                 </div>
               </div>
 
               {/* اسم المشروع / PROJECTNAME */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80 sm:col-span-2">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">اسم المشروع (PROJECTNAME)</div>
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feature.projectName', 'اسم المشروع (PROJECTNAME)')}</div>
                 <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{feature.kmlProjectName || '-'}</div>
               </div>
 
               {/* رقم المشروع / PROJECTID */}
               <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">رقم المشروع (PROJECTID)</div>
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{t('feature.projectId', 'رقم المشروع (PROJECTID)')}</div>
                 <div className="text-xs font-bold text-slate-900 dark:text-white mt-0.5">{feature.kmlProjectId || '-'}</div>
               </div>
 
@@ -343,7 +345,7 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
 
           {feature.description && (
             <div className="p-4 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400">
-              <span className="font-bold text-slate-800 dark:text-slate-200">ملاحظات الوصف: </span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">{t('feature.desc', 'ملاحظات الوصف: ')}</span>
               {feature.description}
             </div>
           )}
@@ -359,13 +361,13 @@ export const FeatureDetailsModal: React.FC<FeatureDetailsModalProps> = ({ featur
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-xs transition-colors flex items-center gap-1.5"
           >
             <Navigation className="w-3.5 h-3.5" />
-            فتح بالخريطة
+            {t('feature.openInMap', 'فتح بالخريطة')}
           </a>
           <button
             onClick={onClose}
             className="px-5 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-white font-bold rounded-lg text-xs transition-colors cursor-pointer"
           >
-            إغلاق
+            {t('common.close', 'إغلاق')}
           </button>
         </div>
 

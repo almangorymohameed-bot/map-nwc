@@ -52,8 +52,10 @@ import {
   Bell,
   Sun,
   Moon,
-  History
+  History,
+  Globe
 } from 'lucide-react';
+import { useLanguage } from './utils/i18n';
 
 // Helper to determine the actual effective scope of a project (resolving any data classification discrepancies)
 export const getActualProjectScope = (proj: Project): string => {
@@ -321,6 +323,8 @@ export const isNotificationAllowed = (
 };
 
 export default function App() {
+  const { language, toggleLanguage, t, translateDynamic, isRtl } = useLanguage();
+
   // 0. Dark Mode State & Global Class Sync
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return localStorage.getItem('water_maps_dark_mode') === 'true';
@@ -1561,15 +1565,29 @@ export default function App() {
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-600/10 rounded-full blur-3xl pointer-events-none"></div>
         <div className="w-full max-w-md bg-white border border-slate-200/80 rounded-3xl shadow-2xl p-6 md:p-8 space-y-6 relative z-10">
+          
+          {/* Top Language Toggle Button on Login */}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-extrabold flex items-center gap-1.5 cursor-pointer shadow-2xs transition-all"
+              title={language === 'ar' ? 'Switch to English' : 'التبديل إلى العربية'}
+            >
+              <Globe className="h-3.5 w-3.5 text-blue-600" />
+              <span>{t('app.switchLang')}</span>
+            </button>
+          </div>
+
           <div className="text-center space-y-3">
             <div className="mx-auto flex justify-center pb-2">
               <NWCLogo size="lg" className="h-20 w-auto" />
             </div>
             <div>
               <span className="px-2.5 py-0.5 text-[9.5px] tracking-wide font-extrabold text-blue-800 bg-blue-50 rounded-full uppercase border border-blue-100">
-                   • 
+                NWC GIS PLATFORM • {language === 'ar' ? 'شركة المياه الوطنية' : 'National Water Company'}
               </span>
-              <h2 className="text-base font-extrabold text-slate-900 mt-2">الخرائط التفاعلية </h2>
+              <h2 className="text-base font-extrabold text-slate-900 mt-2">{t('login.title')}</h2>
             </div>
           </div>
 
@@ -1580,29 +1598,29 @@ export default function App() {
           )}
 
           <div className="flex bg-slate-100 p-1 rounded-2xl border border-slate-200">
-            <button onClick={() => { setLoginTab('nwc'); setLoginError(''); }} className={`flex-1 text-center py-2 rounded-xl text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 ${loginTab === 'nwc' ? 'bg-white text-blue-700 shadow-md border' : 'text-slate-500'}`}><Mail className="h-4 w-4" /><span>موظفو NWC</span></button>
-            <button onClick={() => { setLoginTab('admin'); setLoginError(''); }} className={`flex-1 text-center py-2 rounded-xl text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 ${loginTab === 'admin' ? 'bg-white text-blue-700 shadow-md border' : 'text-slate-500'}`}><Lock className="h-4 w-4" /><span>مدير النظام</span></button>
+            <button onClick={() => { setLoginTab('nwc'); setLoginError(''); }} className={`flex-1 text-center py-2 rounded-xl text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 ${loginTab === 'nwc' ? 'bg-white text-blue-700 shadow-md border' : 'text-slate-500'}`}><Mail className="h-4 w-4" /><span>{t('login.nwcEmployees')}</span></button>
+            <button onClick={() => { setLoginTab('admin'); setLoginError(''); }} className={`flex-1 text-center py-2 rounded-xl text-xs font-extrabold cursor-pointer flex items-center justify-center gap-1.5 ${loginTab === 'admin' ? 'bg-white text-blue-700 shadow-md border' : 'text-slate-500'}`}><Lock className="h-4 w-4" /><span>{t('login.adminLogin')}</span></button>
           </div>
 
           {loginTab === 'nwc' ? (
             <form onSubmit={handleNwcSubmit} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700 block">البريد الإلكتروني للشركة:</label>
+                <label className="text-[11px] font-bold text-slate-700 block">{t('login.emailLabel')}</label>
                 <input type="email" required value={nwcEmail} onChange={e => setNwcEmail(e.target.value)} placeholder="username@nwc.com.sa" className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none text-slate-800 font-mono text-left" dir="ltr" />
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700 block">كلمة المرور الخاصة بحسابك:</label>
+                <label className="text-[11px] font-bold text-slate-700 block">{t('login.passwordLabel')}</label>
                 <input type="password" required value={nwcPassword} onChange={e => setNwcPassword(e.target.value)} placeholder="••••••••" className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none text-slate-800 font-mono text-center tracking-widest" />
               </div>
-              <button type="submit" className="w-full mt-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs py-3.5 px-4 rounded-xl shadow-md cursor-pointer flex items-center justify-center gap-2"><span>التحقق والدخول للبوابة الجغرافية</span><Compass className="h-4 w-4" /></button>
+              <button type="submit" className="w-full mt-2 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xs py-3.5 px-4 rounded-xl shadow-md cursor-pointer flex items-center justify-center gap-2"><span>{t('login.enterPortal')}</span><Compass className="h-4 w-4" /></button>
             </form>
           ) : (
             <form onSubmit={handleAdminSubmit} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-[11px] font-bold text-slate-700 block">رمز المرور الأمني للمشرف العام:</label>
+                <label className="text-[11px] font-bold text-slate-700 block">{t('login.adminPassLabel')}</label>
                 <input type="password" required value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="••••••••" className="w-full text-xs p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none text-slate-800 font-mono text-center tracking-widest" />
               </div>
-              <button type="submit" className="w-full mt-2 bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs py-3.5 px-4 rounded-xl shadow-md cursor-pointer flex items-center justify-center gap-2"><span>دخول لوحة تحكم الصلاحيات</span><Key className="h-4 w-4" /></button>
+              <button type="submit" className="w-full mt-2 bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs py-3.5 px-4 rounded-xl shadow-md cursor-pointer flex items-center justify-center gap-2"><span>{t('login.enterAdmin')}</span><Key className="h-4 w-4" /></button>
             </form>
           )}
         </div>
@@ -1618,16 +1636,27 @@ export default function App() {
             <div className="flex items-center gap-3">
               <NWCLogo size="sm" className="h-11 w-auto" />
               <div>
-                <h1 className="text-sm font-extrabold tracking-tight text-slate-900 dark:text-white">الخرائط التفاعلية </h1>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium"> </p>
+                <h1 className="text-sm font-extrabold tracking-tight text-slate-900 dark:text-white">{t('app.title')}</h1>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">{t('app.subtitle')}</p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3 relative">
               <div className="hidden sm:block text-right">
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold block">المستخدم الحالي</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold block">{t('app.currentUser')}</span>
                 <span className="text-xs text-slate-800 dark:text-slate-200 font-extrabold">{currentUser.name}</span>
               </div>
+
+              {/* Language Switcher Button */}
+              <button
+                type="button"
+                onClick={toggleLanguage}
+                className="px-2.5 py-2 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-2xs"
+                title={language === 'ar' ? 'Switch to English' : 'التبديل إلى العربية'}
+              >
+                <Globe className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <span className="font-extrabold text-blue-700 dark:text-blue-300">{t('app.switchLang')}</span>
+              </button>
 
               {/* Dark Mode Toggle Switch Button */}
               <button
@@ -1638,17 +1667,17 @@ export default function App() {
                     ? 'bg-slate-800 border-slate-700 text-amber-400 hover:bg-slate-700 shadow-2xs'
                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-2xs'
                 }`}
-                title={darkMode ? 'التبديل إلى الوضع النهاري' : 'التبديل إلى الوضع الليلي'}
+                title={darkMode ? t('app.switchToLight') : t('app.switchToDark')}
               >
                 {darkMode ? (
                   <>
                     <Sun className="h-4 w-4 text-amber-400 fill-amber-400" />
-                    <span className="hidden sm:inline text-amber-300">نهاري ☀️</span>
+                    <span className="hidden sm:inline text-amber-300">{t('app.lightMode')}</span>
                   </>
                 ) : (
                   <>
                     <Moon className="h-4 w-4 text-slate-600 fill-slate-200" />
-                    <span className="hidden sm:inline">ليلي 🌙</span>
+                    <span className="hidden sm:inline">{t('app.darkMode')}</span>
                   </>
                 )}
               </button>
@@ -1660,27 +1689,27 @@ export default function App() {
                 <button type="button" onClick={() => setShowNotificationsDropdown(!showNotificationsDropdown)} className={`p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-center relative ${showNotificationsDropdown ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-200 dark:border-blue-800 text-blue-600 dark:text-blue-400' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}><Bell className="h-4 w-4" />{unreadNotificationsCount > 0 && (<span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[9px] font-extrabold h-4 w-4 rounded-full flex items-center justify-center animate-bounce">{unreadNotificationsCount}</span>)}</button>
 
                 {showNotificationsDropdown && (
-                  <div className="absolute left-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 overflow-hidden text-right">
+                  <div className={`absolute ${isRtl ? 'left-0' : 'right-0'} mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 overflow-hidden`}>
                     <div className="p-3.5 bg-slate-50 dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                      <div className="flex items-center gap-2"><Bell className="h-4 w-4 text-blue-600 dark:text-blue-400" /><span className="text-xs font-extrabold text-slate-800 dark:text-slate-200">إشعارات المشاريع والشبكات</span></div>
+                      <div className="flex items-center gap-2"><Bell className="h-4 w-4 text-blue-600 dark:text-blue-400" /><span className="text-xs font-extrabold text-slate-800 dark:text-slate-200">{t('notif.title')}</span></div>
                       <div className="flex gap-2 items-center">
                         <button
                           type="button"
                           onClick={() => { setShowNotificationsDropdown(false); setActiveTab('settings'); }}
                           className="text-[10px] text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-300 font-bold cursor-pointer flex items-center gap-1 bg-slate-200/60 dark:bg-slate-700/60 px-2 py-0.5 rounded-lg border border-slate-300/50 dark:border-slate-600/50 transition-all"
-                          title="تحديد أنواع التنبيهات المسموح بها"
+                          title={t('notif.preferences')}
                         >
                           <Sliders className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                          <span>تحديد التفضيلات</span>
+                          <span>{t('notif.preferences')}</span>
                         </button>
-                        {unreadNotificationsCount > 0 && (<button type="button" onClick={handleMarkAllAsRead} className="text-[10px] text-blue-600 dark:text-blue-400 font-bold cursor-pointer">تحديد الكل كمقروء</button>)}
-                        {notifications.length > 0 && (<button type="button" onClick={handleClearNotifications} className="text-[10px] text-slate-400 hover:text-rose-600 font-bold cursor-pointer">مسح الكل</button>)}
+                        {unreadNotificationsCount > 0 && (<button type="button" onClick={handleMarkAllAsRead} className="text-[10px] text-blue-600 dark:text-blue-400 font-bold cursor-pointer">{t('notif.markAllRead')}</button>)}
+                        {notifications.length > 0 && (<button type="button" onClick={handleClearNotifications} className="text-[10px] text-slate-400 hover:text-rose-600 font-bold cursor-pointer">{t('notif.clearAll')}</button>)}
                       </div>
                     </div>
 
                     <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
                       {groupedNotifications.length === 0 ? (
-                        <div className="p-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2"><Bell className="h-8 w-8 text-slate-200 dark:text-slate-700" /><span>لا توجد إشعارات نشطة حالياً</span></div>
+                        <div className="p-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2"><Bell className="h-8 w-8 text-slate-200 dark:text-slate-700" /><span>{t('notif.empty')}</span></div>
                       ) : (
                         groupedNotifications.map(notif => (
                           <div key={notif.id} onClick={() => handleNotificationClick(notif)} className={`p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors cursor-pointer flex gap-3 items-start ${!notif.read ? 'bg-blue-50/20 dark:bg-blue-950/30' : ''}`}>
@@ -1688,16 +1717,16 @@ export default function App() {
                             <div className="flex-1 min-w-0 space-y-1">
                               <div className="flex items-center justify-between gap-1">
                                 <p className="text-xs text-slate-800 dark:text-slate-200 font-extrabold truncate flex items-center gap-1.5">
-                                  <span>{notif.projectName ? `مشروع: ${notif.projectName}` : 'تحديث مشروع'}</span>
+                                  <span>{notif.projectName ? `${t('list.project')}: ${notif.projectName}` : t('notif.title')}</span>
                                   {(notif.type === 'change_detected' || notif.message?.includes('تحديث جديد')) && (
                                     <span className="bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 font-black text-[9px] px-1.5 py-0.2 rounded border border-amber-300 dark:border-amber-700 shrink-0">
-                                      ✨ يوجد تحديث جديد
+                                      {t('notif.newUpdate')}
                                     </span>
                                   )}
                                 </p>
                                 {notif.groupedCount && notif.groupedCount > 1 ? (
                                   <span className="bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-extrabold text-[9.5px] px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800 shrink-0 flex items-center gap-0.5">
-                                    <span>×{notif.groupedCount} تحديثات</span>
+                                    <span>×{notif.groupedCount} {t('notif.updates')}</span>
                                   </span>
                                 ) : null}
                               </div>
@@ -1707,10 +1736,10 @@ export default function App() {
                                 <div className="flex items-center gap-1.5">
                                   {notif.groupedCount && notif.groupedCount > 1 ? (
                                     <span className="bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 px-1.5 py-0.2 rounded font-bold text-[9px]">
-                                      مجمعة ({notif.groupedCount})
+                                      {t('notif.grouped')} ({notif.groupedCount})
                                     </span>
                                   ) : null}
-                                  <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.2 rounded font-medium text-[9px]">{notif.region || notif.scope}</span>
+                                  <span className="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.2 rounded font-medium text-[9px]">{translateDynamic(notif.region) || translateDynamic(notif.scope)}</span>
                                 </div>
                               </div>
                             </div>
@@ -1723,14 +1752,14 @@ export default function App() {
                 )}
               </div>
 
-              <button onClick={handleLogout} className="p-2 text-rose-600 hover:text-white bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 dark:hover:bg-rose-600 border border-rose-100 dark:border-rose-900 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"><LogOut className="h-4 w-4" /><span className="hidden sm:inline">تسجيل الخروج</span></button>
+              <button onClick={handleLogout} className="p-2 text-rose-600 hover:text-white bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-600 dark:hover:bg-rose-600 border border-rose-100 dark:border-rose-900 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"><LogOut className="h-4 w-4" /><span className="hidden sm:inline">{t('app.logout')}</span></button>
             </div>
           </div>
         </div>
       </header>
 
       {!isOnline && (
-        <div className="bg-amber-600 text-white text-xs px-6 py-2.5 font-bold text-center flex items-center justify-center gap-2"><span>وضع تصفح غير متصل بالإنترنت نشط (Offline)</span></div>
+        <div className="bg-amber-600 text-white text-xs px-6 py-2.5 font-bold text-center flex items-center justify-center gap-2"><span>{t('app.offline')}</span></div>
       )}
 
       {successNotification && (
@@ -1742,24 +1771,24 @@ export default function App() {
           <div className="flex items-center gap-3 relative z-10">
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></div>
             <div>
-              <div className="text-xs text-slate-200">مرحباً: <span className="font-bold text-blue-400">{currentUser.name}</span> ({currentUser.role === 'admin' ? 'صلاحية مدير النظام الكاملة' : 'محرر خرائط'})</div>
-              <div className="text-[10px] text-slate-400 font-medium mt-0.5">الوصول المسموح: <span className="text-slate-300">المناطق [ {currentUser.allowedRegions.join('، ')} ]</span></div>
+              <div className="text-xs text-slate-200">{language === 'ar' ? 'مرحباً' : 'Welcome'}: <span className="font-bold text-blue-400">{currentUser.name}</span> ({currentUser.role === 'admin' ? t('app.fullAdminAccess') : t('app.editorRole')})</div>
+              <div className="text-[10px] text-slate-400 font-medium mt-0.5">{t('app.allowedAccess')}: <span className="text-slate-300">{t('app.regions')} [ {currentUser.allowedRegions.map(r => translateDynamic(r)).join(', ')} ]</span></div>
             </div>
           </div>
           <div className="flex items-center gap-2 relative z-10">
-            {canEditProjects && (<button onClick={handleStartAddNewProject} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm cursor-pointer"><Plus className="h-4 w-4" /><span>إدراج مشروع خارطة جديد</span></button>)}
+            {canEditProjects && (<button onClick={handleStartAddNewProject} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm cursor-pointer"><Plus className="h-4 w-4" /><span>{t('app.addNewProject')}</span></button>)}
           </div>
         </div>
 
         <div className="border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-2xs transition-colors">
           <div className="flex gap-1.5 overflow-x-auto w-full sm:w-auto">
             {[
-              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers', 'changelog']).includes('maps')) ? [{ id: 'maps', label: 'الخرائط التفاعلية', icon: MapIcon }] : []),
-              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers', 'changelog']).includes('stats')) ? [{ id: 'stats', label: ' الإحصائيات ', icon: Layers }] : []),
-              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers', 'changelog']).includes('layers')) ? [{ id: 'layers', label: 'طبقات المشاريع', icon: Compass }] : []),
-              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers', 'changelog']).includes('changelog')) ? [{ id: 'changelog', label: 'سجل التغييرات', icon: History }] : []),
-              ...(currentUser.role === 'admin' ? [{ id: 'users', label: 'إدارة وتوزيع صلاحيات الحسابات', icon: Users }] : []),
-              { id: 'settings', label: 'إعدادات الإشعارات', icon: Sliders }
+              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers', 'changelog']).includes('maps')) ? [{ id: 'maps', label: t('tab.maps'), icon: MapIcon }] : []),
+              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers', 'changelog']).includes('stats')) ? [{ id: 'stats', label: t('tab.stats'), icon: Layers }] : []),
+              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers', 'changelog']).includes('layers')) ? [{ id: 'layers', label: t('tab.layers'), icon: Compass }] : []),
+              ...((currentUser.role === 'admin' || (currentUser.allowedTabs || ['maps', 'stats', 'layers', 'changelog']).includes('changelog')) ? [{ id: 'changelog', label: t('tab.changelog'), icon: History }] : []),
+              ...(currentUser.role === 'admin' ? [{ id: 'users', label: t('tab.users'), icon: Users }] : []),
+              { id: 'settings', label: t('tab.settings'), icon: Sliders }
             ].map(tab => {
               const Icon = tab.icon;
               return (
@@ -1773,8 +1802,8 @@ export default function App() {
           {activeTab === 'maps' && (
             <div className="flex flex-col space-y-4">
               <div className="xl:hidden bg-white dark:bg-slate-900 p-1 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex">
-                <button type="button" onClick={() => setMobileViewMode('map')} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileViewMode === 'map' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400'}`}><MapIcon className="h-3.5 w-3.5 shrink-0" /><span>الخارطة التفاعلية</span></button>
-                <button type="button" onClick={() => setMobileViewMode('list')} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileViewMode === 'list' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400'}`}><FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /><span>قائمة المشاريع ({visibleProjects.length})</span></button>
+                <button type="button" onClick={() => setMobileViewMode('map')} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileViewMode === 'map' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400'}`}><MapIcon className="h-3.5 w-3.5 shrink-0" /><span>{t('tab.interactiveMap')}</span></button>
+                <button type="button" onClick={() => setMobileViewMode('list')} className={`flex-1 text-center py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${mobileViewMode === 'list' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400'}`}><FileSpreadsheet className="h-3.5 w-3.5 shrink-0" /><span>{t('tab.projectList')} ({visibleProjects.length})</span></button>
               </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
@@ -1783,7 +1812,15 @@ export default function App() {
                 </div>
 
                 <div className={`xl:col-span-5 flex flex-col ${mobileViewMode === 'list' ? 'block' : 'hidden xl:flex'}`}>
-                  <div className="bg-white dark:bg-slate-900 p-4 rounded-t-2xl border dark:border-slate-800 flex items-center justify-between"><div className="flex items-center gap-2"><FileSpreadsheet className="h-4 w-4 text-slate-500 dark:text-slate-400" /><span className="text-xs font-bold text-slate-800 dark:text-slate-200">قائمة المشاريع</span></div><span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded font-bold">{filteredProjects.length} عدد المشاريع</span></div>
+                  <div className="bg-white dark:bg-slate-900 p-4 rounded-t-2xl border dark:border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{t('list.projectListTitle')}</span>
+                    </div>
+                    <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded font-bold">
+                      {isRtl ? `${filteredProjects.length} ${t('list.projectCount')}` : `${t('list.projectCount')}: ${filteredProjects.length}`}
+                    </span>
+                  </div>
                   <div className="bg-slate-50/50 dark:bg-slate-950/50 p-4 border dark:border-slate-800 rounded-b-2xl max-h-[580px] overflow-y-auto w-full">
                     <ProjectList 
                       projects={visibleProjects} 

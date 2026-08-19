@@ -8,6 +8,7 @@ import { Project, User } from '../types';
 import { Droplet, Wind, RefreshCw, CheckCircle2, AlertTriangle, Building2, MapPin, Layers, BarChart3, Globe, Sparkles, Ruler, SlidersHorizontal, Lock } from 'lucide-react';
 import { MyMapsAnalysisPanel } from './MyMapsAnalysisPanel';
 import { ProjectLengthsDashboard } from './ProjectLengthsDashboard';
+import { useLanguage } from '../utils/i18n';
 
 interface DashboardStatsProps {
   projects: Project[];
@@ -18,6 +19,7 @@ interface DashboardStatsProps {
 }
 
 export function DashboardStats({ projects, selectedProject, onSelectProject, isAdmin, currentUser }: DashboardStatsProps) {
+  const { t, translateDynamic, formatNumber, isRtl } = useLanguage();
   // Compute allowed sub-tabs based on currentUser permissions
   const allowedSubTabs = useMemo(() => {
     if (!currentUser) return ['lengths', 'mymaps', 'general'];
@@ -129,10 +131,10 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
           <Lock className="h-6 w-6" />
         </div>
         <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">
-          عفواً، لا تملك صلاحية الوصول إلى أقسام الإحصائيات
+          {t('dash.noAccessTitle')}
         </h3>
         <p className="text-xs text-slate-500 max-w-md mx-auto">
-          تم تقييد الوصول إلى كافة الأقسام الفرعية لوحة الإحصائيات لحسابك الحالي. يرجى التواصل مع مسؤول النظام لمنحك الصلاحيات المناسبة.
+          {t('dash.noAccessDesc')}
         </p>
       </div>
     );
@@ -154,7 +156,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
               }`}
             >
               <Ruler className="h-4 w-4 text-amber-300" />
-              <span>حصر الأطوال والرخص بالسجمنت 📏</span>
+              <span>{t('dash.subtabLengths')}</span>
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
             </button>
           )}
@@ -170,7 +172,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
               }`}
             >
               <Globe className="h-4 w-4 text-cyan-400" />
-              <span>تحليل الخرائط الجغرافية (My Maps) 📊</span>
+              <span>{t('dash.subtabMyMaps')}</span>
             </button>
           )}
 
@@ -185,7 +187,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
               }`}
             >
               <BarChart3 className="h-4 w-4" />
-              <span>إحصائيات المشاريع العامة 📈</span>
+              <span>{t('dash.subtabGeneral')}</span>
             </button>
           )}
         </div>
@@ -214,7 +216,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
             <div className="flex items-center justify-between">
               <span className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <span>فرز وتصفية الإحصائيات العامة حسب حالة/مرحلة المشروع:</span>
+                <span>{t('dash.filterByStatus')}</span>
               </span>
               {selectedGeneralStatus !== 'all' && (
                 <button
@@ -222,7 +224,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
                   onClick={() => setSelectedGeneralStatus('all')}
                   className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
                 >
-                  عرض جميع الحالات
+                  {t('dash.showAllStatuses')}
                 </button>
               )}
             </div>
@@ -237,7 +239,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
                     : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                 }`}
               >
-                الكل ({projects.length})
+                {t('dash.statusAll')} ({projects.length})
               </button>
 
               <button
@@ -249,7 +251,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
                     : 'bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-400 border border-slate-200 dark:border-slate-700 hover:bg-amber-50'
                 }`}
               >
-                ⚡ جاري التنفيذ
+                {t('dash.statusOngoing')}
               </button>
 
               <button
@@ -261,7 +263,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
                     : 'bg-white dark:bg-slate-900 text-blue-700 dark:text-blue-400 border border-slate-200 dark:border-slate-700 hover:bg-blue-50'
                 }`}
               >
-                📝 مسلم ابتدائي
+                {t('dash.statusHandover')}
               </button>
 
               <button
@@ -273,7 +275,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
                     : 'bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-400 border border-slate-200 dark:border-slate-700 hover:bg-indigo-50'
                 }`}
               >
-                ⏳ جاري الاستلام الابتدائي
+                {t('dash.statusReceiving')}
               </button>
 
               <button
@@ -285,7 +287,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
                     : 'bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 hover:bg-emerald-50'
                 }`}
               >
-                ✅ مكتمل
+                {t('dash.statusCompleted')}
               </button>
 
               <button
@@ -297,7 +299,7 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
                     : 'bg-white dark:bg-slate-900 text-rose-700 dark:text-rose-400 border border-slate-200 dark:border-slate-700 hover:bg-rose-50'
                 }`}
               >
-                ⚠️ مسحوب
+                {t('dash.statusWithdrawn')}
               </button>
 
               <button
@@ -309,137 +311,137 @@ export function DashboardStats({ projects, selectedProject, onSelectProject, isA
                     : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                 }`}
               >
-                🛑 معلق / متوقف
+                {t('dash.statusSuspended')}
               </button>
             </div>
           </div>
 
           {/* Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Projects */}
-        <div id="stat-total" className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs flex items-center justify-between transition-all hover:shadow-md">
-          <div className="space-y-1">
-            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">إجمالي المشاريع المتاحة</span>
-            <h3 className="text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">{total}</h3>
-            <span className="text-xs text-slate-400 dark:text-slate-500">حسب صلاحيات حسابك الحالي</span>
-          </div>
-          <div className="p-3 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-2xl">
-            <Layers className="h-6 w-6" />
-          </div>
-        </div>
-
-        {/* Water Projects */}
-        <div id="stat-water" className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs flex items-center justify-between transition-all hover:shadow-md">
-          <div className="space-y-1">
-            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">شبكات ومشاريع المياه</span>
-            <h3 className="text-3xl font-bold text-cyan-600 dark:text-cyan-400 tracking-tight">{waterCount}</h3>
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-600 dark:bg-cyan-400"></span>
-              <span>نسبة مئوية: %{total > 0 ? ((waterCount / total) * 100).toFixed(2) : '0.00'}</span>
+            {/* Total Projects */}
+            <div id="stat-total" className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs flex items-center justify-between transition-all hover:shadow-md">
+              <div className="space-y-1">
+                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('dash.totalAvailable')}</span>
+                <h3 className="text-3xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">{formatNumber(total)}</h3>
+                <span className="text-xs text-slate-400 dark:text-slate-500">{t('dash.accordingToPerms')}</span>
+              </div>
+              <div className="p-3 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-2xl">
+                <Layers className="h-6 w-6" />
+              </div>
             </div>
-          </div>
-          <div className="p-3 bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 rounded-2xl">
-            <Droplet className="h-6 w-6" />
-          </div>
-        </div>
 
-        {/* Sewage Projects */}
-        <div id="stat-sewage" className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs flex items-center justify-between transition-all hover:shadow-md">
-          <div className="space-y-1">
-            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">شبكات ومحطات الرفع والصرف</span>
-            <h3 className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 tracking-tight">{sewageCount}</h3>
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400"></span>
-              <span>نسبة مئوية: %{total > 0 ? ((sewageCount / total) * 100).toFixed(2) : '0.00'}</span>
-            </div>
-          </div>
-          <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-2xl">
-            <Wind className="h-6 w-6 animate-pulse" />
-          </div>
-        </div>
-
-        {/* Ongoing projects */}
-        <div id="stat-ongoing" className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs flex items-center justify-between transition-all hover:shadow-md">
-          <div className="space-y-1">
-            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">مشاريع جاري تنفيذها</span>
-            <h3 className="text-3xl font-bold text-amber-600 dark:text-amber-400 tracking-tight">{currentCount}</h3>
-            <div className="flex items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">{initialHandoverCount} مكتمل/مُسلم</span>
-              <span className="text-rose-600 dark:text-rose-400 font-medium">{withdrawnCount} معلق/مسحوب</span>
-            </div>
-          </div>
-          <div className="p-3 bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 rounded-2xl">
-            <RefreshCw className="h-6 w-6" />
-          </div>
-        </div>
-      </div>
-
-      {/* Breakdowns section */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Custom regional distribution chart */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs lg:col-span-7 space-y-4">
-          <h4 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            التوزيع الجغرافي للمشاريع المفوضة لك
-          </h4>
-          
-          <div className="space-y-3 pt-2">
-            {Object.entries(regionsMap).map(([regionName, count]) => {
-              const pet = total > 0 ? (count / total) * 100 : 0;
-              return (
-                <div key={regionName} className="space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-slate-700 dark:text-slate-200">{regionName}</span>
-                    <span className="text-slate-500 dark:text-slate-400 font-medium">{count} مشروع ({pet.toFixed(2)}%)</span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                    <div 
-                      className="bg-blue-500 dark:bg-blue-400 h-full rounded-full transition-all duration-500" 
-                      style={{ width: `${pet}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-            
-            {Object.keys(regionsMap).length === 0 && (
-              <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-8">لا يوجد بيانات توزيع متاحة</p>
-            )}
-          </div>
-        </div>
-
-        {/* Contractor Leaderboard */}
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs lg:col-span-5 space-y-4">
-          <h4 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            المقاولين الأكثر تنفيذاً للمشاريع
-          </h4>
-
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {topContractors.map(([contractor, count], idx) => (
-              <div key={contractor} className="flex items-center justify-between py-3 first:pt-1 last:pb-1">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex items-center justify-center w-5 h-5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded-full">
-                    {idx + 1}
-                  </span>
-                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[200px]" title={contractor}>
-                    {contractor}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-100 dark:border-slate-700 text-[11px] px-2 py-0.5 rounded-md font-bold">
-                    {count} مشروع
-                  </span>
+            {/* Water Projects */}
+            <div id="stat-water" className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs flex items-center justify-between transition-all hover:shadow-md">
+              <div className="space-y-1">
+                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('dash.waterProjects')}</span>
+                <h3 className="text-3xl font-bold text-cyan-600 dark:text-cyan-400 tracking-tight">{formatNumber(waterCount)}</h3>
+                <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-600 dark:bg-cyan-400"></span>
+                  <span>{t('dash.percentage')} {total > 0 ? ((waterCount / total) * 100).toFixed(2) : '0.00'}%</span>
                 </div>
               </div>
-            ))}
+              <div className="p-3 bg-cyan-50 dark:bg-cyan-950/60 text-cyan-600 dark:text-cyan-400 rounded-2xl">
+                <Droplet className="h-6 w-6" />
+              </div>
+            </div>
 
-            {topContractors.length === 0 && (
-              <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-8">لا يوجد مقاولين لتصنيفهم</p>
-            )}
+            {/* Sewage Projects */}
+            <div id="stat-sewage" className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs flex items-center justify-between transition-all hover:shadow-md">
+              <div className="space-y-1">
+                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('dash.sewageProjects')}</span>
+                <h3 className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 tracking-tight">{formatNumber(sewageCount)}</h3>
+                <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 dark:bg-emerald-400"></span>
+                  <span>{t('dash.percentage')} {total > 0 ? ((sewageCount / total) * 100).toFixed(2) : '0.00'}%</span>
+                </div>
+              </div>
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-2xl">
+                <Wind className="h-6 w-6 animate-pulse" />
+              </div>
+            </div>
+
+            {/* Ongoing projects */}
+            <div id="stat-ongoing" className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs flex items-center justify-between transition-all hover:shadow-md">
+              <div className="space-y-1">
+                <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{t('dash.ongoingProjects')}</span>
+                <h3 className="text-3xl font-bold text-amber-600 dark:text-amber-400 tracking-tight">{formatNumber(currentCount)}</h3>
+                <div className="flex items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">{formatNumber(initialHandoverCount)} {t('dash.completedOrHandover')}</span>
+                  <span className="text-rose-600 dark:text-rose-400 font-medium">{formatNumber(withdrawnCount)} {t('dash.suspendedOrWithdrawn')}</span>
+                </div>
+              </div>
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 rounded-2xl">
+                <RefreshCw className="h-6 w-6" />
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+
+          {/* Breakdowns section */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Custom regional distribution chart */}
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs lg:col-span-7 space-y-4">
+              <h4 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                {t('dash.geoDistribution')}
+              </h4>
+              
+              <div className="space-y-3 pt-2">
+                {Object.entries(regionsMap).map(([regionName, count]) => {
+                  const pet = total > 0 ? (count / total) * 100 : 0;
+                  return (
+                    <div key={regionName} className="space-y-1.5">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">{translateDynamic(regionName)}</span>
+                        <span className="text-slate-500 dark:text-slate-400 font-medium">{formatNumber(count)} {t('dash.project')} ({pet.toFixed(2)}%)</span>
+                      </div>
+                      <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-blue-500 dark:bg-blue-400 h-full rounded-full transition-all duration-500" 
+                          style={{ width: `${pet}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+                
+                {Object.keys(regionsMap).length === 0 && (
+                  <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-8">{t('dash.noGeoData')}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Contractor Leaderboard */}
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs lg:col-span-5 space-y-4">
+              <h4 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                {t('dash.topContractors')}
+              </h4>
+
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {topContractors.map(([contractor, count], idx) => (
+                  <div key={contractor} className="flex items-center justify-between py-3 first:pt-1 last:pb-1">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex items-center justify-center w-5 h-5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded-full">
+                        {formatNumber(idx + 1)}
+                      </span>
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[200px]" title={contractor}>
+                        {translateDynamic(contractor)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-100 dark:border-slate-700 text-[11px] px-2 py-0.5 rounded-md font-bold">
+                        {formatNumber(count)} {t('dash.project')}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+
+                {topContractors.length === 0 && (
+                  <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-8">{t('dash.noContractors')}</p>
+                )}
+              </div>
+            </div>
+          </div>
         </>
       )}
     </div>

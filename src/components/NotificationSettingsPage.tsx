@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Project } from '../types';
+import { useLanguage } from '../utils/i18n';
 import { getSupabaseClient } from '../utils/supabaseSetup';
 import { 
   Bell, 
@@ -67,6 +68,7 @@ export function NotificationSettingsPage({
   onShowNotification,
   onSendTestNativeNotification
 }: NotificationSettingsPageProps) {
+  const { t, translateDynamic, isRtl, language } = useLanguage();
   const storageKey = `water_maps_notif_settings_${currentUser.id}`;
 
   const [settings, setSettings] = useState<NotificationSettings>(() => {
@@ -99,7 +101,7 @@ export function NotificationSettingsPage({
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
     if (onShowNotification) {
-      onShowNotification('تم تحديث جدول وموعد الفحص المجدول للتقرير اليومي بنجاح');
+      onShowNotification(language === 'en' ? 'Scheduled analysis timing and frequency updated successfully' : 'تم تحديث جدول وموعد الفحص المجدول للتقرير اليومي بنجاح');
     }
   };
 
@@ -108,9 +110,9 @@ export function NotificationSettingsPage({
     runSequentialDailyAutoAnalysis(projects, { forceRun: true }).then(res => {
       if (onShowNotification) {
         if (res.wasCancelled) {
-          onShowNotification(`🛑 تم إيقاف الفحص بطلب منك بعد معالجة ${res.processed} مشروع.`);
+          onShowNotification(language === 'en' ? `🛑 Analysis halted at user request after scanning ${res.processed} projects.` : `🛑 تم إيقاف الفحص بطلب منك بعد معالجة ${res.processed} مشروع.`);
         } else {
-          onShowNotification(`📊 اكتمل الفحص الشامل للمشاريع (تحت بند جاري): تم معالجة ${res.processed} مشروع ورصد ${res.changesFound} تغييرات.`);
+          onShowNotification(language === 'en' ? `📊 Completed batch analysis: ${res.processed} projects scanned, ${res.changesFound} changes detected.` : `📊 اكتمل الفحص الشامل للمشاريع (تحت بند جاري): تم معالجة ${res.processed} مشروع ورصد ${res.changesFound} تغييرات.`);
         }
       }
     });
@@ -121,14 +123,16 @@ export function NotificationSettingsPage({
   const handleSendBroadcastTestNotif = async () => {
     setIsSendingTestNotif(true);
     const supabase = getSupabaseClient();
-    const testMsg = `📢 إشعار تجريبي عام من المهندس (${currentUser.name}): تم التأكد من إتاحة استلام التغيرات لجميع مهندسي ومدراء النظام بنجاح!`;
+    const testMsg = language === 'en'
+      ? `📢 General test broadcast from (${currentUser.name}): Project change notification pipeline operational for all engineers.`
+      : `📢 إشعار تجريبي عام من المهندس (${currentUser.name}): تم التأكد من إتاحة استلام التغيرات لجميع مهندسي ومدراء النظام بنجاح!`;
     
     try {
       if (supabase) {
         await supabase.from('notifications').insert([{
           user_id: 'all',
           project_id: projects[0]?.id || 1,
-          project_name: projects[0]?.name || 'مشروع عام',
+          project_name: projects[0]?.name || (language === 'en' ? 'General Project' : 'مشروع عام'),
           type: 'change_detected',
           message: testMsg,
           created_at: new Date().toISOString()
@@ -136,11 +140,11 @@ export function NotificationSettingsPage({
       }
       
       if (onSendTestNativeNotification) {
-        onSendTestNativeNotification('تجربة الإشعارات العامة 🔔', testMsg);
+        onSendTestNativeNotification(language === 'en' ? 'Broadcast Notification Test 🔔' : 'تجربة الإشعارات العامة 🔔', testMsg);
       }
       
       if (onShowNotification) {
-        onShowNotification('🚀 تم بث الإشعار التجريبي العام لجميع المستخدمين بنجاح!');
+        onShowNotification(language === 'en' ? '🚀 Public test broadcast sent to all users!' : '🚀 تم بث الإشعار التجريبي العام لجميع المستخدمين بنجاح!');
       }
     } catch (err: any) {
       console.error('Test broadcast notification error:', err);
@@ -165,7 +169,7 @@ export function NotificationSettingsPage({
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
     if (onShowNotification) {
-      onShowNotification('تم إحداث تغييرات على إعدادات التنبيهات بنجاح');
+      onShowNotification(language === 'en' ? 'Notification preferences updated successfully' : 'تم إحداث تغييرات على إعدادات التنبيهات بنجاح');
     }
   };
 
@@ -174,23 +178,26 @@ export function NotificationSettingsPage({
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
     if (onShowNotification) {
-      onShowNotification('تم إعادة ضبط الإعدادات للوضع الافتراضي');
+      onShowNotification(language === 'en' ? 'Notification settings reset to defaults' : 'تم إعادة ضبط الإعدادات للوضع الافتراضي');
     }
   };
 
   const handleTestNotification = () => {
     if (onSendTestNativeNotification) {
-      onSendTestNativeNotification('تجربة التنبيهات 🔔', 'هذا تنبيه تجريبي للتأكد من إعدادات الإشعارات الخاصة بك.');
+      onSendTestNativeNotification(
+        language === 'en' ? 'Notification Test 🔔' : 'تجربة التنبيهات 🔔', 
+        language === 'en' ? 'This is a test notification to verify your alert settings.' : 'هذا تنبيه تجريبي للتأكد من إعدادات الإشعارات الخاصة بك.'
+      );
     }
     if (onShowNotification) {
-      onShowNotification('تم إرسال إشعار تجريبي بنجاح 🔔');
+      onShowNotification(language === 'en' ? 'Test notification sent successfully 🔔' : 'تم إرسال إشعار تجريبي بنجاح 🔔');
     }
   };
 
   const favoriteProjectsCount = projects.filter(p => p.isFavorite).length;
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto" id="notification-settings-page">
+    <div className="space-y-6 max-w-5xl mx-auto" id="notification-settings-page" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Header Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-6 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 transform translate-x-8 -translate-y-8 w-48 h-48 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -201,13 +208,13 @@ export function NotificationSettingsPage({
             </div>
             <div>
               <h2 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
-                <span>إعدادات وتفضيلات التنبيهات</span>
+                <span>{t('notifSettings.title')}</span>
                 <span className="bg-blue-500/20 text-blue-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-blue-400/30">
-                  تصفية مخصصة
+                  {language === 'en' ? 'Custom Filter' : 'تصفية مخصصة'}
                 </span>
               </h2>
               <p className="text-xs text-slate-300 mt-1 font-medium">
-                قم بتحديد أنواع التنبيهات التي ترغب باستلامها والتحكم بالنوافذ المنبثقة لتقليل الازدحام في القائمة.
+                {t('notifSettings.subtitle')}
               </p>
             </div>
           </div>
@@ -219,15 +226,15 @@ export function NotificationSettingsPage({
               className="px-3.5 py-2 bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl border border-slate-700 transition-all cursor-pointer flex items-center gap-1.5"
             >
               <RotateCcw className="h-3.5 w-3.5 text-slate-400" />
-              <span>استعادة الافتراضي</span>
+              <span>{t('notifSettings.restoreDefaults')}</span>
             </button>
             <button
               type="button"
               onClick={handleTestNotification}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 border-0"
             >
               <Bell className="h-3.5 w-3.5" />
-              <span>تجربة إشعار</span>
+              <span>{t('notifSettings.testNotification')}</span>
             </button>
           </div>
         </div>
@@ -238,9 +245,9 @@ export function NotificationSettingsPage({
         <div className="bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300 px-4 py-3 rounded-2xl text-xs font-bold flex items-center justify-between animate-fadeIn">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-            <span>تم حفظ التفضيلات الجديدة تلقائياً وستطبق على جميع الإشعارات فوراً.</span>
+            <span>{language === 'en' ? 'Preferences saved and applied immediately.' : 'تم حفظ التفضيلات الجديدة تلقائياً وستطبق على جميع الإشعارات فوراً.'}</span>
           </div>
-          <span className="text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded font-mono">حفظ تلقائي</span>
+          <span className="text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded font-mono">{language === 'en' ? 'Auto-Saved' : 'حفظ تلقائي'}</span>
         </div>
       )}
 
@@ -254,8 +261,8 @@ export function NotificationSettingsPage({
               <Bell className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">أنواع الأحداث المسموحة</h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">حدد أي من أحداث المشاريع ترغب بتلقي تنبيهات عنها</p>
+              <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{t('notifSettings.eventTypes')}</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{t('notifSettings.eventTypesDesc')}</p>
             </div>
           </div>
 
@@ -267,11 +274,11 @@ export function NotificationSettingsPage({
                   <FolderPlus className="h-4 w-4" />
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200">إضافة مشاريع جديدة</div>
-                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">إشعارات عند إدراج خارطة مشروع جديد بالنظام</div>
+                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{t('notifSettings.allowNewProjects')}</div>
+                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">{t('notifSettings.allowNewProjectsDesc')}</div>
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0 mr-2">
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 mx-2">
                 <input
                   type="checkbox"
                   checked={settings.allowNewProjects}
@@ -290,13 +297,13 @@ export function NotificationSettingsPage({
                 </div>
                 <div>
                   <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                    <span>رصد تغيرات وتحديثات الخرائط اليومية</span>
-                    <span className="bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 text-[9px] font-black px-1.5 py-0.2 rounded">موصى به</span>
+                    <span>{t('notifSettings.allowMapChanges')}</span>
+                    <span className="bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 text-[9px] font-black px-1.5 py-0.2 rounded">{language === 'en' ? 'Recommended' : 'موصى به'}</span>
                   </div>
-                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">تنبيهات عند وجود تحديث جديد بأطوال وشبكات الخريطة</div>
+                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">{t('notifSettings.allowMapChangesDesc')}</div>
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0 mr-2">
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 mx-2">
                 <input
                   type="checkbox"
                   checked={settings.allowMapChanges}
@@ -314,11 +321,11 @@ export function NotificationSettingsPage({
                   <FileEdit className="h-4 w-4" />
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200">تعديلات بيانات وصلاحيات المشاريع</div>
-                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">إشعارات عند تغيير المقاول، الاستشاري، أو حالة المشروع</div>
+                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{t('notifSettings.allowProjectEdits')}</div>
+                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">{t('notifSettings.allowProjectEditsDesc')}</div>
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0 mr-2">
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 mx-2">
                 <input
                   type="checkbox"
                   checked={settings.allowProjectEdits}
@@ -339,8 +346,8 @@ export function NotificationSettingsPage({
               <Monitor className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">سلوك التنبيهات والنوافذ المنبثقة</h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">التحكم في النوافذ المنبثقة الخارجية وتصفية النطاق</p>
+              <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{t('notifSettings.behavior')}</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">{t('notifSettings.behaviorDesc')}</p>
             </div>
           </div>
 
@@ -353,17 +360,17 @@ export function NotificationSettingsPage({
                 </div>
                 <div>
                   <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                    <span>التنبيهات المنبثقة بالنظام/السطح</span>
+                    <span>{t('notifSettings.allowNativePush')}</span>
                     {!settings.allowNativePush && (
                       <span className="bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 text-[9px] font-black px-1.5 py-0.2 rounded">
-                        متوقفة
+                        {language === 'en' ? 'Disabled' : 'متوقفة'}
                       </span>
                     )}
                   </div>
-                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">إيقاف النوافذ المنبثقة الخارجية عند عدم الرغبة بالإزعاج</div>
+                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">{t('notifSettings.allowNativePushDesc')}</div>
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0 mr-2">
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 mx-2">
                 <input
                   type="checkbox"
                   checked={settings.allowNativePush}
@@ -382,13 +389,13 @@ export function NotificationSettingsPage({
                 </div>
                 <div>
                   <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                    <span>تنبيهات المشاريع المفضلة ⭐ فقط</span>
-                    <span className="text-[10px] text-slate-400 font-mono">({favoriteProjectsCount} محدد)</span>
+                    <span>{t('notifSettings.onlyFavoriteProjects')}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">({favoriteProjectsCount} {language === 'en' ? 'selected' : 'محدد'})</span>
                   </div>
-                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">استلام تنبيهات حصرياً للمشاريع التي أضفتها لنجمة المفضلات</div>
+                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400">{t('notifSettings.onlyFavoriteProjectsDesc')}</div>
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0 mr-2">
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 mx-2">
                 <input
                   type="checkbox"
                   checked={settings.onlyFavoriteProjects}
@@ -404,7 +411,7 @@ export function NotificationSettingsPage({
               <button
                 type="button"
                 onClick={() => handleToggle('filterByRegion')}
-                className={`p-3 rounded-2xl border text-right transition-all cursor-pointer flex items-center justify-between ${
+                className={`p-3 rounded-2xl border ${isRtl ? 'text-right' : 'text-left'} transition-all cursor-pointer flex items-center justify-between ${
                   settings.filterByRegion 
                     ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300' 
                     : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 text-slate-500'
@@ -413,17 +420,17 @@ export function NotificationSettingsPage({
                 <div>
                   <div className="text-[11px] font-extrabold flex items-center gap-1">
                     <Filter className="h-3 w-3" />
-                    <span>حسب منطقتك</span>
+                    <span>{t('notifSettings.filterByRegion')}</span>
                   </div>
-                  <div className="text-[9.5px] text-slate-400 font-medium">تصفية جغرافية</div>
+                  <div className="text-[9.5px] text-slate-400 font-medium">{language === 'en' ? 'Geographic' : 'تصفية جغرافية'}</div>
                 </div>
-                {settings.filterByRegion ? <Check className="h-4 w-4 text-blue-600" /> : <span className="text-[10px]">إيقاف</span>}
+                {settings.filterByRegion ? <Check className="h-4 w-4 text-blue-600" /> : <span className="text-[10px]">{language === 'en' ? 'Off' : 'إيقاف'}</span>}
               </button>
 
               <button
                 type="button"
                 onClick={() => handleToggle('filterByScope')}
-                className={`p-3 rounded-2xl border text-right transition-all cursor-pointer flex items-center justify-between ${
+                className={`p-3 rounded-2xl border ${isRtl ? 'text-right' : 'text-left'} transition-all cursor-pointer flex items-center justify-between ${
                   settings.filterByScope 
                     ? 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300' 
                     : 'bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 text-slate-500'
@@ -432,11 +439,11 @@ export function NotificationSettingsPage({
                 <div>
                   <div className="text-[11px] font-extrabold flex items-center gap-1">
                     <Filter className="h-3 w-3" />
-                    <span>حسب قطاعك (مياه/صرف)</span>
+                    <span>{t('notifSettings.filterByScope')}</span>
                   </div>
-                  <div className="text-[9.5px] text-slate-400 font-medium">تصفية القطاع</div>
+                  <div className="text-[9.5px] text-slate-400 font-medium">{language === 'en' ? 'Scope' : 'تصفية القطاع'}</div>
                 </div>
-                {settings.filterByScope ? <Check className="h-4 w-4 text-blue-600" /> : <span className="text-[10px]">إيقاف</span>}
+                {settings.filterByScope ? <Check className="h-4 w-4 text-blue-600" /> : <span className="text-[10px]">{language === 'en' ? 'Off' : 'إيقاف'}</span>}
               </button>
             </div>
 
@@ -455,13 +462,13 @@ export function NotificationSettingsPage({
               </div>
               <div>
                 <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
-                  <span>إدارة التقرير اليومي الشامل وحفظ استهلاك Vercel</span>
+                  <span>{t('notifSettings.adminAutoAnalysis')}</span>
                   <span className="bg-amber-400/20 text-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-400/30">
-                    خاص بمدير النظام
+                    {language === 'en' ? 'Admin Only' : 'خاص بمدير النظام'}
                   </span>
                 </h3>
                 <p className="text-[11px] text-indigo-200/80 font-medium mt-0.5">
-                  تم إيقاف الفحص التلقائي بالخلفية لجميع المستخدمين للحفاظ على رصيد طلبات Vercel (Edge Requests). يتم تشغيل الفحص فقط بطلب من مدير النظام.
+                  {t('notifSettings.adminAutoAnalysisDesc')}
                 </p>
               </div>
             </div>
@@ -471,21 +478,21 @@ export function NotificationSettingsPage({
                 type="button"
                 onClick={handleManualBatchTrigger}
                 disabled={autoProgress.isRunning}
-                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 border-0"
               >
                 <RefreshCw className={`h-3.5 w-3.5 text-cyan-300 ${autoProgress.isRunning ? 'animate-spin' : ''}`} />
-                <span>{autoProgress.isRunning ? 'جاري الفحص الآن...' : 'تحليل المشاريع (تحت بند جاري) 🚀'}</span>
+                <span>{autoProgress.isRunning ? (language === 'en' ? 'Analyzing...' : 'جاري الفحص الآن...') : (language === 'en' ? 'Analyze Ongoing Projects 🚀' : 'تحليل المشاريع (تحت بند جاري) 🚀')}</span>
               </button>
 
               {autoProgress.isRunning && (
                 <button
                   type="button"
                   onClick={stopDailyAutoAnalysis}
-                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 animate-pulse"
-                  title="إيقاف التقرير والفحص اليومي"
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 animate-pulse border-0"
+                  title={language === 'en' ? 'Stop Daily Analysis' : 'إيقاف التقرير والفحص اليومي'}
                 >
                   <StopCircle className="h-3.5 w-3.5 text-white" />
-                  <span>إيقاف الفحص 🛑</span>
+                  <span>{language === 'en' ? 'Stop 🛑' : 'إيقاف الفحص 🛑'}</span>
                 </button>
               )}
             </div>
@@ -497,13 +504,13 @@ export function NotificationSettingsPage({
               <div>
                 <div className="text-xs font-bold text-indigo-100 flex items-center gap-1.5">
                   <Clock className="h-4 w-4 text-cyan-400" />
-                  <span>تفعيل التحديث اليومي التلقائي المجدول</span>
+                  <span>{language === 'en' ? 'Enable Scheduled Daily Auto-Update' : 'تفعيل التحديث اليومي التلقائي المجدول'}</span>
                 </div>
                 <div className="text-[10.5px] text-slate-300 mt-0.5">
-                  (معطل افتراضياً لحفظ استهلاك خوادم Vercel - يوصى بالتشغيل اليدوي فقط)
+                  {language === 'en' ? '(Disabled by default for server optimization - manual trigger recommended)' : '(معطل افتراضياً لحفظ استهلاك خوادم Vercel - يوصى بالتشغيل اليدوي فقط)'}
                 </div>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0 mr-2">
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 mx-2">
                 <input
                   type="checkbox"
                   checked={scheduleConfig.autoScheduledEnabled}
@@ -517,87 +524,49 @@ export function NotificationSettingsPage({
             {/* Select Scheduled Hour KSA */}
             <div className="p-4 bg-slate-800/60 rounded-2xl border border-indigo-800/40 space-y-2">
               <label className="text-xs font-bold text-indigo-100 block">
-                تحديد وقت التحديث المفضل (توقيت المملكة العربية السعودية 🇸🇦):
+                {language === 'en' ? 'Preferred Scheduled Hour (Saudi Arabia AST 🇸🇦):' : 'تحديد وقت التحديث المفضل (توقيت المملكة العربية السعودية 🇸🇦):'}
               </label>
               <select
                 value={scheduleConfig.scheduledHourKSA}
                 onChange={(e) => handleUpdateScheduleConfig({ ...scheduleConfig, scheduledHourKSA: Number(e.target.value) })}
                 className="w-full bg-slate-900 text-cyan-300 text-xs font-bold p-2.5 rounded-xl border border-indigo-700/60 focus:outline-none focus:border-cyan-400 cursor-pointer"
               >
-                <option value={1}>01:00 صباحاً AST (منتصف الليل)</option>
-                <option value={2}>02:00 صباحاً AST (وقت متأخر - موصى به)</option>
-                <option value={3}>03:00 صباحاً AST (وقت متأخر جداً - افتراضي)</option>
-                <option value={4}>04:00 صباحاً AST (قبل الفجر)</option>
-                <option value={5}>05:00 صباحاً AST (الفجر)</option>
-                <option value={23}>11:00 مساءً AST (قبل منتصف الليل)</option>
+                <option value={1}>{language === 'en' ? '01:00 AM AST (Midnight)' : '01:00 صباحاً AST (منتصف الليل)'}</option>
+                <option value={2}>{language === 'en' ? '02:00 AM AST (Late Night - Recommended)' : '02:00 صباحاً AST (وقت متأخر - موصى به)'}</option>
+                <option value={3}>{language === 'en' ? '03:00 AM AST (Very Late Night - Default)' : '03:00 صباحاً AST (وقت متأخر جداً - افتراضي)'}</option>
+                <option value={4}>{language === 'en' ? '04:00 AM AST (Pre-Dawn)' : '04:00 صباحاً AST (قبل الفجر)'}</option>
+                <option value={5}>{language === 'en' ? '05:00 AM AST (Dawn)' : '05:00 صباحاً AST (الفجر)'}</option>
+                <option value={23}>{language === 'en' ? '11:00 PM AST (Pre-Midnight)' : '11:00 مساءً AST (قبل منتصف الليل)'}</option>
               </select>
             </div>
           </div>
 
           <div className="text-[11px] bg-indigo-950/80 p-3 rounded-xl border border-indigo-800/40 text-indigo-200 flex flex-col sm:flex-row items-center justify-between gap-2">
             <span>
-              📌 الساعة الحالية بتوقيت السعودية: <strong className="text-amber-300 font-mono">{getSaudiCurrentHourAndDate().saudiTime.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })}</strong>
+              📌 {language === 'en' ? 'Current Saudi Time: ' : 'الساعة الحالية بتوقيت السعودية: '}
+              <strong className="text-amber-300 font-mono">
+                {getSaudiCurrentHourAndDate().saudiTime.toLocaleTimeString(language === 'en' ? 'en-US' : 'ar-SA', { hour: '2-digit', minute: '2-digit' })}
+              </strong>
             </span>
             <span className="text-slate-400 text-[10px]">
-              آخر تشغيل محلي: {localStorage.getItem('water_maps_last_daily_auto_run_date') || 'لم يتم بعد اليوم'}
+              {language === 'en' ? 'Last local run: ' : 'آخر تشغيل محلي: '}
+              {localStorage.getItem('water_maps_last_daily_auto_run_date') || (language === 'en' ? 'Not run yet today' : 'لم يتم بعد اليوم')}
             </span>
           </div>
         </div>
       )}
-
-      {/* Category 4: Broadcast Testing & Database RLS Policy Settings - Hidden from UI per user request, preserved in code */}
-      {/* 
-      <div className="bg-amber-500/10 dark:bg-amber-950/20 rounded-3xl p-6 border border-amber-500/30 dark:border-amber-700/40 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl border border-amber-500/30 shrink-0">
-              <Database className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <span>توزيع الإشعارات وقواعد Supabase (RLS)</span>
-              </h3>
-              <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium mt-0.5">
-                تأكيد وصول إشعارات التغيرات والمشاريع المضافة لكل المهندسين والمشرفين
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleSendBroadcastTestNotif}
-            disabled={isSendingTestNotif}
-            className="px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
-          >
-            <Send className="h-3.5 w-3.5" />
-            <span>{isSendingTestNotif ? 'جاري البث...' : 'بث إشعار تجريبي عام لكل المستخدمين 📢'}</span>
-          </button>
-        </div>
-
-        <div className="text-xs bg-white dark:bg-slate-900 p-4 rounded-2xl border border-amber-200 dark:border-amber-900/50 text-slate-700 dark:text-slate-300 space-y-2">
-          <p className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
-            <ShieldCheck className="h-4 w-4 text-emerald-500" />
-            <span>إعدادات قاعدة بيانات Supabase لضمان المزامنة الحية:</span>
-          </p>
-          <p className="leading-relaxed text-[11.5px]">
-            إذا ظهرت شارة <code className="bg-slate-100 dark:bg-slate-800 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded font-mono text-[10.5px]">3 RLS policies</code> أمام جدول <code className="font-mono text-blue-600 dark:text-blue-400">notifications</code> في Supabase، يُفضل إلغاء القيد المباشر لجعل الجدول <code className="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded font-mono text-[10.5px]">UNRESTRICTED</code> تماماً مثل جدول المشاريع <code className="font-mono">projects</code> عبر تشغيل الأمر التالي في SQL Editor:
-          </p>
-          <div className="bg-slate-950 text-cyan-300 p-3 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800 select-all">
-            ALTER TABLE public.notifications DISABLE ROW LEVEL SECURITY;
-          </div>
-        </div>
-      </div>
-      */}
 
       {/* Footer Info Box */}
       <div className="bg-slate-50 dark:bg-slate-900/60 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 flex items-start gap-3.5">
         <AlertCircle className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
         <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1">
           <p className="font-bold text-slate-800 dark:text-slate-200">
-            ملاحظة تنظيمية حول إدارة الإشعارات:
+            {language === 'en' ? 'Notification Management Policy:' : 'ملاحظة تنظيمية حول إدارة الإشعارات:'}
           </p>
           <p className="leading-relaxed">
-            يتم تطبيق هذه الإعدادات مباشرة على جهازك وحسابك ({currentUser.name}). بإمكانك تعديل التفضيلات في أي وقت لتقليل القوائم المنبثقة أو جعلها مقتصرة فقط على التغيرات اليومية للخرائط أو المشاريع المضافة حديثاً.
+            {language === 'en'
+              ? `These settings are applied directly to your account (${currentUser.name}). You can customize your preferences anytime to minimize popups or filter specifically for daily map alterations.`
+              : `يتم تطبيق هذه الإعدادات مباشرة على جهازك وحسابك (${currentUser.name}). بإمكانك تعديل التفضيلات في أي وقت لتقليل القوائم المنبثقة أو جعلها مقتصرة فقط على التغيرات اليومية للخرائط أو المشاريع المضافة حديثاً.`}
           </p>
         </div>
       </div>

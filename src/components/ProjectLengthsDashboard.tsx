@@ -9,6 +9,7 @@ import { ReportHistoryStore, extractPoDigits, isReportMatchingProject, findRepor
 import { DashboardMetricsStore, DashboardProjectMetric } from '../utils/dashboardMetricsStore';
 import { generateSyntheticProjectKMLData, getStatusCategoryLabel, isValidIdentifier, cleanSegmentId, cleanPermitNo, cleanStage, isYellowItemWithoutPermit } from '../utils/myMapsKmlParser';
 import { YellowNoPermitModal, YellowNoPermitItemDetail } from './YellowNoPermitModal';
+import { useLanguage } from '../utils/i18n';
 import * as XLSX from 'xlsx';
 import {
   Ruler,
@@ -71,6 +72,7 @@ interface CategoryStats {
 }
 
 export function ProjectLengthsDashboard({ projects, onSelectProject, onOpenMyMaps }: ProjectLengthsDashboardProps) {
+  const { t, language, translateDynamic, isRtl } = useLanguage();
   const [activeCategory, setActiveCategory] = useState<CategoryType>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedScope, setSelectedScope] = useState<'all' | 'water' | 'sewage'>('all');

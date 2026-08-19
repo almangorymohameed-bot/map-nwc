@@ -7,6 +7,7 @@ import React, { useState, useMemo } from 'react';
 import { Project, KMLFeatureItem } from '../types';
 import { FeatureDetailsModal, FeatureDetailData } from './FeatureDetailsModal';
 import { exportYellowNoPermitToPDF } from '../utils/pdfExport';
+import { useLanguage } from '../utils/i18n';
 import * as XLSX from 'xlsx';
 import { 
   X, 
@@ -76,6 +77,7 @@ export function YellowNoPermitModal({
   categoryTitle = 'جميع المشاريع',
   onOpenMyMaps
 }: YellowNoPermitModalProps) {
+  const { t, language, isRtl, formatNumber, translateDynamic } = useLanguage();
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedProjectFilter, setSelectedProjectFilter] = useState<string>('all');
   const [selectedContractorFilter, setSelectedContractorFilter] = useState<string>('all');

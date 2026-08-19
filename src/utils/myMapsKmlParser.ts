@@ -9,12 +9,12 @@ import length from '@turf/length';
 import { lineString } from '@turf/helpers';
 
 // Color mappings requested
-export const COLOR_CONFIG: Record<StatusCategory, { hex: string; label: string }> = {
-  executed_water: { hex: '#01579B', label: 'منفذ - مياه' },
-  executed_sewage: { hex: '#097138', label: 'منفذ - صرف' },
-  ongoing: { hex: '#ffea00', label: 'جاري العمل' },
-  remaining: { hex: '#a52714', label: 'أعمال متبقية' },
-  cancelled: { hex: '#F48FB1', label: 'خطوط تم إلغائها' }
+export const COLOR_CONFIG: Record<StatusCategory, { hex: string; label: string; labelEn: string }> = {
+  executed_water: { hex: '#01579B', label: 'منفذ - شبكات مياه', labelEn: 'Executed - Water Networks' },
+  executed_sewage: { hex: '#097138', label: 'منفذ - شبكات صرف صحي', labelEn: 'Executed - Sewage Networks' },
+  ongoing: { hex: '#ffea00', label: 'جاري العمل / التنفيذ', labelEn: 'Ongoing / In Progress' },
+  remaining: { hex: '#a52714', label: 'أعمال متبقية', labelEn: 'Remaining Works' },
+  cancelled: { hex: '#F48FB1', label: 'خطوط تم إلغائها / ملغى', labelEn: 'Cancelled Lines' }
 };
 
 /**
@@ -27,12 +27,12 @@ export function isSewageProject(projectName?: string, projectScope?: string): bo
 }
 
 /**
- * Category label mapping:
- * 'executed_water' (#01579B) always returns "منفذ - مياه"
+ * Category label mapping with bilingual support
  */
-
-export function getStatusCategoryLabel(category: StatusCategory, projectName?: string, projectScope?: string): string {
-  return COLOR_CONFIG[category]?.label || category;
+export function getStatusCategoryLabel(category: StatusCategory, projectName?: string, projectScope?: string, lang: 'ar' | 'en' = 'ar'): string {
+  const item = COLOR_CONFIG[category];
+  if (!item) return category;
+  return lang === 'en' ? item.labelEn : item.label;
 }
 
 // Calculate Haversine distance in meters between two lat/lng coordinates

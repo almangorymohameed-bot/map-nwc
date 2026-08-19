@@ -5,6 +5,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { User, Project } from '../types';
+import { useLanguage } from '../utils/i18n';
 import { 
   Users, 
   UserCheck, 
@@ -51,25 +52,6 @@ const SCOPE_OPTIONS = [
   'صرف صحي'
 ];
 
-const TAB_OPTIONS = [
-  { id: 'maps', label: 'الخرائط التفاعلية 🗺️' },
-  { id: 'stats', label: 'الإحصائيات الجغرافية 📊' },
-  { id: 'layers', label: 'طبقات المشاريع 🥞' },
-  { id: 'changelog', label: 'سجل التغييرات 📜' }
-];
-
-const LAYER_OPTIONS = [
-  { id: 'water', label: 'طبقة المياه 💧' },
-  { id: 'sewage', label: 'طبقة الصرف 🌿' },
-  { id: 'materials', label: 'طبقة مواد التشوين 📦' }
-];
-
-const STATS_SUBTAB_OPTIONS = [
-  { id: 'lengths', label: 'حصر الأطوال والرخص بالسجمنت 📏' },
-  { id: 'mymaps', label: 'تحليل الخرائط الجغرافية (My Maps) 📊' },
-  { id: 'general', label: 'إحصائيات المشاريع العامة 📈' }
-];
-
 export function UserManagement({ 
   users, 
   currentUser, 
@@ -77,10 +59,30 @@ export function UserManagement({
   onDeleteUser, 
   projects = [] 
 }: UserManagementProps) {
+  const { t, translateDynamic, isRtl, language } = useLanguage();
   const [selectedUser, setSelectedUser] = useState<User | null>(users[0] || null);
   const [isEditing, setIsEditing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  const TAB_OPTIONS = useMemo(() => [
+    { id: 'maps', label: language === 'en' ? 'Interactive Maps 🗺️' : 'الخرائط التفاعلية 🗺️' },
+    { id: 'stats', label: language === 'en' ? 'GIS Statistics 📊' : 'الإحصائيات الجغرافية 📊' },
+    { id: 'layers', label: language === 'en' ? 'Project Layers 🥞' : 'طبقات المشاريع 🥞' },
+    { id: 'changelog', label: language === 'en' ? 'Change Log 📜' : 'سجل التغييرات 📜' }
+  ], [language]);
+
+  const LAYER_OPTIONS = useMemo(() => [
+    { id: 'water', label: language === 'en' ? 'Water Layer 💧' : 'طبقة المياه 💧' },
+    { id: 'sewage', label: language === 'en' ? 'Sewage Layer 🌿' : 'طبقة الصرف 🌿' },
+    { id: 'materials', label: language === 'en' ? 'Materials Layer 📦' : 'طبقة مواد التشوين 📦' }
+  ], [language]);
+
+  const STATS_SUBTAB_OPTIONS = useMemo(() => [
+    { id: 'lengths', label: language === 'en' ? 'Lengths & Permits per Segment 📏' : 'حصر الأطوال والرخص بالسجمنت 📏' },
+    { id: 'mymaps', label: language === 'en' ? 'My Maps GIS Analysis 📊' : 'تحليل الخرائط الجغرافية (My Maps) 📊' },
+    { id: 'general', label: language === 'en' ? 'General Projects Stats 📈' : 'إحصائيات المشاريع العامة 📈' }
+  ], [language]);
 
   // Form State
   const [formData, setFormData] = useState<Partial<User>>({
@@ -321,10 +323,10 @@ export function UserManagement({
   const handleDelete = (userId: string) => {
     if (!isAdmin) return;
     if (userId === currentUser.id) {
-      alert('لا يمكنك حذف الحساب النشط حالياً!');
+      alert(language === 'en' ? 'You cannot delete the currently active user!' : 'لا يمكنك حذف الحساب النشط حالياً!');
       return;
     }
-    if (confirm('هل أنت متأكد من رغبتك في حذف هذا المستخدم وسحب صلاحياته نهائياً؟')) {
+    if (confirm(language === 'en' ? 'Are you sure you want to delete this user and permanently revoke access?' : 'هل أنت متأكد من رغبتك في حذف هذا المستخدم وسحب صلاحياته نهائياً؟')) {
       onDeleteUser(userId);
       const remaining = users.filter(u => u.id !== userId);
       setSelectedUser(remaining[0] || null);
@@ -334,22 +336,24 @@ export function UserManagement({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[600px]" id="user-management-panel" dir="rtl">
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[600px]" id="user-management-panel" dir={isRtl ? 'rtl' : 'ltr'}>
       
       {/* Users List Column */}
-      <div className="lg:col-span-4 border-l border-slate-200/80 p-5 space-y-4 flex flex-col">
-        <div className="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 shrink-0">
+      <div className={`lg:col-span-4 ${isRtl ? 'border-l' : 'border-r'} border-slate-200/80 dark:border-slate-800 p-5 space-y-4 flex flex-col`}>
+        <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-100 dark:border-slate-700 shrink-0">
           <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-blue-600" />
-            <h4 className="font-bold text-slate-800 text-sm">مستخدمو النظام</h4>
+            <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+              {language === 'en' ? 'System Users' : 'مستخدمو النظام'}
+            </h4>
           </div>
           {isAdmin && (
             <button
               onClick={handleStartCreate}
-              className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer border-0"
+              className="flex items-center gap-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer border-0 shadow-xs"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span>مستخدم جديد</span>
+              <span>{t('users.addNew')}</span>
             </button>
           )}
         </div>
@@ -362,19 +366,19 @@ export function UserManagement({
               <div
                 key={u.id}
                 onClick={() => handleSelectUser(u)}
-                className={`p-3.5 rounded-xl border cursor-pointer transition-all duration-200 text-right ${
+                className={`p-3.5 rounded-xl border cursor-pointer transition-all duration-200 ${isRtl ? 'text-right' : 'text-left'} ${
                   isSelected 
-                    ? 'border-blue-500/80 bg-blue-50/25 shadow-xs' 
-                    : 'border-slate-100 hover:border-slate-200 bg-white hover:bg-slate-50/50'
+                    ? 'border-blue-500/80 bg-blue-50/30 dark:bg-blue-950/40 shadow-xs' 
+                    : 'border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50/50 dark:hover:bg-slate-800/50'
                 }`}
               >
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start gap-2">
                   <div>
-                    <h5 className="font-bold text-slate-850 text-xs flex flex-wrap items-center gap-1.5 leading-tight">
+                    <h5 className="font-bold text-slate-850 dark:text-slate-100 text-xs flex flex-wrap items-center gap-1.5 leading-tight">
                       <span>{u.name}</span>
                       {u.id === currentUser.id && (
-                        <span className="text-[9px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-normal">
-                          أنت حالياً
+                        <span className="text-[9px] bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 px-1.5 py-0.5 rounded font-normal">
+                          {language === 'en' ? 'You' : 'أنت حالياً'}
                         </span>
                       )}
                     </h5>
@@ -382,17 +386,17 @@ export function UserManagement({
                     
                     {/* Display Job Title and Department if present */}
                     {(u.jobTitle || u.department) && (
-                      <div className="flex items-center gap-1.5 mt-1.5 text-slate-500 text-[10px] font-semibold">
+                      <div className="flex items-center gap-1.5 mt-1.5 text-slate-500 dark:text-slate-400 text-[10px] font-semibold">
                         {u.jobTitle && (
                           <span className="flex items-center gap-0.5">
                             <Briefcase className="h-3 w-3 shrink-0 text-slate-400" />
-                            {u.jobTitle}
+                            {translateDynamic(u.jobTitle)}
                           </span>
                         )}
                         {u.department && (
-                          <span className="flex items-center gap-0.5 border-r border-slate-200 pr-1.5 mr-1.5">
+                          <span className={`flex items-center gap-0.5 ${isRtl ? 'border-r pr-1.5 mr-1.5' : 'border-l pl-1.5 ml-1.5'} border-slate-200 dark:border-slate-700`}>
                             <Building2 className="h-3 w-3 shrink-0 text-slate-400" />
-                            {u.department}
+                            {translateDynamic(u.department)}
                           </span>
                         )}
                       </div>
@@ -400,25 +404,27 @@ export function UserManagement({
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold whitespace-nowrap ${
                     u.role === 'admin' 
-                      ? 'bg-rose-50 text-rose-600 border border-rose-100' 
+                      ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900' 
                       : u.role === 'editor'
-                        ? 'bg-amber-50 text-amber-600 border border-amber-100'
-                        : 'bg-slate-50 text-slate-600 border border-slate-100'
+                        ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-700'
                   }`}>
-                    {u.role === 'admin' ? 'مدير كامل' : u.role === 'editor' ? 'محرر خرائط' : 'مستعرض فقط'}
+                    {u.role === 'admin' ? (language === 'en' ? 'Full Admin' : 'مدير كامل') : u.role === 'editor' ? (language === 'en' ? 'Map Editor' : 'محرر خرائط') : (language === 'en' ? 'Viewer Only' : 'مستعرض فقط')}
                   </span>
                 </div>
 
                 <div className="flex flex-wrap gap-1 mt-2.5">
-                  <div className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
-                    المناطق: {u.allowedRegions.join('، ')}
+                  <div className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded">
+                    {language === 'en' ? 'Regions: ' : 'المناطق: '} 
+                    {u.allowedRegions.map(r => translateDynamic(r)).join(', ')}
                   </div>
-                  <div className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
-                    القطاعات: {u.allowedScopes.join('، ')}
+                  <div className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded">
+                    {language === 'en' ? 'Scopes: ' : 'القطاعات: '}
+                    {u.allowedScopes.map(s => translateDynamic(s)).join(', ')}
                   </div>
                   {u.allowedProjectIds && u.allowedProjectIds.length > 0 && (
-                    <div className="text-[9px] bg-amber-50 text-amber-700 border border-amber-100 px-1.5 py-0.5 rounded font-bold">
-                      مشاريع مخصصة: {u.allowedProjectIds.length}
+                    <div className="text-[9px] bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-100 dark:border-amber-900 px-1.5 py-0.5 rounded font-bold">
+                      {language === 'en' ? 'Assigned: ' : 'مشاريع مخصصة: '}{u.allowedProjectIds.length}
                     </div>
                   )}
                 </div>
@@ -433,41 +439,50 @@ export function UserManagement({
         
         {/* Security Warning notice if not admin */}
         {!isAdmin && (
-          <div className="mb-4 bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-slate-600 text-xs flex items-start gap-2 text-right">
+          <div className={`mb-4 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 p-3.5 rounded-xl text-slate-600 dark:text-slate-300 text-xs flex items-start gap-2 ${isRtl ? 'text-right' : 'text-left'}`}>
             <Shield className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
             <div>
-              <span className="font-bold">مستند للقراءة فقط:</span> صلاحيات حسابك الحالي (<span className="font-semibold text-rose-600">{currentUser.name}</span>) لا تسمح لك بتعديل أو سحب صلاحيات مستخدمين آخرين. لوحة التعديل مقفلة.
+              <span className="font-bold">{language === 'en' ? 'Read-only View: ' : 'مستند للقراءة فقط: '}</span>
+              {language === 'en' 
+                ? `Your account (${currentUser.name}) does not have privileges to edit or revoke permissions of other users. Panel is locked.`
+                : `صلاحيات حسابك الحالي (${currentUser.name}) لا تسمح لك بتعديل أو سحب صلاحيات مستخدمين آخرين. لوحة التعديل مقفلة.`}
             </div>
           </div>
         )}
 
         {(isEditing || isCreating) ? (
-          <form onSubmit={handleSave} className="space-y-5 text-right">
-            <h4 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
-              {isCreating ? 'إعداد حساب مستخدم وصلاحيات جديدة' : `تعديل صلاحيات المستشار: ${formData.name}`}
+          <form onSubmit={handleSave} className={`space-y-5 ${isRtl ? 'text-right' : 'text-left'}`}>
+            <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 border-b border-slate-100 dark:border-slate-800 pb-2">
+              {isCreating 
+                ? (language === 'en' ? 'Create New User Account & Assign Privileges' : 'إعداد حساب مستخدم وصلاحيات جديدة') 
+                : (language === 'en' ? `Edit Permissions: ${formData.name}` : `تعديل صلاحيات المستخدم: ${formData.name}`)}
             </h4>
 
             {/* Basic Info & Department/Job Fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1 sm:col-span-2">
-                <label className="text-xs font-semibold text-slate-600">الاسم الثلاثي أو القطاع</label>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  {t('users.fullName')}
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="مثال: المهندس فيصل المقرن"
-                  className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-right"
+                  placeholder={language === 'en' ? 'e.g. Eng. Faisal Al-Mugrin' : 'مثال: المهندس فيصل المقرن'}
+                  className={`w-full text-xs p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-800 dark:text-slate-100 ${isRtl ? 'text-right' : 'text-left'}`}
                   value={formData.name || ''}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600">البريد الإلكتروني للشركة (يجب أن ينتهي بـ @nwc.com.sa)</label>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  {t('users.username')}
+                </label>
                 <input
                   type="email"
                   required
                   placeholder="f.mugrin@nwc.com.sa"
-                  className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white font-mono text-left"
+                  className="w-full text-xs p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-800 dark:text-slate-100 font-mono text-left"
                   dir="ltr"
                   value={formData.username || ''}
                   onChange={e => setFormData({ ...formData, username: e.target.value })}
@@ -475,41 +490,42 @@ export function UserManagement({
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600">كلمة مرور الحساب (لصاحب البريد)</label>
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  {t('users.password')}
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder="مثال: nwc1234"
-                  className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white font-mono text-center"
+                  placeholder="nwc1234"
+                  className="w-full text-xs p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-800 dark:text-slate-100 font-mono text-center"
                   value={formData.password || ''}
                   onChange={e => setFormData({ ...formData, password: e.target.value })}
                 />
               </div>
 
-              {/* Requirement 3: Add Department and Job Title fields */}
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 flex items-center gap-1 justify-start">
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1 justify-start">
                   <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                  <span>القسم / الإدارة</span>
+                  <span>{t('users.department')}</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="مثال: إدارة مشاريع الصرف الصحي"
-                  className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-right"
+                  placeholder={language === 'en' ? 'e.g. Sewage Projects Directorate' : 'مثال: إدارة مشاريع الصرف الصحي'}
+                  className={`w-full text-xs p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-800 dark:text-slate-100 ${isRtl ? 'text-right' : 'text-left'}`}
                   value={formData.department || ''}
                   onChange={e => setFormData({ ...formData, department: e.target.value })}
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-600 flex items-center gap-1 justify-start">
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1 justify-start">
                   <Briefcase className="h-3.5 w-3.5 text-slate-400" />
-                  <span>الوظيفة / المسمى الوظيفي</span>
+                  <span>{t('users.jobTitle')}</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="مثال: أخصائي نظم معلومات جغرافية"
-                  className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white text-right"
+                  placeholder={language === 'en' ? 'e.g. GIS Specialist' : 'مثال: أخصائي نظم معلومات جغرافية'}
+                  className={`w-full text-xs p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-800 dark:text-slate-100 ${isRtl ? 'text-right' : 'text-left'}`}
                   value={formData.jobTitle || ''}
                   onChange={e => setFormData({ ...formData, jobTitle: e.target.value })}
                 />
@@ -518,23 +534,25 @@ export function UserManagement({
 
             {/* Role Select */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-600 block">مرتبة وامتياز الحساب</label>
+              <label className="text-xs font-semibold text-slate-600 dark:text-slate-300 block">
+                {t('users.role')}
+              </label>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 {[
-                  { value: 'viewer', title: 'مستعرض', desc: 'استعراض البيانات والخرائط فقط دون القدرة على تعديل الرابط أو مواصفات العقد.' },
-                  { value: 'editor', title: 'محرر خرائط', desc: 'صلاحية تعديل روابط الـ KMZ للمناطق المسموحة له والبيانات الفنية.' },
-                  { value: 'admin', title: 'مدير كامل', desc: 'حق الوصول لجميع المشاريع وتلقي التقارير وإنشاء وتعديل مستخدمي النظام.' }
+                  { value: 'viewer', title: language === 'en' ? 'Viewer' : 'مستعرض', desc: language === 'en' ? 'View GIS maps and dashboards only without edit permissions.' : 'استعراض البيانات والخرائط فقط دون القدرة على تعديل الرابط أو مواصفات العقد.' },
+                  { value: 'editor', title: language === 'en' ? 'Map Editor' : 'محرر خرائط', desc: language === 'en' ? 'Ability to update KMZ maps and technical project data in assigned scopes.' : 'صلاحية تعديل روابط الـ KMZ للمناطق المسموحة له والبيانات الفنية.' },
+                  { value: 'admin', title: language === 'en' ? 'Full Admin' : 'مدير كامل', desc: language === 'en' ? 'Full system access to all projects, audit logs, and user management.' : 'حق الوصول لجميع المشاريع وتلقي التقارير وإنشاء وتعديل مستخدمي النظام.' }
                 ].map(r => (
                   <label
                     key={r.value}
-                    className={`p-2.5 rounded-lg border text-right cursor-pointer flex flex-col justify-between transition-all ${
+                    className={`p-2.5 rounded-lg border cursor-pointer flex flex-col justify-between transition-all ${isRtl ? 'text-right' : 'text-left'} ${
                       formData.role === r.value 
-                        ? 'border-blue-600 bg-blue-50/25 shadow-2xs' 
-                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                        ? 'border-blue-600 bg-blue-50/30 dark:bg-blue-950/40 shadow-2xs' 
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800'
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800">{r.title}</span>
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100">{r.title}</span>
                       <input
                         type="radio"
                         name="role"
@@ -549,14 +567,18 @@ export function UserManagement({
               </div>
             </div>
 
-            {/* Requirement 2: List all site features in permissions */}
-            <div className="border border-slate-200/80 rounded-2xl p-4.5 bg-slate-50/40 space-y-4">
-              <span className="text-xs font-extrabold text-slate-800 block">إعداد خصائص الموقع وصلاحيات الاستخدام</span>
+            {/* Site features in permissions */}
+            <div className="border border-slate-200/80 dark:border-slate-700 rounded-2xl p-4.5 bg-slate-50/40 dark:bg-slate-800/40 space-y-4">
+              <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100 block">
+                {language === 'en' ? 'Feature Access & Usage Permissions' : 'إعداد خصائص الموقع وصلاحيات الاستخدام'}
+              </span>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* A. Tab Permissions */}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700 block">التبويبات المسموح للرؤية بزيارتها:</label>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                    {t('users.allowedTabs')}:
+                  </label>
                   <div className="space-y-1.5">
                     {TAB_OPTIONS.map(tab => {
                       const isAllowed = (formData.allowedTabs || ['maps', 'stats', 'layers']).includes(tab.id);
@@ -567,15 +589,15 @@ export function UserManagement({
                           onClick={() => handleTabToggle(tab.id)}
                           className={`flex items-center justify-between w-full p-2 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
                             isAllowed 
-                              ? 'bg-white border-blue-200 text-blue-800' 
-                              : 'bg-white/50 border-slate-200 text-slate-400'
+                              ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300' 
+                              : 'bg-white/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400'
                           }`}
                         >
                           <span>{tab.label}</span>
                           {isAllowed ? (
-                            <CheckSquare className="h-4 w-4 text-blue-600 shrink-0" />
+                            <CheckSquare className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
                           ) : (
-                            <Square className="h-4 w-4 text-slate-300 shrink-0" />
+                            <Square className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />
                           )}
                         </button>
                       );
@@ -585,7 +607,9 @@ export function UserManagement({
 
                 {/* B. Specific Feature Settings */}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-700 block">تراخيص التحكم والتصفح الإضافية:</label>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                    {t('users.permissionsFlags')}:
+                  </label>
                   <div className="space-y-1.5">
                     {/* B1. Open External Links */}
                     <button
@@ -593,18 +617,20 @@ export function UserManagement({
                       onClick={() => setFormData({ ...formData, canOpenExternalLinks: !formData.canOpenExternalLinks })}
                       className={`flex items-center justify-between w-full p-2.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
                         formData.canOpenExternalLinks !== false
-                          ? 'bg-white border-blue-200 text-blue-800'
-                          : 'bg-white/50 border-slate-200 text-slate-400'
+                          ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300'
+                          : 'bg-white/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400'
                       }`}
                     >
-                      <div className="flex flex-col items-start gap-0.5">
-                        <span>فتح روابط خارجية ↗️</span>
-                        <span className="text-[9px] text-slate-400 font-normal">تفعيل أزرار ملاحة خرائط قوقل الخارجية</span>
+                      <div className={`flex flex-col ${isRtl ? 'items-start' : 'items-start'} gap-0.5`}>
+                        <span>{t('users.canOpenExternalLinks')}</span>
+                        <span className="text-[9px] text-slate-400 font-normal">
+                          {language === 'en' ? 'Enable external Google Maps routing and navigation buttons' : 'تفعيل أزرار ملاحة خرائط قوقل الخارجية'}
+                        </span>
                       </div>
                       {formData.canOpenExternalLinks !== false ? (
-                        <CheckSquare className="h-4 w-4 text-blue-600 shrink-0" />
+                        <CheckSquare className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
                       ) : (
-                        <Square className="h-4 w-4 text-slate-300 shrink-0" />
+                        <Square className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />
                       )}
                     </button>
 
@@ -614,18 +640,20 @@ export function UserManagement({
                       onClick={() => setFormData({ ...formData, canFilter: !formData.canFilter })}
                       className={`flex items-center justify-between w-full p-2.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
                         formData.canFilter !== false
-                          ? 'bg-white border-blue-200 text-blue-800'
-                          : 'bg-white/50 border-slate-200 text-slate-400'
+                          ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300'
+                          : 'bg-white/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400'
                       }`}
                     >
-                      <div className="flex flex-col items-start gap-0.5">
-                        <span>البحث والتصفية والفلترة 🔍</span>
-                        <span className="text-[9px] text-slate-400 font-normal">عرض شريط فلترة المشاريع في القائمة</span>
+                      <div className={`flex flex-col ${isRtl ? 'items-start' : 'items-start'} gap-0.5`}>
+                        <span>{t('users.canFilter')}</span>
+                        <span className="text-[9px] text-slate-400 font-normal">
+                          {language === 'en' ? 'Show project filter and search bar in list' : 'عرض شريط فلترة المشاريع في القائمة'}
+                        </span>
                       </div>
                       {formData.canFilter !== false ? (
-                        <CheckSquare className="h-4 w-4 text-blue-600 shrink-0" />
+                        <CheckSquare className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
                       ) : (
-                        <Square className="h-4 w-4 text-slate-300 shrink-0" />
+                        <Square className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />
                       )}
                     </button>
 
@@ -635,26 +663,30 @@ export function UserManagement({
                       onClick={() => setFormData({ ...formData, canInsert: !formData.canInsert })}
                       className={`flex items-center justify-between w-full p-2.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
                         formData.canInsert !== false
-                          ? 'bg-white border-blue-200 text-blue-800'
-                          : 'bg-white/50 border-slate-200 text-slate-400'
+                          ? 'bg-white dark:bg-slate-800 border-blue-200 dark:border-blue-700 text-blue-800 dark:text-blue-300'
+                          : 'bg-white/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400'
                       }`}
                     >
-                      <div className="flex flex-col items-start gap-0.5">
-                        <span>إدراج وإضافة مشاريع جديدة ➕</span>
-                        <span className="text-[9px] text-slate-400 font-normal">السماح بتعبئة وإدراج مشاريع جغرافية بالبوابة</span>
+                      <div className={`flex flex-col ${isRtl ? 'items-start' : 'items-start'} gap-0.5`}>
+                        <span>{t('users.canInsert')}</span>
+                        <span className="text-[9px] text-slate-400 font-normal">
+                          {language === 'en' ? 'Allow adding and modifying GIS projects in portal' : 'السماح بتعبئة وإدراج مشاريع جغرافية بالبوابة'}
+                        </span>
                       </div>
                       {formData.canInsert !== false ? (
-                        <CheckSquare className="h-4 w-4 text-blue-600 shrink-0" />
+                        <CheckSquare className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
                       ) : (
-                        <Square className="h-4 w-4 text-slate-300 shrink-0" />
+                        <Square className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />
                       )}
                     </button>
                   </div>
                 </div>
 
                 {/* B4. Project Layers Permissions */}
-                <div className="space-y-2 col-span-1 md:col-span-2 border-t border-slate-200/60 pt-3 mt-1">
-                  <label className="text-xs font-bold text-slate-700 block">صلاحيات رؤية طبقات المشاريع التفصيلية:</label>
+                <div className="space-y-2 col-span-1 md:col-span-2 border-t border-slate-200/60 dark:border-slate-700 pt-3 mt-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                    {t('users.allowedLayers')}:
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {LAYER_OPTIONS.map(layer => {
                       const list = formData.allowedLayers || ['water', 'sewage', 'materials'];
@@ -697,15 +729,15 @@ export function UserManagement({
                           }}
                           className={`flex items-center justify-between p-2.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
                             isAllowed
-                              ? 'bg-amber-50/70 border-amber-300 text-amber-900 shadow-xs'
-                              : 'bg-white/50 border-slate-200 text-slate-400'
+                              ? 'bg-amber-50/70 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 shadow-xs'
+                              : 'bg-white/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400'
                           }`}
                         >
                           <span>{layer.label}</span>
                           {isAllowed ? (
-                            <CheckSquare className="h-4 w-4 text-amber-600 shrink-0" />
+                            <CheckSquare className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
                           ) : (
-                            <Square className="h-4 w-4 text-slate-300 shrink-0" />
+                            <Square className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />
                           )}
                         </button>
                       );
@@ -714,8 +746,10 @@ export function UserManagement({
                 </div>
 
                 {/* B5. Statistics Sub-Tabs Permissions */}
-                <div className="space-y-2 col-span-1 md:col-span-2 border-t border-slate-200/60 pt-3 mt-1">
-                  <label className="text-xs font-bold text-slate-700 block">صلاحيات تفاصيل تبويبات الإحصائيات (الأقسام الفرعية للإحصائيات):</label>
+                <div className="space-y-2 col-span-1 md:col-span-2 border-t border-slate-200/60 dark:border-slate-700 pt-3 mt-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                    {t('users.allowedStatsSubTabs')}:
+                  </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {STATS_SUBTAB_OPTIONS.map(subtab => {
                       const list = formData.allowedStatsSubTabs || ['lengths', 'mymaps', 'general'];
@@ -744,15 +778,15 @@ export function UserManagement({
                           }}
                           className={`flex items-center justify-between p-2.5 rounded-lg text-xs font-bold transition-all border cursor-pointer ${
                             isAllowed
-                              ? 'bg-blue-50/70 border-blue-300 text-blue-900 shadow-xs'
-                              : 'bg-white/50 border-slate-200 text-slate-400'
+                              ? 'bg-blue-50/70 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800 text-blue-900 dark:text-blue-200 shadow-xs'
+                              : 'bg-white/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 text-slate-400'
                           }`}
                         >
                           <span>{subtab.label}</span>
                           {isAllowed ? (
-                            <CheckSquare className="h-4 w-4 text-blue-600 shrink-0" />
+                            <CheckSquare className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
                           ) : (
-                            <Square className="h-4 w-4 text-slate-300 shrink-0" />
+                            <Square className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />
                           )}
                         </button>
                       );
@@ -765,20 +799,22 @@ export function UserManagement({
             {/* Allowed Regions (Checkboxes) */}
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
-                <label className="text-xs font-semibold text-slate-700">تحديد المنافذ الجغرافية المسموحة (المناطق والأقاليم)</label>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  {t('users.allowedRegions')}
+                </label>
                 <button
                   type="button"
                   onClick={() => handleCheckboxChange('allowedRegions', 'الكل')}
-                  className={`text-[10px] px-2 py-0.5 rounded border cursor-pointer border-0 ${
+                  className={`text-[10px] px-2 py-0.5 rounded border cursor-pointer ${
                     formData.allowedRegions?.includes('الكل') 
                       ? 'bg-blue-600 text-white border-blue-600 font-bold' 
-                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 font-semibold'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 font-semibold'
                   }`}
                 >
-                  الوصول العام (الكل)
+                  {language === 'en' ? 'Global Access (All)' : 'الوصول العام (الكل)'}
                 </button>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
                 {REGION_OPTIONS.map(reg => {
                   const isChecked = formData.allowedRegions?.includes(reg) || formData.allowedRegions?.includes('الكل');
                   return (
@@ -786,14 +822,14 @@ export function UserManagement({
                       type="button"
                       key={reg}
                       onClick={() => handleCheckboxChange('allowedRegions', reg)}
-                      className={`flex items-center gap-2 p-1.5 rounded text-right text-xs transition-colors cursor-pointer ${
+                      className={`flex items-center gap-2 p-1.5 rounded ${isRtl ? 'text-right' : 'text-left'} text-xs transition-colors cursor-pointer ${
                         isChecked 
-                          ? 'bg-white text-blue-700 font-bold border border-blue-200 shadow-xs' 
-                          : 'text-slate-500 hover:bg-slate-100 bg-transparent border-0'
+                          ? 'bg-white dark:bg-slate-800 text-blue-700 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-700 shadow-xs' 
+                          : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-transparent border-0'
                       }`}
                     >
-                      {isChecked ? <CheckSquare className="h-4 w-4 text-blue-600 shrink-0" /> : <Square className="h-4 w-4 text-slate-300 shrink-0" />}
-                      <span className="truncate">{reg}</span>
+                      {isChecked ? <CheckSquare className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" /> : <Square className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />}
+                      <span className="truncate">{translateDynamic(reg)}</span>
                     </button>
                   );
                 })}
@@ -803,20 +839,22 @@ export function UserManagement({
             {/* Allowed Scopes */}
             <div className="space-y-1.5">
               <div className="flex justify-between items-center">
-                <label className="text-xs font-semibold text-slate-700">تحديد قطاعات الشبكات المشمولة بالرؤية</label>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  {t('users.allowedScopes')}
+                </label>
                 <button
                   type="button"
                   onClick={() => handleCheckboxChange('allowedScopes', 'الكل')}
-                  className={`text-[10px] px-2 py-0.5 rounded border cursor-pointer border-0 ${
+                  className={`text-[10px] px-2 py-0.5 rounded border cursor-pointer ${
                     formData.allowedScopes?.includes('الكل') 
                       ? 'bg-blue-600 text-white border-blue-600 font-bold' 
-                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 font-semibold'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 font-semibold'
                   }`}
                 >
-                  صلاحية شاملة (الكل)
+                  {language === 'en' ? 'All Scopes (All)' : 'صلاحية شاملة (الكل)'}
                 </button>
               </div>
-              <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
                 {SCOPE_OPTIONS.map(scope => {
                   const isChecked = formData.allowedScopes?.includes(scope) || formData.allowedScopes?.includes('الكل');
                   return (
@@ -824,44 +862,48 @@ export function UserManagement({
                       type="button"
                       key={scope}
                       onClick={() => handleCheckboxChange('allowedScopes', scope)}
-                      className={`flex items-center gap-2 p-1.5 rounded text-right text-xs transition-colors cursor-pointer ${
+                      className={`flex items-center gap-2 p-1.5 rounded ${isRtl ? 'text-right' : 'text-left'} text-xs transition-colors cursor-pointer ${
                         isChecked 
-                          ? 'bg-white text-emerald-700 font-bold border border-emerald-200 shadow-xs' 
-                          : 'text-slate-500 hover:bg-slate-100 bg-transparent border-0'
+                          ? 'bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-200 dark:border-emerald-700 shadow-xs' 
+                          : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 bg-transparent border-0'
                       }`}
                     >
-                      {isChecked ? <CheckSquare className="h-4 w-4 text-emerald-600 shrink-0" /> : <Square className="h-4 w-4 text-slate-300 shrink-0" />}
-                      <span>{scope}</span>
+                      {isChecked ? <CheckSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" /> : <Square className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />}
+                      <span>{translateDynamic(scope)}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* Requirement 2: Custom project permissions based on Sub-Program selection */}
-            <div className="border border-slate-200 rounded-2xl p-4 bg-amber-50/20 border-amber-200/50 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/30 pb-2">
+            {/* Custom project permissions based on Sub-Program selection */}
+            <div className="border border-slate-200 dark:border-slate-700 rounded-2xl p-4 bg-amber-50/20 dark:bg-amber-950/20 border-amber-200/50 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/30 dark:border-amber-800/30 pb-2">
                 <div>
-                  <h5 className="text-xs font-extrabold text-amber-800 flex items-center gap-1">
+                  <h5 className="text-xs font-extrabold text-amber-800 dark:text-amber-300 flex items-center gap-1">
                     <Layers className="h-4 w-4 text-amber-600" />
-                    <span>صلاحية تحديد مشاريع مخصصة داخل البرنامج الفرعي</span>
+                    <span>{language === 'en' ? 'Custom Assigned Projects per Sub-Program' : 'صلاحية تحديد مشاريع مخصصة داخل البرنامج الفرعي'}</span>
                   </h5>
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    اختر البرنامج الفرعي، ثم عيّن مشاريع محددة للمستشار أو عيّنها كاملة.
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {language === 'en' ? 'Select sub-program to assign specific projects or include all.' : 'اختر البرنامج الفرعي، ثم عيّن مشاريع محددة للمستشار أو عيّنها كاملة.'}
                   </p>
                 </div>
                 {formData.allowedProjectIds && formData.allowedProjectIds.length > 0 && (
-                  <span className="text-[10px] px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-md font-bold">
-                    إجمالي المشاريع المحددة المسموحة: {formData.allowedProjectIds.length}
+                  <span className="text-[10px] px-2 py-0.5 bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-md font-bold">
+                    {language === 'en' ? 'Assigned Count: ' : 'إجمالي المشاريع المحددة المسموحة: '}{formData.allowedProjectIds.length}
                   </span>
                 )}
               </div>
 
               {/* Global control for all projects across all programs */}
-              <div className="bg-amber-500/5 border border-amber-200/40 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3" id="global-projects-bulk-actions">
-                <div className="space-y-0.5 text-right">
-                  <span className="text-xs font-bold text-amber-900 block">التحكم الشامل بكافة المشاريع:</span>
-                  <p className="text-[10px] text-slate-500 leading-normal">تحديد أو إلغاء تحديد كافة المشاريع بجميع البرامج الفرعية المتاحة بضغطة واحدة.</p>
+              <div className="bg-amber-500/5 border border-amber-200/40 dark:border-amber-800/40 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3" id="global-projects-bulk-actions">
+                <div className={`space-y-0.5 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  <span className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
+                    {language === 'en' ? 'Global Control for All Projects:' : 'التحكم الشامل بكافة المشاريع:'}
+                  </span>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-normal">
+                    {language === 'en' ? 'Select or deselect all projects across all sub-programs in one click.' : 'تحديد أو إلغاء تحديد كافة المشاريع بجميع البرامج الفرعية المتاحة بضغطة واحدة.'}
+                  </p>
                 </div>
                 <div className="flex flex-wrap gap-1.5 shrink-0">
                   <button
@@ -869,29 +911,31 @@ export function UserManagement({
                     onClick={handleSelectAllProjectsAcrossAllPrograms}
                     className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white text-[10px] font-black rounded-lg transition-colors border-0 cursor-pointer shadow-3xs"
                   >
-                    تحديد جميع المشاريع بكافة البرامج 🌐
+                    {language === 'en' ? 'Select All Projects 🌐' : 'تحديد جميع المشاريع بكافة البرامج 🌐'}
                   </button>
                   <button
                     type="button"
                     onClick={handleDeselectAllProjectsAcrossAllPrograms}
-                    className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-600 text-[10px] font-bold rounded-lg transition-colors border border-slate-200 cursor-pointer shadow-3xs"
+                    className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded-lg transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer shadow-3xs"
                   >
-                    إلغاء تحديد كافة المشاريع 🧹
+                    {language === 'en' ? 'Deselect All 🧹' : 'إلغاء تحديد كافة المشاريع 🧹'}
                   </button>
                 </div>
               </div>
 
               {/* Sub-Program dropdown selection */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                <label className="text-xs font-bold text-slate-600 shrink-0">البرنامج الفرعي النشط:</label>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 shrink-0">
+                  {language === 'en' ? 'Active Sub-Program:' : 'البرنامج الفرعي النشط:'}
+                </label>
                 <select
                   value={selectedSubProgramForPerms}
                   onChange={e => setSelectedSubProgramForPerms(e.target.value)}
-                  className="p-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 flex-1"
+                  className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 flex-1 text-slate-800 dark:text-slate-200"
                 >
-                  <option value="">-- اختر البرنامج الفرعي --</option>
+                  <option value="">{language === 'en' ? '-- Select Sub-Program --' : '-- اختر البرنامج الفرعي --'}</option>
                   {subPrograms.map(sp => (
-                    <option key={sp} value={sp}>{sp}</option>
+                    <option key={sp} value={sp}>{translateDynamic(sp)}</option>
                   ))}
                 </select>
 
@@ -902,14 +946,14 @@ export function UserManagement({
                       onClick={handleSelectAllProjectsInSubProgram}
                       className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-[10px] font-black rounded-lg transition-colors border-0 cursor-pointer"
                     >
-                      كامل مشاريع هذا البرنامج 🎯
+                      {language === 'en' ? 'All in this program 🎯' : 'كامل مشاريع هذا البرنامج 🎯'}
                     </button>
                     <button
                       type="button"
                       onClick={handleDeselectAllProjectsInSubProgram}
-                      className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold rounded-lg transition-colors border-0 cursor-pointer"
+                      className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-[10px] font-bold rounded-lg transition-colors border-0 cursor-pointer"
                     >
-                      إلغاء تحديد الكل
+                      {language === 'en' ? 'Deselect' : 'إلغاء التحديد'}
                     </button>
                   </div>
                 )}
@@ -918,7 +962,7 @@ export function UserManagement({
               {/* Projects in Selected Sub-Program Checkbox List */}
               {selectedSubProgramForPerms ? (
                 projectsInSelectedSubProgram.length > 0 ? (
-                  <div className="space-y-1.5 max-h-[180px] overflow-y-auto bg-white border border-slate-200 rounded-xl p-3">
+                  <div className="space-y-1.5 max-h-[180px] overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
                     {projectsInSelectedSubProgram.map(proj => {
                       const isChecked = (formData.allowedProjectIds || []).includes(proj.id);
                       return (
@@ -926,24 +970,24 @@ export function UserManagement({
                           type="button"
                           key={proj.id}
                           onClick={() => handleToggleProjectPermission(proj.id)}
-                          className={`flex items-start gap-2.5 p-2 rounded-lg text-right text-xs transition-all w-full border cursor-pointer ${
+                          className={`flex items-start gap-2.5 p-2 rounded-lg ${isRtl ? 'text-right' : 'text-left'} text-xs transition-all w-full border cursor-pointer ${
                             isChecked 
-                              ? 'bg-amber-50/50 border-amber-200 text-amber-900 font-bold' 
-                              : 'bg-white border-slate-100 text-slate-500 hover:bg-slate-50'
+                              ? 'bg-amber-50/50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 font-bold' 
+                              : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
                           }`}
                         >
                           {isChecked ? (
-                            <CheckSquare className="h-4.5 w-4.5 text-amber-600 shrink-0 mt-0.5" />
+                            <CheckSquare className="h-4.5 w-4.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                           ) : (
-                            <Square className="h-4.5 w-4.5 text-slate-350 shrink-0 mt-0.5" />
+                            <Square className="h-4.5 w-4.5 text-slate-350 dark:text-slate-600 shrink-0 mt-0.5" />
                           )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
-                              <span className="truncate text-slate-800 text-[11px] font-extrabold">{proj.name}</span>
-                              <span className="text-[9px] px-1.5 bg-slate-100 border border-slate-200 text-slate-600 rounded whitespace-nowrap">{proj.classification}</span>
+                              <span className="truncate text-slate-800 dark:text-slate-100 text-[11px] font-extrabold">{translateDynamic(proj.name)}</span>
+                              <span className="text-[9px] px-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded whitespace-nowrap">{translateDynamic(proj.classification)}</span>
                             </div>
                             <div className="text-[9.5px] text-slate-400 font-normal mt-1 leading-none">
-                              الرقم التشغيلي: <span className="font-mono">{proj.operationalNumber}</span> | المقاول: {proj.contractor}
+                              {language === 'en' ? 'PO: ' : 'الرقم التشغيلي: '}<span className="font-mono">{proj.operationalNumber}</span> | {language === 'en' ? 'Contractor: ' : 'المقاول: '}{proj.contractor}
                             </div>
                           </div>
                         </button>
@@ -951,19 +995,19 @@ export function UserManagement({
                     })}
                   </div>
                 ) : (
-                  <div className="p-4 bg-white border border-slate-100 rounded-xl text-center text-xs text-slate-400">
-                    لا توجد مشاريع مضافة تابعة لهذا البرنامج الفرعي بعد.
+                  <div className="p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl text-center text-xs text-slate-400">
+                    {language === 'en' ? 'No projects currently added under this sub-program.' : 'لا توجد مشاريع مضافة تابعة لهذا البرنامج الفرعي بعد.'}
                   </div>
                 )
               ) : (
-                <div className="p-4 bg-white border border-slate-100 rounded-xl text-center text-xs text-slate-400">
-                  يرجى تحديد برنامج فرعي لعرض ومطابقة المشاريع الفردية.
+                <div className="p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl text-center text-xs text-slate-400">
+                  {language === 'en' ? 'Please select a sub-program to view and assign individual projects.' : 'يرجى تحديد برنامج فرعي لعرض ومطابقة المشاريع الفردية.'}
                 </div>
               )}
             </div>
 
             {/* Form actions */}
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 shrink-0">
+            <div className={`flex items-center ${isRtl ? 'justify-end' : 'justify-end'} gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 shrink-0`}>
               <button
                 type="button"
                 onClick={() => {
@@ -971,74 +1015,82 @@ export function UserManagement({
                   setIsCreating(false);
                   if (users[0]) setSelectedUser(users[0]);
                 }}
-                className="text-xs font-semibold px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer bg-white"
+                className="text-xs font-semibold px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300"
               >
-                إلغاء التعديل
+                {t('common.cancel')}
               </button>
               <button
                 type="submit"
                 className="text-xs font-bold px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors shadow-xs cursor-pointer border-0"
               >
-                حفظ كافة الصلاحيات
+                {t('common.save')}
               </button>
             </div>
           </form>
         ) : selectedUser ? (
-          <div className="space-y-6 flex-1 flex flex-col justify-between text-right">
+          <div className={`space-y-6 flex-1 flex flex-col justify-between ${isRtl ? 'text-right' : 'text-left'}`}>
             {/* Show User Detail */}
             <div className="space-y-5">
               <div className="flex items-start justify-between">
                 <div>
-                  <h4 className="text-lg font-bold text-slate-800">{selectedUser.name}</h4>
-                  <p className="text-xs font-mono text-slate-400">اسم حساب البوابة: @{selectedUser.username}</p>
+                  <h4 className="text-lg font-bold text-slate-800 dark:text-slate-100">{selectedUser.name}</h4>
+                  <p className="text-xs font-mono text-slate-400">@{selectedUser.username}</p>
                   
                   {/* Display Department & Job Title in Detail Card */}
                   {(selectedUser.jobTitle || selectedUser.department) && (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2.5 text-slate-600 text-xs">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2.5 text-slate-600 dark:text-slate-300 text-xs">
                       {selectedUser.jobTitle && (
-                        <span className="flex items-center gap-1 bg-slate-50 border border-slate-100 px-2 py-1 rounded-lg">
+                        <span className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 px-2 py-1 rounded-lg">
                           <Briefcase className="h-4 w-4 text-slate-400" />
-                          <span>الوظيفة: <strong>{selectedUser.jobTitle}</strong></span>
+                          <span>{t('users.jobTitle')}: <strong>{translateDynamic(selectedUser.jobTitle)}</strong></span>
                         </span>
                       )}
                       {selectedUser.department && (
-                        <span className="flex items-center gap-1 bg-slate-50 border border-slate-100 px-2 py-1 rounded-lg">
+                        <span className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 px-2 py-1 rounded-lg">
                           <Building2 className="h-4 w-4 text-slate-400" />
-                          <span>القسم: <strong>{selectedUser.department}</strong></span>
+                          <span>{t('users.department')}: <strong>{translateDynamic(selectedUser.department)}</strong></span>
                         </span>
                       )}
                     </div>
                   )}
                 </div>
-                <div className="p-3 bg-blue-50 rounded-2xl text-blue-600 shrink-0">
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/60 rounded-2xl text-blue-600 dark:text-blue-400 shrink-0">
                   <UserCheck className="h-7 w-7" />
                 </div>
               </div>
 
               {/* Badges and parameters summary */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 font-bold block mb-1 text-right">المرتبة الأمنية للمستخدم</span>
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <span className={`text-[10px] text-slate-400 font-bold block mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                    {t('users.role')}
+                  </span>
                   <div className="flex items-center gap-1.5 justify-start">
                     <Shield className="h-4 w-4 text-indigo-500 shrink-0" />
-                    <span className="text-xs font-bold text-slate-800">
-                      {selectedUser.role === 'admin' ? 'مدير كامل' : selectedUser.role === 'editor' ? 'محرر خرائط فنية' : 'مستعرض خرائط فقط'}
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      {selectedUser.role === 'admin' ? (language === 'en' ? 'Full Admin' : 'مدير كامل') : selectedUser.role === 'editor' ? (language === 'en' ? 'Map Editor' : 'محرر خرائط فنية') : (language === 'en' ? 'Viewer Only' : 'مستعرض خرائط فقط')}
                     </span>
                   </div>
                 </div>
 
-                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                  <span className="text-[10px] text-slate-400 font-bold block mb-1 text-right">حالة الحساب بمركز التنسيق</span>
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <span className={`text-[10px] text-slate-400 font-bold block mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                    {language === 'en' ? 'Account Status' : 'حالة الحساب بمركز التنسيق'}
+                  </span>
                   <div className="flex items-center gap-1.5 justify-start">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-                    <span className="text-xs font-semibold text-slate-800">نَشِط ومتصل لـ KMZ</span>
+                    <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      {language === 'en' ? 'Active & KMZ Connected' : 'نَشِط ومتصل لـ KMZ'}
+                    </span>
                   </div>
                 </div>
 
-                <div className="bg-blue-50/40 p-3.5 rounded-xl border border-blue-100/60">
-                  <span className="text-[10px] text-blue-500 font-bold block mb-1 text-right">كلمة المرور المسجلة له</span>
+                <div className="bg-blue-50/40 dark:bg-blue-950/40 p-3.5 rounded-xl border border-blue-100/60 dark:border-blue-900/60">
+                  <span className={`text-[10px] text-blue-500 font-bold block mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                    {t('users.password')}
+                  </span>
                   <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-blue-800">
+                    <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-blue-800 dark:text-blue-300">
                       <Key className="h-4 w-4 text-blue-500 shrink-0" />
                       <span>{showPassword ? (selectedUser.password || 'nwc1234') : '••••••••'}</span>
                     </div>
@@ -1046,7 +1098,7 @@ export function UserManagement({
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-100/50 transition-all cursor-pointer shrink-0 border-0 bg-transparent"
-                      title={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                      title={showPassword ? (language === 'en' ? 'Hide Password' : 'إخفاء كلمة المرور') : (language === 'en' ? 'Show Password' : 'إظهار كلمة المرور')}
                     >
                       {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                     </button>
@@ -1055,66 +1107,79 @@ export function UserManagement({
               </div>
 
               {/* Requirement 2 Checklist overview in User detail card */}
-              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
-                <span className="text-xs font-extrabold text-slate-800 block">امتيازات التحكم المفصلة:</span>
+              <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-800/40 space-y-3">
+                <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200 block">
+                  {language === 'en' ? 'Detailed Privilege Overview:' : 'امتيازات التحكم المفصلة:'}
+                </span>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs leading-relaxed">
                   {/* Tabs */}
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block mb-1">التبويبات المصرح بزيارتها:</span>
+                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
+                    <span className="text-[10px] text-slate-400 font-bold block mb-1">
+                      {t('users.allowedTabs')}:
+                    </span>
                     <div className="flex flex-wrap gap-1.5">
                       {(selectedUser.allowedTabs || ['maps', 'stats', 'layers']).map(tab => (
-                        <span key={tab} className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-bold">
-                          {tab === 'maps' ? 'الخرائط التفاعلية' : tab === 'stats' ? 'الإحصائيات' : tab === 'layers' ? 'طبقات المشاريع' : tab}
+                        <span key={tab} className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded text-[10px] font-bold">
+                          {tab === 'maps' ? (language === 'en' ? 'Maps' : 'الخرائط التفاعلية') : tab === 'stats' ? (language === 'en' ? 'Stats' : 'الإحصائيات') : tab === 'layers' ? (language === 'en' ? 'Layers' : 'طبقات المشاريع') : tab}
                         </span>
                       ))}
                     </div>
                   </div>
 
                   {/* Actions */}
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-100 space-y-1">
-                    <span className="text-[10px] text-slate-400 font-bold block mb-1">الخصائص الإضافية المسموحة:</span>
+                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 space-y-1">
+                    <span className="text-[10px] text-slate-400 font-bold block mb-1">
+                      {t('users.permissionsFlags')}:
+                    </span>
                     <div className="flex flex-col gap-1 text-[11px] font-semibold">
                       <div className="flex items-center gap-1.5">
                         <span className={`w-1.5 h-1.5 rounded-full ${selectedUser.canOpenExternalLinks !== false ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                        <span className={selectedUser.canOpenExternalLinks !== false ? 'text-emerald-700' : 'text-slate-400'}>
-                          فتح الروابط الخارجية: {selectedUser.canOpenExternalLinks !== false ? 'مسموح ✅' : 'معطل 🔒'}
+                        <span className={selectedUser.canOpenExternalLinks !== false ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}>
+                          {language === 'en' ? 'Open external links: ' : 'فتح الروابط الخارجية: '}
+                          {selectedUser.canOpenExternalLinks !== false ? (language === 'en' ? 'Allowed ✅' : 'مسموح ✅') : (language === 'en' ? 'Disabled 🔒' : 'معطل 🔒')}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className={`w-1.5 h-1.5 rounded-full ${selectedUser.canFilter !== false ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                        <span className={selectedUser.canFilter !== false ? 'text-emerald-700' : 'text-slate-400'}>
-                          البحث والتصفية: {selectedUser.canFilter !== false ? 'مسموح ✅' : 'معطل 🔒'}
+                        <span className={selectedUser.canFilter !== false ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}>
+                          {language === 'en' ? 'Search & Filter: ' : 'البحث والتصفية: '}
+                          {selectedUser.canFilter !== false ? (language === 'en' ? 'Allowed ✅' : 'مسموح ✅') : (language === 'en' ? 'Disabled 🔒' : 'معطل 🔒')}
                         </span>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <span className={`w-1.5 h-1.5 rounded-full ${selectedUser.canInsert !== false ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                        <span className={selectedUser.canInsert !== false ? 'text-emerald-700' : 'text-slate-400'}>
-                          إدراج وإضافة مشاريع: {selectedUser.canInsert !== false ? 'مسموح ✅' : 'معطل 🔒'}
+                        <span className={selectedUser.canInsert !== false ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}>
+                          {language === 'en' ? 'Add & Edit Projects: ' : 'إدراج وإضافة مشاريع: '}
+                          {selectedUser.canInsert !== false ? (language === 'en' ? 'Allowed ✅' : 'مسموح ✅') : (language === 'en' ? 'Disabled 🔒' : 'معطل 🔒')}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* Layers allowed */}
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-100 md:col-span-1">
-                    <span className="text-[10px] text-slate-400 font-bold block mb-1">طبقات المشاريع المسموح برؤيتها:</span>
+                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 md:col-span-1">
+                    <span className="text-[10px] text-slate-400 font-bold block mb-1">
+                      {t('users.allowedLayers')}:
+                    </span>
                     <div className="flex flex-wrap gap-1.5">
                       {((selectedUser.allowedLayers && selectedUser.allowedLayers.length > 0) ? selectedUser.allowedLayers : ['water', 'sewage', 'materials']).map(l => (
-                        <span key={l} className="px-2 py-0.5 bg-amber-50 text-amber-900 border border-amber-200/60 rounded text-[10px] font-bold">
-                          {l === 'water' ? '💧 المياه' : l === 'sewage' ? '🌿 الصرف الصحي' : l === 'materials' ? '📦 مواد التشوين' : l}
+                        <span key={l} className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 border border-amber-200/60 dark:border-amber-900 rounded text-[10px] font-bold">
+                          {l === 'water' ? (language === 'en' ? '💧 Water' : '💧 المياه') : l === 'sewage' ? (language === 'en' ? '🌿 Sewage' : '🌿 الصرف الصحي') : l === 'materials' ? (language === 'en' ? '📦 Materials' : '📦 مواد التشوين') : l}
                         </span>
                       ))}
                     </div>
                   </div>
 
                   {/* Stats Sub-tabs allowed */}
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-100 md:col-span-1">
-                    <span className="text-[10px] text-slate-400 font-bold block mb-1">أقسام الإحصائيات المسموح برؤيتها:</span>
+                  <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 md:col-span-1">
+                    <span className="text-[10px] text-slate-400 font-bold block mb-1">
+                      {t('users.allowedStatsSubTabs')}:
+                    </span>
                     <div className="flex flex-wrap gap-1.5">
                       {((selectedUser.allowedStatsSubTabs && selectedUser.allowedStatsSubTabs.length > 0) ? selectedUser.allowedStatsSubTabs : ['lengths', 'mymaps', 'general']).map(s => (
-                        <span key={s} className="px-2 py-0.5 bg-blue-50 text-blue-900 border border-blue-200/60 rounded text-[10px] font-bold">
-                          {s === 'lengths' ? '📏 حصر الأطوال والرخص' : s === 'mymaps' ? '📊 تحليل My Maps' : s === 'general' ? '📈 الإحصائيات العامة' : s}
+                        <span key={s} className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200 border border-blue-200/60 dark:border-blue-900 rounded text-[10px] font-bold">
+                          {s === 'lengths' ? (language === 'en' ? '📏 Lengths & Permits' : '📏 حصر الأطوال والرخص') : s === 'mymaps' ? (language === 'en' ? '📊 My Maps' : '📊 تحليل My Maps') : s === 'general' ? (language === 'en' ? '📈 General Stats' : '📈 الإحصائيات العامة') : s}
                         </span>
                       ))}
                     </div>
@@ -1124,32 +1189,42 @@ export function UserManagement({
 
               {/* Geographic boundaries visual */}
               <div className="space-y-2">
-                <span className="text-xs font-bold text-slate-700 block">نطاق التراخيص الجغرافي والقطاعي الممنوح للمستخدم:</span>
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
+                  {language === 'en' ? 'Geographic & Sector Coverage Granted:' : 'نطاق التراخيص الجغرافي والقطاعي الممنوح للمستخدم:'}
+                </span>
                 
                 <div className="space-y-1.5">
-                  <div className="text-xs text-slate-500">
-                    <strong className="text-slate-800">الأقاليم والمحافظات المسموحة:</strong>{' '}
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    <strong className="text-slate-800 dark:text-slate-200">{t('users.allowedRegions')}:</strong>{' '}
                     {selectedUser.allowedRegions.includes('الكل') ? (
-                      <span className="text-blue-600 font-semibold bg-blue-50 px-2 py-0.5 rounded">وصول جغرافي كامل (جميع المناطق)</span>
+                      <span className="text-blue-600 dark:text-blue-400 font-semibold bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded">
+                        {language === 'en' ? 'Full Geographic Access (All Regions)' : 'وصول جغرافي كامل (جميع المناطق)'}
+                      </span>
                     ) : (
-                      <span className="text-slate-700 font-semibold">{selectedUser.allowedRegions.join('، ')}</span>
+                      <span className="text-slate-700 dark:text-slate-300 font-semibold">{selectedUser.allowedRegions.map(r => translateDynamic(r)).join(', ')}</span>
                     )}
                   </div>
                   
-                  <div className="text-xs text-slate-500">
-                    <strong className="text-slate-800">القطاعات الفنية المسموحة:</strong>{' '}
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    <strong className="text-slate-800 dark:text-slate-200">{t('users.allowedScopes')}:</strong>{' '}
                     {selectedUser.allowedScopes.includes('الكل') ? (
-                      <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded">كافة تخصصات المياه والصرف</span>
+                      <span className="text-emerald-700 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded">
+                        {language === 'en' ? 'All Water & Sewage Scopes' : 'كافة تخصصات المياه والصرف'}
+                      </span>
                     ) : (
-                      <span className="text-slate-700 font-semibold">{selectedUser.allowedScopes.join('، ')}</span>
+                      <span className="text-slate-700 dark:text-slate-300 font-semibold">{selectedUser.allowedScopes.map(s => translateDynamic(s)).join(', ')}</span>
                     )}
                   </div>
 
                   {selectedUser.allowedProjectIds && selectedUser.allowedProjectIds.length > 0 && (
-                    <div className="text-xs text-slate-500 border-t border-dashed border-slate-200 pt-2.5 mt-2.5">
-                      <strong className="text-amber-800">🔒 الوصول مقتصر على مشاريع محددة ({selectedUser.allowedProjectIds.length}):</strong>{' '}
+                    <div className="text-xs text-slate-500 dark:text-slate-400 border-t border-dashed border-slate-200 dark:border-slate-700 pt-2.5 mt-2.5">
+                      <strong className="text-amber-800 dark:text-amber-300">
+                        {language === 'en' ? `🔒 Restricted to specific projects (${selectedUser.allowedProjectIds.length}):` : `🔒 الوصول مقتصر على مشاريع محددة (${selectedUser.allowedProjectIds.length}):`}
+                      </strong>{' '}
                       <p className="text-[10px] text-slate-400 font-semibold leading-relaxed mt-1">
-                        تم تقييد رؤية هذا المستشار حصراً على المشاريع المحددة التي عينها المشرف العام. لن يتمكن من رؤية غيرها في البوابة.
+                        {language === 'en' 
+                          ? 'This user is restricted exclusively to projects assigned by the system admin.'
+                          : 'تم تقييد رؤية هذا المستشار حصراً على المشاريع المحددة التي عينها المشرف العام. لن يتمكن من رؤية غيرها في البوابة.'}
                       </p>
                     </div>
                   )}
@@ -1157,30 +1232,32 @@ export function UserManagement({
               </div>
 
               {/* Rules description */}
-              <div className="p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-100 text-[11px] text-indigo-900 leading-relaxed">
-                <span className="font-bold block mb-0.5">💡 أثر الصلاحيات والقيود:</span>
-                تلقائياً يقوم النظام بتطبيق القيود الجغرافية والقطاعية والمشاريع المخصصة لفلترة المشاريع في الخرائط والإحصائيات وتفاصيل البوابة لضمان حماية ومطابقة السرية التامة للمعلومات الرسمية لشركة المياه الوطنية.
+              <div className="p-3.5 bg-indigo-50/50 dark:bg-indigo-950/30 rounded-xl border border-indigo-100 dark:border-indigo-900 text-[11px] text-indigo-900 dark:text-indigo-200 leading-relaxed">
+                <span className="font-bold block mb-0.5">💡 {language === 'en' ? 'Access Control Policy:' : 'أثر الصلاحيات والقيود:'}</span>
+                {language === 'en' 
+                  ? 'The system automatically enforces geographic, scope, and project constraints to safeguard National Water Company official GIS records.'
+                  : 'تلقائياً يقوم النظام بتطبيق القيود الجغرافية والقطاعية والمشاريع المخصصة لفلترة المشاريع في الخرائط والإحصائيات وتفاصيل البوابة لضمان حماية ومطابقة السرية التامة للمعلومات الرسمية لشركة المياه الوطنية.'}
               </div>
             </div>
 
             {/* Actions for selection */}
             {isAdmin && (
-              <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-100 shrink-0">
+              <div className={`flex items-center ${isRtl ? 'justify-end' : 'justify-end'} gap-2 pt-4 border-t border-slate-100 dark:border-slate-800 shrink-0`}>
                 <button
                   type="button"
                   onClick={() => handleDelete(selectedUser.id)}
-                  className="flex items-center gap-1 text-xs text-rose-600 hover:text-white border border-rose-200 hover:bg-rose-600 px-3 py-2 rounded-xl transition-all cursor-pointer bg-white"
+                  className="flex items-center gap-1 text-xs text-rose-600 hover:text-white border border-rose-200 dark:border-rose-800 hover:bg-rose-600 px-3 py-2 rounded-xl transition-all cursor-pointer bg-white dark:bg-slate-900"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  <span>حذف الحساب</span>
+                  <span>{t('users.deleteUser')}</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleStartEdit}
-                  className="flex items-center gap-1 text-xs bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer border-0"
+                  className="flex items-center gap-1 text-xs bg-slate-900 dark:bg-blue-600 hover:bg-slate-800 dark:hover:bg-blue-500 text-white font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer border-0"
                 >
                   <Settings className="h-3.5 w-3.5" />
-                  <span>تعديل هذا المستخدم</span>
+                  <span>{t('users.editUser')}</span>
                 </button>
               </div>
             )}
@@ -1188,7 +1265,7 @@ export function UserManagement({
         ) : (
           <div className="text-center text-slate-400 py-16">
             <Users className="h-10 w-10 mx-auto opacity-40 mb-2" />
-            <p className="text-xs">الرجاء اختيار مستخدم من القائمة لمشاهدة أو تعديل تفاصيل صلاحياته.</p>
+            <p className="text-xs">{language === 'en' ? 'Please select a user from the list to view or edit permissions.' : 'الرجاء اختيار مستخدم من القائمة لمشاهدة أو تعديل تفاصيل صلاحياته.'}</p>
           </div>
         )}
 

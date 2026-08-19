@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Volume2, AlertCircle, Loader2, Check } from 'lucide-react';
+import { useLanguage } from '../utils/i18n';
 
 interface VoiceSearchButtonProps {
   onSpeechResult: (text: string) => void;
@@ -27,14 +28,17 @@ export const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = ({
   onAutoSubmit,
   className = '',
   size = 'md',
-  placeholderHint = 'تحدث باسم المشروع، رقم العقد، أو المنطقة...'
+  placeholderHint
 }) => {
+  const { t, isRtl, language } = useLanguage();
   const [isListening, setIsListening] = useState(false);
   const [isSupported, setIsSupported] = useState(true);
   const [interimText, setInterimText] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [showTooltip, setShowTooltip] = useState(false);
   const recognitionRef = useRef<any>(null);
+
+  const defaultHint = placeholderHint || (language === 'en' ? 'Speak project name, PO number, or region...' : 'تحدث باسم المشروع، رقم العقد، أو المنطقة...');
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -47,7 +51,7 @@ export const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = ({
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setIsSupported(false);
-      setStatusMessage('عذراً، متصفحك لا يدعم خاصية البحث الصوتي المباشر.');
+      setStatusMessage(t('voice.notSupported'));
       setShowTooltip(true);
       setTimeout(() => setShowTooltip(false), 4000);
       return;
@@ -63,12 +67,12 @@ export const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = ({
 
       recognition.continuous = false;
       recognition.interimResults = true;
-      recognition.lang = 'ar-SA'; // Default to Saudi Arabic for local field context
+      recognition.lang = language === 'en' ? 'en-US' : 'ar-SA';
 
       recognition.onstart = () => {
         setIsListening(true);
         setInterimText('');
-        setStatusMessage('جاري الاستماع... تحدث الآن 🎙️');
+        setStatusMessage(t('voice.listening'));
         setShowTooltip(true);
       };
 
@@ -91,7 +95,7 @@ export const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = ({
         }
 
         if (isFinal) {
-          setStatusMessage('تم التقاط الأمر الصوتي بنجاح ✨');
+          setStatusMessage(t('voice.captured'));
           setTimeout(() => {
             setIsListening(false);
             setShowTooltip(false);
@@ -106,11 +110,11 @@ export const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = ({
         console.warn('Speech recognition error:', event.error);
         setIsListening(false);
         if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-          setStatusMessage('يرجى السماح بصلاحية الميكروفون في المتصفح لاستخدام البحث الصوتي.');
+          setStatusMessage(t('voice.micPermission'));
         } else if (event.error === 'no-speech') {
-          setStatusMessage('لم يتم التقاط أي صوت، يرجى إعادة المحاولة والتحدث بوضوح.');
+          setStatusMessage(t('voice.noSpeech'));
         } else {
-          setStatusMessage('حدث خطأ أثناء الاتصال بالبحث الصوتي.');
+          setStatusMessage(t('voice.error'));
         }
         setShowTooltip(true);
         setTimeout(() => setShowTooltip(false), 4000);
@@ -124,7 +128,7 @@ export const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = ({
     } catch (err) {
       console.error('Failed to initialize speech recognition:', err);
       setIsListening(false);
-      setStatusMessage('تعذر بدء التسجيل الصوتي.');
+      setStatusMessage(t('voice.startError'));
       setShowTooltip(true);
       setTimeout(() => setShowTooltip(false), 3000);
     }
@@ -172,8 +176,8 @@ export const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = ({
             ? 'bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 border border-slate-200 hover:border-blue-200'
             : 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-60'
         } ${className}`}
-        title={isListening ? 'إيقاف الاستماع الصوتي' : 'البحث بالصوت المباشر (الأوامر الصوتية)'}
-        dir="rtl"
+        title={isListening ? t('voice.stopTitle') : t('voice.startTitle')}
+        dir={isRtl ? 'rtl' : 'ltr'}
       >
         {isListening ? (
           <Mic className={`${iconSizes[size]} animate-bounce text-white`} />
@@ -191,18 +195,18 @@ export const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = ({
 
       {/* Floating Popup Card for Live Speech Feedback */}
       {showTooltip && (
-        <div className="absolute top-full mt-2 right-0 z-[2000] w-64 bg-slate-900 text-white text-xs p-3 rounded-xl shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-top-2 duration-200" dir="rtl">
+        <div className={`absolute top-full mt-2 ${isRtl ? 'right-0 text-right' : 'left-0 text-left'} z-[2000] w-64 bg-slate-900 text-white text-xs p-3 rounded-xl shadow-2xl border border-slate-700 animate-in fade-in slide-in-from-top-2 duration-200`} dir={isRtl ? 'rtl' : 'ltr'}>
           <div className="flex items-center justify-between gap-2 mb-1.5 border-b border-slate-800 pb-1.5">
             <div className="flex items-center gap-1.5 font-extrabold text-blue-400 text-[11px]">
               {isListening ? (
                 <>
                   <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-                  <span>البحث الصوتي نشط...</span>
+                  <span>{t('voice.titleActive')}</span>
                 </>
               ) : (
                 <>
                   <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
-                  <span>خاصية البحث بالأوامر الصوتية</span>
+                  <span>{t('voice.titleFeature')}</span>
                 </>
               )}
             </div>
@@ -212,7 +216,7 @@ export const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = ({
                 onClick={stopListening}
                 className="text-[10px] text-slate-400 hover:text-white px-1.5 py-0.5 rounded bg-slate-800"
               >
-                إلغاء
+                {t('common.cancel')}
               </button>
             )}
           </div>
@@ -223,7 +227,7 @@ export const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = ({
 
           {interimText && (
             <div className="mt-2 bg-slate-800/90 p-2 rounded-lg border border-slate-700/80">
-              <span className="text-[9px] text-slate-400 font-bold block mb-0.5">النص الملتقط:</span>
+              <span className="text-[9px] text-slate-400 font-bold block mb-0.5">{t('voice.capturedText')}</span>
               <p className="text-xs font-black text-amber-300 break-words leading-tight">
                 "{interimText}"
               </p>
@@ -232,7 +236,7 @@ export const VoiceSearchButton: React.FC<VoiceSearchButtonProps> = ({
 
           {!isListening && !interimText && (
             <p className="text-[9.5px] text-slate-400 mt-1 italic">
-              {placeholderHint}
+              {defaultHint}
             </p>
           )}
         </div>

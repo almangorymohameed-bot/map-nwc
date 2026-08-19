@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { Project, User as UserType } from '../types';
 import { getSupabaseClient } from '../utils/supabaseSetup';
+import { useLanguage } from '../utils/i18n';
 
 export interface FieldChange {
   fieldLabel: string;
@@ -66,6 +67,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
   projects,
   onSelectProject
 }) => {
+  const { t, translateDynamic, formatNumber, isRtl, language } = useLanguage();
   const [changelogs, setChangelogs] = useState<ChangelogItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -238,17 +240,17 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
     const totalLogs = filteredChangelogs.length;
     const uniqueProjectsCount = new Set(filteredChangelogs.map(c => c.projectName)).size;
     const uniqueUsersCount = new Set(filteredChangelogs.map(c => c.userName)).size;
-    const latestLog = filteredChangelogs.length > 0 ? filteredChangelogs[0].timestamp : 'لا يوجد';
+    const latestLog = filteredChangelogs.length > 0 ? filteredChangelogs[0].timestamp : t('changelog.none', 'لا يوجد');
 
     return { totalLogs, uniqueProjectsCount, uniqueUsersCount, latestLog };
-  }, [filteredChangelogs]);
+  }, [filteredChangelogs, t]);
 
   const toggleExpand = (id: string) => {
     setExpandedLogIds(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   return (
-    <div className="space-y-6 dir-rtl text-right font-sans" id="changelog-tab-root">
+    <div className={`space-y-6 font-sans ${isRtl ? 'dir-rtl text-right' : 'dir-ltr text-left'}`} dir={isRtl ? 'rtl' : 'ltr'} id="changelog-tab-root">
       
       {/* Top Banner Card */}
       <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-slate-800 relative overflow-hidden">
@@ -259,10 +261,12 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
               <div className="p-2.5 bg-blue-600/30 rounded-2xl border border-blue-400/30 backdrop-blur-md">
                 <History className="h-6 w-6 text-blue-400" />
               </div>
-              <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">سجل التغييرات والتحديثات التاريخية (Timeline Changelog)</h2>
+              <h2 className="text-lg sm:text-xl font-extrabold tracking-tight">
+                {t('changelog.bannerTitle', 'سجل التغييرات والتحديثات التاريخية (Timeline Changelog)')}
+              </h2>
             </div>
             <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-              جدول زمني تفاعلي يوثق كافة التعديلات والإدراجات التي طرأت على بيانات الخرائط التشغيلية، مع عرض دقيق للمهندس المجرِي للتعديل، وقت الإجراء، والمقارنة المباشرة بين البيانات القديمة والجديدة.
+              {t('changelog.bannerDesc', 'جدول زمني تفاعلي يوثق كافة التعديلات والإدراجات التي طرأت على بيانات الخرائط التشغيلية، مع عرض دقيق للمهندس المجرِي للتعديل، وقت الإجراء، والمقارنة المباشرة بين البيانات القديمة والجديدة.')}
             </p>
           </div>
 
@@ -272,26 +276,26 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
             className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all border border-white/15 cursor-pointer shrink-0 self-start md:self-center"
           >
             <RotateCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>تحديث السجل فوراً</span>
+            <span>{t('changelog.refreshNow', 'تحديث السجل فوراً')}</span>
           </button>
         </div>
 
         {/* Quick KPI Counters */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-800/80">
           <div className="bg-white/5 backdrop-blur-xs p-3 rounded-2xl border border-white/10">
-            <span className="text-[10px] text-slate-400 font-bold block">إجمالي التعديلات المسجلة</span>
-            <span className="text-base font-black text-blue-400 mt-0.5 block">{stats.totalLogs} إجراء</span>
+            <span className="text-[10px] text-slate-400 font-bold block">{t('changelog.totalRecordedChanges', 'إجمالي التعديلات المسجلة')}</span>
+            <span className="text-base font-black text-blue-400 mt-0.5 block">{formatNumber(stats.totalLogs)} {t('changelog.actionUnit', 'إجراء')}</span>
           </div>
           <div className="bg-white/5 backdrop-blur-xs p-3 rounded-2xl border border-white/10">
-            <span className="text-[10px] text-slate-400 font-bold block">المشاريع المعدلة</span>
-            <span className="text-base font-black text-emerald-400 mt-0.5 block">{stats.uniqueProjectsCount} مشروع</span>
+            <span className="text-[10px] text-slate-400 font-bold block">{t('changelog.modifiedProjects', 'المشاريع المعدلة')}</span>
+            <span className="text-base font-black text-emerald-400 mt-0.5 block">{formatNumber(stats.uniqueProjectsCount)} {t('changelog.projectUnit', 'مشروع')}</span>
           </div>
           <div className="bg-white/5 backdrop-blur-xs p-3 rounded-2xl border border-white/10">
-            <span className="text-[10px] text-slate-400 font-bold block">المهندسين المساهمين</span>
-            <span className="text-base font-black text-amber-400 mt-0.5 block">{stats.uniqueUsersCount} مهندس</span>
+            <span className="text-[10px] text-slate-400 font-bold block">{t('changelog.contributingEngineers', 'المهندسين المساهمين')}</span>
+            <span className="text-base font-black text-amber-400 mt-0.5 block">{formatNumber(stats.uniqueUsersCount)} {t('changelog.engineerUnit', 'مهندس')}</span>
           </div>
           <div className="bg-white/5 backdrop-blur-xs p-3 rounded-2xl border border-white/10">
-            <span className="text-[10px] text-slate-400 font-bold block">أحدث نشاط مسجل</span>
+            <span className="text-[10px] text-slate-400 font-bold block">{t('changelog.latestActivity', 'أحدث نشاط مسجل')}</span>
             <span className="text-xs font-extrabold text-cyan-300 mt-1 block truncate">{stats.latestLog}</span>
           </div>
         </div>
@@ -303,18 +307,22 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
           
           {/* Search Box */}
           <div className="md:col-span-5 relative">
-            <Search className="h-4 w-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+            <Search className={`h-4 w-4 text-slate-400 absolute top-1/2 -translate-y-1/2 ${isRtl ? 'right-3.5' : 'left-3.5'}`} />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="ابحث باسم المشروع، رقم التشغيل، اسم المهندس، أو البيان المعدل..."
-              className="w-full text-xs pr-10 pl-8 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 dark:text-slate-100"
+              placeholder={t('changelog.searchPlaceholder', 'ابحث باسم المشروع، رقم التشغيل، اسم المهندس، أو البيان المعدل...')}
+              className={`w-full text-xs py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 dark:text-slate-100 ${
+                isRtl ? 'pr-10 pl-8' : 'pl-10 pr-8'
+              }`}
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold"
+                className={`absolute top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold ${
+                  isRtl ? 'left-3' : 'right-3'
+                }`}
               >
                 ✕
               </button>
@@ -328,7 +336,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
               onChange={(e) => setSelectedProjectId(e.target.value)}
               className="w-full text-xs p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 dark:text-slate-100 font-medium"
             >
-              <option value="all">كل المشاريع ({projects.length})</option>
+              <option value="all">{t('changelog.allProjects', 'كل المشاريع')} ({formatNumber(projects.length)})</option>
               {projects.map(p => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -344,10 +352,10 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
               onChange={(e) => setSelectedChangeType(e.target.value)}
               className="w-full text-xs p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 dark:text-slate-100 font-medium"
             >
-              <option value="all">جميع أنواع الإجراءات</option>
-              <option value="edit">📝 تعديل بيانات المشروع</option>
-              <option value="add">🚀 إضافة مشروع جديد</option>
-              <option value="map_update">🗺️ تحديث الخريطة والأطوال</option>
+              <option value="all">{t('changelog.allActionTypes', 'جميع أنواع الإجراءات')}</option>
+              <option value="edit">{t('changelog.editProjectData', '📝 تعديل بيانات المشروع')}</option>
+              <option value="add">{t('changelog.addNewProject', '🚀 إضافة مشروع جديد')}</option>
+              <option value="map_update">{t('changelog.updateMapLengths', '🗺️ تحديث الخريطة والأطوال')}</option>
             </select>
           </div>
 
@@ -358,7 +366,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
               onChange={(e) => setSelectedUser(e.target.value)}
               className="w-full text-xs p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 dark:text-slate-100 font-medium"
             >
-              <option value="all">جميع المهندسين</option>
+              <option value="all">{t('changelog.allEngineers', 'جميع المهندسين')}</option>
               {availableUsers.map((u, idx) => (
                 <option key={idx} value={u}>
                   {u}
@@ -377,7 +385,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <h3 className="text-xs font-extrabold text-slate-900 dark:text-white">
-              الجدول الزمني للعمليات ({filteredChangelogs.length})
+              {t('changelog.timelineTitle', 'الجدول الزمني للعمليات')} ({formatNumber(filteredChangelogs.length)})
             </h3>
           </div>
           {(searchTerm || selectedProjectId !== 'all' || selectedChangeType !== 'all' || selectedUser !== 'all') && (
@@ -390,7 +398,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
               }}
               className="text-[11px] text-blue-600 dark:text-blue-400 font-bold hover:underline cursor-pointer"
             >
-              إعادة ضبط الفلاتر
+              {t('changelog.resetFilters', 'إعادة ضبط الفلاتر')}
             </button>
           )}
         </div>
@@ -398,16 +406,16 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
         {loading ? (
           <div className="py-16 text-center text-slate-400 text-xs space-y-3">
             <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <p className="font-bold">جاري تحميل وثائق سجل التغييرات التاريخية...</p>
+            <p className="font-bold">{t('changelog.loading', 'جاري تحميل وثائق سجل التغييرات التاريخية...')}</p>
           </div>
         ) : filteredChangelogs.length === 0 ? (
           <div className="py-16 text-center text-slate-400 text-xs space-y-3">
             <History className="h-12 w-12 text-slate-300 dark:text-slate-700 mx-auto stroke-1" />
-            <p className="font-extrabold text-slate-600 dark:text-slate-300">لا توجد سجلات تعديل مطابقة للبحث أو الفلاتر المحددة</p>
-            <p className="text-[11px] text-slate-400">حاول تغيير جملة البحث أو تحديد مشروع ومهندس آخر.</p>
+            <p className="font-extrabold text-slate-600 dark:text-slate-300">{t('changelog.noRecords', 'لا توجد سجلات تعديل مطابقة للبحث أو الفلاتر المحددة')}</p>
+            <p className="text-[11px] text-slate-400">{t('changelog.noRecordsDesc', 'حاول تغيير جملة البحث أو تحديد مشروع ومهندس آخر.')}</p>
           </div>
         ) : (
-          <div className="relative pr-4 sm:pr-6 border-r-2 border-slate-200 dark:border-slate-800 space-y-8">
+          <div className={`relative space-y-8 ${isRtl ? 'pr-4 sm:pr-6 border-r-2' : 'pl-4 sm:pl-6 border-l-2'} border-slate-200 dark:border-slate-800`}>
             {filteredChangelogs.map((log, index) => {
               const isExpanded = expandedLogIds[log.id] ?? (index === 0 || (log.fieldChanges && log.fieldChanges.length > 0));
               const projectObj = projects.find(p => p.name === log.projectName || String(p.id) === String(log.projectId));
@@ -416,7 +424,9 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
                 <div key={log.id} className="relative group">
                   
                   {/* Timeline Node Icon */}
-                  <div className={`absolute -right-[25px] sm:-right-[33px] top-1.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white ring-4 ring-white dark:ring-slate-900 shadow-md z-10 transition-transform group-hover:scale-110 ${
+                  <div className={`absolute top-1.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white ring-4 ring-white dark:ring-slate-900 shadow-md z-10 transition-transform group-hover:scale-110 ${
+                    isRtl ? '-right-[25px] sm:-right-[33px]' : '-left-[25px] sm:-left-[33px]'
+                  } ${
                     log.changeType === 'add'
                       ? 'bg-emerald-600'
                       : log.changeType === 'map_update'
@@ -449,7 +459,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
                               {log.userName}
                             </span>
                             <span className="text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-full font-bold">
-                              {log.userRole || 'عضو بوابة NWC'}
+                              {translateDynamic(log.userRole || '') || t('changelog.memberRole', 'عضو بوابة NWC')}
                             </span>
                           </div>
                         </div>
@@ -487,11 +497,11 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
                           : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
                       }`}>
                         {log.changeType === 'add' ? (
-                          <>🚀 إضافة مشروع جديد</>
+                          <>{t('changelog.addNewProject', '🚀 إضافة مشروع جديد')}</>
                         ) : log.changeType === 'map_update' ? (
-                          <>🗺️ تحديث خريطة وأطوال</>
+                          <>{t('changelog.updateMapLengths', '🗺️ تحديث خريطة وأطوال')}</>
                         ) : (
-                          <>📝 تعديل بيانات المشروع</>
+                          <>{t('changelog.editProjectData', '📝 تعديل بيانات المشروع')}</>
                         )}
                       </span>
                     </div>
@@ -511,7 +521,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
                         >
                           <ArrowLeftRight className="h-3.5 w-3.5" />
                           <span>
-                            {isExpanded ? 'إخفاء المقارنة التفصيلية (القديمة ⬅️ الجديدة)' : 'عرض المقارنة التفصيلية (القديمة ⬅️ الجديدة)'}
+                            {isExpanded ? t('changelog.hideComparison', 'إخفاء المقارنة التفصيلية (القديمة ⬅️ الجديدة)') : t('changelog.showComparison', 'عرض المقارنة التفصيلية (القديمة ⬅️ الجديدة)')}
                           </span>
                           {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                         </button>
@@ -522,8 +532,8 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
                             {log.fieldChanges && log.fieldChanges.length > 0 && (
                               <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
                                 <div className="bg-slate-100 dark:bg-slate-800 px-3.5 py-2 border-b border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                                  <span>البيان المعدل</span>
-                                  <span>مقارنة القيمة القديمة بالجديدة</span>
+                                  <span>{t('changelog.modifiedField', 'البيان المعدل')}</span>
+                                  <span>{t('changelog.comparisonOldNew', 'مقارنة القيمة القديمة بالجديدة')}</span>
                                 </div>
                                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
                                   {log.fieldChanges.map((change, fcIdx) => (
@@ -532,7 +542,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
                                       {/* Field Label */}
                                       <div className="md:col-span-4 font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                                         <Tag className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                                        <span>{change.fieldLabel}</span>
+                                        <span>{translateDynamic(change.fieldLabel)}</span>
                                       </div>
 
                                       {/* Old vs New Comparison Box */}
@@ -540,13 +550,13 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
                                         {/* Old Value */}
                                         <div className="bg-rose-50/80 dark:bg-rose-950/40 p-2 rounded-lg border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 font-medium text-[11.5px] flex items-center gap-1.5 break-all">
                                           <XCircle className="h-3.5 w-3.5 text-rose-500 shrink-0" />
-                                          <span className="line-through opacity-80">{change.oldValue || 'غير محدد'}</span>
+                                          <span className="line-through opacity-80">{translateDynamic(change.oldValue) || t('changelog.unspecified', 'غير محدد')}</span>
                                         </div>
 
                                         {/* New Value */}
                                         <div className="bg-emerald-50/80 dark:bg-emerald-950/40 p-2 rounded-lg border border-emerald-200 dark:border-emerald-900 text-emerald-800 dark:text-emerald-300 font-extrabold text-[11.5px] flex items-center gap-1.5 break-all">
                                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                                          <span>{change.newValue || 'غير محدد'}</span>
+                                          <span>{translateDynamic(change.newValue) || t('changelog.unspecified', 'غير محدد')}</span>
                                         </div>
                                       </div>
 
@@ -561,7 +571,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
                               <div className="bg-purple-50/60 dark:bg-purple-950/30 p-3.5 rounded-xl border border-purple-200 dark:border-purple-900/60 space-y-2 text-xs text-purple-900 dark:text-purple-200">
                                 <div className="font-bold flex items-center gap-1.5">
                                   <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                                  <span>تفاصيل تغيرات الخريطة والأطوال (KML Map Analysis):</span>
+                                  <span>{t('changelog.mapDetailsTitle', 'تفاصيل تغيرات الخريطة والأطوال (KML Map Analysis):')}</span>
                                 </div>
                                 {log.mapDetails.summaryMessages && log.mapDetails.summaryMessages.length > 0 ? (
                                   <ul className="list-disc list-inside space-y-1 font-semibold text-[11px]">
@@ -570,7 +580,7 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
                                     ))}
                                   </ul>
                                 ) : (
-                                  <p className="text-[11px] font-medium">تم تحديث ملف الخريطة بنجاح ورصد الفروقات الميدانية.</p>
+                                  <p className="text-[11px] font-medium">{t('changelog.mapDetailsSuccess', 'تم تحديث ملف الخريطة بنجاح ورصد الفروقات الميدانية.')}</p>
                                 )}
                               </div>
                             )}
@@ -582,13 +592,13 @@ export const ChangelogTab: React.FC<ChangelogTabProps> = ({
 
                     {/* Footer Actions */}
                     {projectObj && onSelectProject && (
-                      <div className="pt-2 flex justify-end">
+                      <div className={`pt-2 flex ${isRtl ? 'justify-end' : 'justify-start'}`}>
                         <button
                           type="button"
                           onClick={() => onSelectProject(projectObj)}
                           className="text-[11px] text-blue-600 dark:text-blue-400 font-bold hover:underline flex items-center gap-1 bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs cursor-pointer"
                         >
-                          <span>عرض خريطة هذا المشروع 📍</span>
+                          <span>{t('changelog.viewProjectMap', 'عرض خريطة هذا المشروع 📍')}</span>
                         </button>
                       </div>
                     )}

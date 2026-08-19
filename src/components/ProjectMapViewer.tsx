@@ -18,6 +18,7 @@ import { MyMapsAnalysisPanel } from './MyMapsAnalysisPanel';
 import { MapLegend } from './MapLegend';
 import { KMLAnalysisResult } from '../types';
 import { handleLoadMyMapsLink, generateSyntheticProjectKMLData } from '../utils/myMapsKmlParser';
+import { useLanguage } from '../utils/i18n';
 import { 
   Map, 
   Maximize2, 
@@ -215,6 +216,7 @@ export function ProjectMapViewer({
   isAdmin = false,
   canOpenExternalLinks = true
 }: ProjectMapViewerProps) {
+  const { t, language, translateDynamic, isRtl } = useLanguage();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLeafletReady, setIsLeafletReady] = useState(true);
   const [showAutoAnalysisModal, setShowAutoAnalysisModal] = useState(false);
@@ -335,17 +337,21 @@ export function ProjectMapViewer({
 
     map.setView([lat, lng], 14, { animate: true, duration: 1.0 });
 
+    const isEn = language === 'en';
+    const dirAttr = isEn ? 'dir="ltr"' : 'dir="rtl"';
+    const textAlignClass = isEn ? 'text-left' : 'text-right';
+
     const popupHtml = `
-      <div dir="rtl" class="text-right p-1.5 font-sans min-w-[200px]">
-        <div class="flex items-center gap-1.5 mb-1.5 align-right">
-          <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-100">الموقع المحدد للبحث 📍</span>
+      <div ${dirAttr} class="${textAlignClass} p-1.5 font-sans min-w-[200px]">
+        <div class="flex items-center gap-1.5 mb-1.5 justify-start">
+          <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-100">${t('map.searchResultCoords', 'الموقع المحدد للبحث 📍')}</span>
           <span class="px-1.5 py-0.5 rounded text-[8.5px] bg-slate-100 text-slate-600 font-mono">GPS_MATCH</span>
         </div>
         <div class="font-extrabold text-slate-900 text-xs mb-1">${popupLabel}</div>
         <div class="text-[9px] text-slate-400 font-mono flex items-center justify-between bg-slate-50 p-1 rounded mt-2 border border-slate-100">
-          <span>خط العرض: ${lat.toFixed(6)}</span>
+          <span>Lat: ${lat.toFixed(6)}</span>
           <span class="text-slate-300">|</span>
-          <span>خط الطول: ${lng.toFixed(6)}</span>
+          <span>Lng: ${lng.toFixed(6)}</span>
         </div>
       </div>
     `;
@@ -568,6 +574,10 @@ export function ProjectMapViewer({
     const L = (window as any).L;
     if (!L) return;
 
+    const isEn = language === 'en';
+    const dirAttr = isEn ? 'dir="ltr"' : 'dir="rtl"';
+    const textAlignClass = isEn ? 'text-left' : 'text-right';
+
     // Instantiate map if not loaded
     if (!mapInstanceRef.current) {
       mapInstanceRef.current = L.map(mapContainerRef.current, {
@@ -669,47 +679,29 @@ export function ProjectMapViewer({
       
       if (isSewage) {
         strokeColor = '#15803d'; // green-700
-        fillColor = '#10b981'; // emerald-500
-      } else {
-        strokeColor = '#1d4ed8'; // blue-700
-        fillColor = '#3b82f6'; // blue-500
-      }
-
-      let radius = 7.5;
-      let weight = 1.5;
-      let opacity = 0.85;
-      let fillOpacity = 0.7;
-
-      if (isSelected) {
-        radius = 12;
-        weight = 3.5;
-        opacity = 1.0;
-        fillOpacity = 0.95;
-        // Keep classification fillColor, but make high-contrast dark slate outline border
-        strokeColor = '#1e293b';
+        fillColor = '#22c55e'; // green-500
       }
 
       const markerOptions = {
-        radius,
-        color: strokeColor,
-        weight,
-        opacity,
-        fillColor,
-        fillOpacity,
-        className: isSelected ? 'leaflet-active-pulse-glow' : ''
+        radius: isSelected ? 12 : 7.5,
+        color: isSelected ? '#ffffff' : strokeColor,
+        fillColor: isSelected ? '#f59e0b' : fillColor,
+        weight: isSelected ? 3.5 : 2,
+        opacity: 1,
+        fillOpacity: isSelected ? 1 : 0.9
       };
 
-      // Clean RTL styling inside Leaflet popups - made very compact for small mobile screens
+      // Clean RTL/LTR styling inside Leaflet popups - made very compact for small mobile screens
       const popupHtml = `
-        <div dir="rtl" class="text-right font-sans p-0 flex flex-col gap-1.5 w-[210px] sm:w-[255px] select-none">
+        <div ${dirAttr} class="${textAlignClass} font-sans p-0 flex flex-col gap-1.5 w-[210px] sm:w-[255px] select-none">
           <div class="flex flex-wrap items-center gap-1 mb-0.5 justify-start">
             <span class="px-1.5 py-0.5 rounded text-[8.5px] font-black shadow-3xs ${
               isWater ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
             }">
-              ${p.scope}
+              ${translateDynamic(p.scope || '')}
             </span>
             <span class="px-1.5 py-0.5 rounded text-[8.5px] font-black bg-slate-100 text-slate-700 border border-slate-200 shadow-3xs">
-              ${p.classification}
+              ${translateDynamic(p.classification || '')}
             </span>
             <span class="px-1.5 py-0.5 rounded text-[8.5px] font-black shadow-3xs ${
               (p.status || '').includes('جاري') 
@@ -718,26 +710,26 @@ export function ProjectMapViewer({
                   ? 'bg-rose-50 text-rose-700 border border-rose-200'
                   : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
             }">
-              ${p.status || ''}
+              ${translateDynamic(p.status || '')}
             </span>
           </div>
-          <h5 class="font-black text-[#0F172A] text-[11.5px] sm:text-[12.5px] leading-tight tracking-tight mb-1 text-right break-words">${p.name}</h5>
+          <h5 class="font-black text-[#0F172A] text-[11.5px] sm:text-[12.5px] leading-tight tracking-tight mb-1 ${textAlignClass} break-words">${p.name}</h5>
           
           <div class="text-[9.5px] text-slate-500 space-y-1 mt-0.5 border-t border-slate-100 pt-1.5 leading-normal">
-            <div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">الرقم التشغيلي:</strong> <span class="font-mono text-slate-800 font-extrabold text-left break-all select-all">${p.operationalNumber}</span></div>
-            <div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">المقاول:</strong> <span class="text-slate-800 font-extrabold text-left leading-tight">${p.contractor}</span></div>
-            <div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">الاستشاري:</strong> <span class="text-slate-800 font-extrabold text-left leading-tight">${p.consultant}</span></div>
-            ${p.surveyorName ? `<div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">اسم المساح:</strong> <span class="text-slate-800 font-extrabold text-left leading-tight">${p.surveyorName}</span></div>` : ''}
+            <div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">${t('map.opNo')}</strong> <span class="font-mono text-slate-800 font-extrabold text-left break-all select-all">${p.operationalNumber}</span></div>
+            <div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">${t('map.contractor')}</strong> <span class="text-slate-800 font-extrabold text-left leading-tight">${p.contractor}</span></div>
+            <div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">${t('map.consultant')}</strong> <span class="text-slate-800 font-extrabold text-left leading-tight">${p.consultant}</span></div>
+            ${p.surveyorName ? `<div class="flex justify-between items-start gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60"><strong class="text-slate-400 shrink-0 font-bold">${t('map.surveyorName')}</strong> <span class="text-slate-800 font-extrabold text-left leading-tight">${p.surveyorName}</span></div>` : ''}
             ${p.surveyorPhone ? `
               <div class="flex justify-between items-center gap-1.5 pb-0.5 border-b border-dashed border-slate-100/60">
-                <strong class="text-slate-400 shrink-0 font-bold">واتساب المساح:</strong>
+                <strong class="text-slate-400 shrink-0 font-bold">${t('map.surveyorPhone')}</strong>
                 <a href="${getWhatsAppLink(p.surveyorPhone, p.name, p.operationalNumber)}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 text-emerald-600 font-extrabold font-mono hover:underline bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" style="text-decoration:none;">
                   <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="#059669" stroke="none"><path d="M12.031 2c-5.514 0-9.998 4.485-9.998 9.999 0 1.944.557 3.754 1.522 5.295l-1.555 5.706 5.86-1.537c1.472.846 3.179 1.335 4.996 1.335 5.514 0 9.998-4.485 9.998-9.999 0-5.514-4.484-9.999-9.998-9.999zm4.444 14.129c-.279.785-1.427 1.442-1.956 1.488-.507.043-1.166.195-3.832-.888-3.033-1.233-4.949-4.322-5.099-4.522-.15-.2-1.222-1.628-1.222-3.102 0-1.474.772-2.197 1.047-2.493.275-.296.598-.37.797-.37.2 0 .4.002.573.011.183.01.428-.069.67.51.246.589.843 2.059.917 2.208.074.15.123.324.025.523-.099.199-.15.324-.298.498-.148.174-.312.389-.446.523-.148.148-.302.31-.13.606.172.296.766 1.264 1.643 2.046 1.127 1.004 2.077 1.316 2.373 1.464.296.148.47.123.644-.075.174-.199.746-.869.944-1.168.198-.298.396-.248.669-.148.273.099 1.734.818 2.031.966.297.148.495.223.568.347.074.124.074.717-.205 1.502z"/></svg>
                   <span dir="ltr">${p.surveyorPhone}</span>
                 </a>
               </div>
             ` : ''}
-            <div class="flex justify-between items-start gap-1.5"><strong class="text-slate-400 shrink-0 font-bold">النطاق:</strong> <span class="text-slate-800 font-extrabold text-left">${p.region}</span></div>
+            <div class="flex justify-between items-start gap-1.5"><strong class="text-slate-400 shrink-0 font-bold">${t('map.region')}</strong> <span class="text-slate-800 font-extrabold text-left">${translateDynamic(p.region || '')}</span></div>
           </div>
           
           <div class="mt-2 pt-1.5 border-t border-slate-100 flex flex-col gap-1">
@@ -748,7 +740,7 @@ export function ProjectMapViewer({
               style="text-decoration: none; color: white !important;"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:2px;"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
-              المعاينة والتفاصيل 🔍
+              ${t('map.viewAndDetails')}
             </button>
             ${canOpenExternalLinks ? `
             <button 
@@ -758,7 +750,7 @@ export function ProjectMapViewer({
               style="text-decoration: none;"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block; vertical-align:middle; margin-left:2px;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-              فتح في قوقل ماب 🌐
+              ${t('map.openInGoogleMaps')}
             </button>
             ` : ''}
           </div>
@@ -804,15 +796,15 @@ export function ProjectMapViewer({
       };
 
       const previewPopupHtml = `
-        <div dir="rtl" class="text-right font-sans p-1.5 min-w-[200px]">
+        <div ${dirAttr} class="${textAlignClass} font-sans p-1.5 min-w-[200px]">
           <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-orange-100 text-orange-700 border border-orange-200">
-            الموقع المحدد بالنقر المباشر
+            ${t('map.clickedLocation')}
           </span>
-          <h5 class="font-extrabold text-slate-900 text-xs mt-1.5 leading-snug mb-1">تعديل جيو-مكاني مؤقت</h5>
-          <p class="text-[10px] text-slate-500 leading-relaxed mb-2">انقر على زر "اعتماد وحفظ" باللوحة لاعتماد تعديل الإحداثيات مباشرة للمشروع.</p>
+          <h5 class="font-extrabold text-slate-900 text-xs mt-1.5 leading-snug mb-1">${t('map.tempGeoEdit')}</h5>
+          <p class="text-[10px] text-slate-500 leading-relaxed mb-2">${t('map.saveCoordsInstruction')}</p>
           <div class="text-[9px] text-slate-500 font-mono space-y-0.5 mt-2 border-t border-slate-100 pt-1.5">
-            <div>خط العرض: <strong class="text-slate-800">${pendingCoords.lat.toFixed(6)}</strong></div>
-            <div>خط الطول: <strong class="text-slate-800">${pendingCoords.lng.toFixed(6)}</strong></div>
+            <div>${t('map.latitude')} <strong class="text-slate-800">${pendingCoords.lat.toFixed(6)}</strong></div>
+            <div>${t('map.longitude')} <strong class="text-slate-800">${pendingCoords.lng.toFixed(6)}</strong></div>
           </div>
         </div>
       `;
@@ -916,8 +908,8 @@ export function ProjectMapViewer({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h4 className="text-[10px] leading-[21px] font-bold truncate max-w-[210px] sm:max-w-xs md:max-w-md text-right" title={project?.name || "الخريطة العامة والمجمل المالي والربط"}>
-                {project?.name || "الخريطة التفاعلية "}
+              <h4 className={`text-[10px] leading-[21px] font-bold truncate max-w-[210px] sm:max-w-xs md:max-w-md ${isRtl ? 'text-right' : 'text-left'}`} title={project?.name || t('map.interactiveMap')}>
+                {project?.name || t('map.interactiveMap')}
               </h4>
             </div>
           </div>
@@ -935,9 +927,9 @@ export function ProjectMapViewer({
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="عرض نقاط المشروع على خريطة ماب الافتراضية المفتوحة"
+                title={t('map.pointsMap')}
               >
-                نقاط ماب (OSM)
+                {t('map.pointsMap')}
               </button>
               <button
                 type="button"
@@ -947,9 +939,9 @@ export function ProjectMapViewer({
                     ? 'bg-blue-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="عرض خريطة قوقل ماب التفاعلية الكاملة"
+                title={t('map.googleMap')}
               >
-                خريطة قوقل ماب (Google Maps) 🗺️
+                {t('map.googleMap')}
               </button>
             </div>
           )}
@@ -958,16 +950,16 @@ export function ProjectMapViewer({
             <button
               onClick={() => onEditClick(project)}
               className="flex items-center gap-1 p-1 px-1.5 sm:px-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-[9px] sm:text-xs font-bold transition-all text-white cursor-pointer shrink-0 shadow-xs"
-              title="تعديل المخطط"
+              title={t('map.edit')}
             >
               <Edit className="h-2.5 w-2.5 sm:h-3 sm:w-3 shrink-0 text-blue-200" />
-              <span>تعديل</span>
+              <span>{t('map.edit')}</span>
             </button>
           )}
 
           <button
             onClick={() => setIsFullscreen(!isFullscreen)}
-            title={isFullscreen ? "تصغير المستعرض" : "توسيع ملء الشاشة"}
+            title={isFullscreen ? t('map.minimize') : t('map.fullscreen')}
             className="p-1 sm:p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors text-slate-300 hover:text-white cursor-pointer shrink-0 flex items-center justify-center animate-pulse-once"
           >
             {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
@@ -988,9 +980,9 @@ export function ProjectMapViewer({
       {/* Google My Maps interactive URL banner */}
       {!isMasterMap && project && (
         <div className="bg-blue-50 dark:bg-slate-800/80 border-b border-blue-100 dark:border-slate-700 px-4 py-2 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-blue-900 dark:text-blue-200 gap-2 font-medium">
-          <div className="flex items-center gap-2 text-right min-w-0 flex-1">
+          <div className={`flex items-center gap-2 ${isRtl ? 'text-right' : 'text-left'} min-w-0 flex-1`}>
             <Globe className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
-            <span className="font-bold text-blue-800 dark:text-blue-300 shrink-0">معاينة تفاصيل المشروع:</span>
+            <span className="font-bold text-blue-800 dark:text-blue-300 shrink-0">{t('map.previewDetails')}</span>
             <span className="text-slate-600 dark:text-slate-300 text-[11px] font-bold truncate">
               {project.name}
             </span>
@@ -1000,10 +992,10 @@ export function ProjectMapViewer({
               type="button"
               onClick={() => setShowAutoAnalysisModal(true)}
               className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-black transition-all text-[10px] cursor-pointer shadow-xs flex items-center gap-1 shrink-0 active:scale-95"
-              title="انقر لفتح وحدة التحليل التلقائي وإجراء حصر الأطوال"
+              title={t('map.autoAnalysisUnit')}
             >
               <BarChart3 className="h-3 w-3" />
-              <span>وحدة التحليل التلقائي 📊</span>
+              <span>{t('map.autoAnalysisUnit')}</span>
             </button>
 
             {canOpenExternalLinks !== false && project.mapUrl && (
@@ -1013,7 +1005,7 @@ export function ProjectMapViewer({
                 rel="noopener noreferrer"
                 className="px-2 py-1 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-slate-700 rounded-lg font-bold transition-all text-[10px] inline-flex items-center gap-1 cursor-pointer"
               >
-                <span>فتح وملاحة ↗️</span>
+                <span>{t('map.openAndNavigate')}</span>
               </a>
             )}
             {project.mapUrl && (mapMode !== 'iframe' ? (
@@ -1021,12 +1013,12 @@ export function ProjectMapViewer({
                 onClick={() => setMapMode('iframe')}
                 className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-extrabold transition-all text-[10px] cursor-pointer shadow-xs"
               >
-                تفعيل المعاينة🗺️
+                {t('map.enablePreview')}
               </button>
             ) : (
               <span className="px-2 py-1 bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg font-bold text-[10px] flex items-center gap-1 shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                المعاينة نشطة
+                {t('map.previewActive')}
               </span>
             ))}
           </div>
@@ -1037,16 +1029,16 @@ export function ProjectMapViewer({
       <div className="flex-1 bg-slate-100 relative min-h-0">
         {/* Floating map search bar panel */}
         {isLeafletReady && mapMode === 'osm' && (
-          <div className="absolute top-3 right-3 z-[1001] text-right font-sans">
+          <div className={`absolute top-3 ${isRtl ? 'right-3 text-right' : 'left-14 text-left'} z-[1001] font-sans`}>
             {!isSearchExpanded ? (
               <button
                 type="button"
                 onClick={() => setIsSearchExpanded(true)}
                 className="flex items-center gap-1.5 px-4 py-2.5 bg-white hover:bg-slate-50 text-blue-600 font-black text-xs rounded-xl border border-slate-200/80 shadow-lg cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]"
-                dir="rtl"
+                dir={isRtl ? 'rtl' : 'ltr'}
               >
                 <Search className="h-4 w-4 text-blue-500 shrink-0" />
-                <span>بحث 🔎</span>
+                <span>{t('map.search')}</span>
               </button>
             ) : (
               <div className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden flex flex-col w-[290px] sm:w-[350px] max-w-[calc(100vw-32px)] transition-all duration-300">
@@ -1058,7 +1050,7 @@ export function ProjectMapViewer({
                       clearSearchMarker();
                     }}
                     className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 shrink-0 cursor-pointer border-0"
-                    title="إغلاق وإخفاء البحث"
+                    title={t('map.closeSearch')}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -1067,17 +1059,17 @@ export function ProjectMapViewer({
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="ابحث بالاسم، الحي، الإحداثيات، أو بالصوت..."
-                      className="w-full text-right text-xs pr-2.5 pl-14 py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-800 font-bold placeholder-slate-400"
-                      dir="rtl"
+                      placeholder={t('map.searchPlaceholder')}
+                      className={`w-full ${isRtl ? 'text-right pr-2.5 pl-14' : 'text-left pl-2.5 pr-14'} text-xs py-2 bg-white rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-800 font-bold placeholder-slate-400`}
+                      dir={isRtl ? 'rtl' : 'ltr'}
                     />
-                    <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <div className={`absolute ${isRtl ? 'left-1.5' : 'right-1.5'} top-1/2 -translate-y-1/2 flex items-center gap-1`}>
                       {searchQuery && (
                         <button
                           type="button"
                           onClick={clearSearchMarker}
                           className="p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 cursor-pointer transition-colors"
-                          title="مسح البحث والرجوع"
+                          title={t('map.clearSearch')}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -1085,7 +1077,7 @@ export function ProjectMapViewer({
                       <VoiceSearchButton
                         size="sm"
                         onSpeechResult={(text) => setSearchQuery(text)}
-                        placeholderHint="تحدث بـاسم المشروع، الشارع، أو الإحداثيات..."
+                        placeholderHint={t('map.voicePlaceholder')}
                       />
                     </div>
                   </div>
@@ -1097,35 +1089,35 @@ export function ProjectMapViewer({
                     {isSearching ? (
                       <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                     ) : (
-                      <span>بحث</span>
+                      <span>{t('map.searchSubmit')}</span>
                     )}
                   </button>
                 </form>
 
                 {/* Quick interactive search guide tip */}
                 <div className="px-3 py-1.5 bg-blue-500/5 text-[9.5px] text-slate-500 font-bold border-b border-slate-100/80 flex items-center justify-between select-none">
-                  <span className="text-blue-700">🔎 تلميح البحث السريع:</span>
-                  <span className="text-slate-600"> "" "24.71, 46.67"</span>
+                  <span className="text-blue-700">{t('map.searchTip')}</span>
+                  <span className="text-slate-600"> {t('map.searchTipExample')}</span>
                 </div>
 
               {/* Error indicator */}
               {searchError && (
                 <div className="p-2.5 px-3 bg-rose-50 border-b border-rose-100 text-[10px] text-rose-700 font-bold flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                  <p className="flex-1 leading-normal text-right">{searchError}</p>
+                  <p className={`flex-1 leading-normal ${isRtl ? 'text-right' : 'text-left'}`}>{searchError}</p>
                 </div>
               )}
 
               {/* Quick info if active search marker */}
               {activeSearchMarkerCoords && !searchResults.length && !matchingProjects.length && !searchError && (
                 <div className="p-2 px-3 bg-purple-50 text-[10px] text-purple-700 font-bold flex items-center justify-between">
-                  <span>تم تحديد الإحداثيات على الخريطة</span>
+                  <span>{t('map.searchResultCoords')}</span>
                   <button 
                     type="button" 
                     onClick={clearSearchMarker} 
                     className="text-purple-900 underline font-bold cursor-pointer hover:text-purple-950 border-0 bg-transparent text-[10px]"
                   >
-                    إلغاء التحديد ✖
+                    {t('map.cancelSelection')}
                   </button>
                 </div>
               )}
@@ -1133,8 +1125,8 @@ export function ProjectMapViewer({
               {/* Local projects matched results */}
               {matchingProjects.length > 0 && (
                 <div className="flex flex-col max-h-[145px] overflow-y-auto divide-y divide-slate-100 border-b border-slate-105">
-                  <div className="p-1 px-2.5 bg-blue-50 text-[9.5px] font-black text-blue-800 text-right">
-                    المشاريع التابعة للمطابقة المحلّية ({matchingProjects.length})
+                  <div className={`p-1 px-2.5 bg-blue-50 text-[9.5px] font-black text-blue-800 ${isRtl ? 'text-right' : 'text-left'}`}>
+                    {t('map.localMatches')} ({matchingProjects.length})
                   </div>
                   {matchingProjects.map((proj) => (
                     <button
@@ -1144,13 +1136,15 @@ export function ProjectMapViewer({
                         const { lat, lng } = getProjectCoordinates(proj);
                         focusOnCoordinates(lat, lng, proj.name, proj);
                       }}
-                      className="p-2 px-3 text-right hover:bg-[#F8FAFC] transition-colors flex flex-col w-full text-xs font-semibold text-slate-705 cursor-pointer border-0 bg-transparent"
+                      className={`p-2 px-3 ${isRtl ? 'text-right' : 'text-left'} hover:bg-[#F8FAFC] transition-colors flex flex-col w-full text-xs font-semibold text-slate-705 cursor-pointer border-0 bg-transparent`}
                     >
                       <div className="flex items-center justify-between w-full">
-                        <span className="truncate text-[11px] leading-tight text-right flex-1 text-slate-800 font-extrabold">{proj.name}</span>
-                        <span className="text-[8.5px] shrink-0 font-bold px-1.5 bg-blue-100 text-blue-700 rounded-sm mr-2">{proj.classification}</span>
+                        <span className={`truncate text-[11px] leading-tight ${isRtl ? 'text-right' : 'text-left'} flex-1 text-slate-800 font-extrabold`}>{proj.name}</span>
+                        <span className="text-[8.5px] shrink-0 font-bold px-1.5 bg-blue-100 text-blue-700 rounded-sm mx-2">{translateDynamic(proj.classification || '')}</span>
                       </div>
-                      <span className="text-[9.5px] text-slate-400 font-bold mt-1 text-right">الجهة: {proj.region} | فئة: {proj.scope}</span>
+                      <span className={`text-[9.5px] text-slate-400 font-bold mt-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                        {t('list.region')}: {translateDynamic(proj.region || '')} | {translateDynamic(proj.scope || '')}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1159,8 +1153,8 @@ export function ProjectMapViewer({
               {/* Nominatim dynamic Geocoding API results */}
               {searchResults.length > 0 && (
                 <div className="flex flex-col max-h-[165px] overflow-y-auto divide-y divide-slate-100">
-                  <div className="p-1 px-2.5 bg-emerald-50 text-[9.5px] font-black text-emerald-800 text-right">
-                    نتائج العنونة ومطابقة الشوارع والأحياء العامة ({searchResults.length})
+                  <div className={`p-1 px-2.5 bg-emerald-50 text-[9.5px] font-black text-emerald-800 ${isRtl ? 'text-right' : 'text-left'}`}>
+                    {t('map.geocodingMatches')} ({searchResults.length})
                   </div>
                   {searchResults.map((result: any, idx: number) => (
                     <button
@@ -1171,14 +1165,14 @@ export function ProjectMapViewer({
                         const lng = parseFloat(result.lon);
                         focusOnCoordinates(lat, lng, result.display_name.split(',')[0] || searchQuery);
                       }}
-                      className="p-2 px-3 text-right hover:bg-[#F8FAFC] transition-colors flex items-start gap-2 w-full text-xs text-slate-700 cursor-pointer border-0 bg-transparent"
+                      className={`p-2 px-3 ${isRtl ? 'text-right' : 'text-left'} hover:bg-[#F8FAFC] transition-colors flex items-start gap-2 w-full text-xs text-slate-700 cursor-pointer border-0 bg-transparent`}
                     >
                       <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-500 mt-0.5" />
                       <div className="flex-1 min-w-0">
-                        <p className="font-extrabold truncate text-[11px] text-slate-800 text-right leading-tight">
+                        <p className={`font-extrabold truncate text-[11px] text-slate-800 ${isRtl ? 'text-right' : 'text-left'} leading-tight`}>
                           {result.display_name.split(',')[0]}
                         </p>
-                        <p className="text-[9.5px] text-slate-400 truncate text-right font-medium leading-none mt-1">
+                        <p className={`text-[9.5px] text-slate-400 truncate ${isRtl ? 'text-right' : 'text-left'} font-medium leading-none mt-1`}>
                           {result.display_name.split(',').slice(1, 4).join(', ')}
                         </p>
                       </div>
@@ -1197,7 +1191,7 @@ export function ProjectMapViewer({
             <button
               type="button"
               onClick={() => setIsMapUnlocked(!isMapUnlocked)}
-              title={isMapUnlocked ? "تعطيل تحريك الخريطة (وضع التمرير الآمن)" : "تمكين تحريك وتصفح الخريطة 🗺️"}
+              title={isMapUnlocked ? t('map.lockScroll') : t('map.unlockScroll')}
               className={`w-10 h-10 rounded-xl shadow-lg border flex items-center justify-center cursor-pointer select-none transition-all active:scale-95 relative ${
                 isMapUnlocked
                   ? 'bg-blue-600 border-blue-500 text-white hover:bg-blue-700 hover:scale-[1.05]'
@@ -1232,7 +1226,7 @@ export function ProjectMapViewer({
 
         {/* Floating map classification legend block */}
         {isLeafletReady && mapMode === 'osm' && (
-          <div className="absolute bottom-4 left-4 z-[999] max-w-[320px] sm:max-w-[400px]" dir="rtl">
+          <div className="absolute bottom-4 left-4 z-[999] max-w-[320px] sm:max-w-[400px]" dir={isRtl ? 'rtl' : 'ltr'}>
             {!isLegendExpanded ? (
               <button
                 type="button"
@@ -1242,14 +1236,14 @@ export function ProjectMapViewer({
                     runProjectAnalysis(project);
                   }
                 }}
-                title="مفاتيح الخريطة وحصر الأطوال"
+                title={t('legend.title')}
                 className="px-3.5 py-2.5 rounded-xl bg-white/95 dark:bg-slate-900/95 hover:bg-white dark:hover:bg-slate-900 border border-slate-200/85 dark:border-slate-800 shadow-2xl flex items-center gap-2 text-blue-600 dark:text-blue-400 transition-all active:scale-95 hover:scale-105 cursor-pointer font-extrabold text-xs"
               >
                 <Key className="h-4 w-4 text-amber-500 animate-pulse" />
-                <span>مفاتيح الخريطة 📊</span>
+                <span>{t('map.legendButton')}</span>
                 {activeAnalysisResult && (
                   <span className="text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 font-mono font-bold px-2 py-0.5 rounded-full border border-blue-200 dark:border-blue-800">
-                    {activeAnalysisResult.totalLengthKm} كم
+                    {activeAnalysisResult.totalLengthKm} {t('dash.km')}
                   </span>
                 )}
               </button>
@@ -1277,9 +1271,9 @@ export function ProjectMapViewer({
                     <div className="w-16 h-16 rounded-full border-4 border-slate-700 border-t-blue-500 animate-spin"></div>
                     <div className="w-10 h-10 rounded-full border-4 border-slate-705 border-t-emerald-500 animate-spin absolute" style={{ animationDirection: 'reverse', animationDuration: '1.2s' }}></div>
                   </div>
-                  <h4 className="text-sm font-extrabold text-white mb-1.5">جاري جلب تفاصيل المخطط التفاعلي</h4>
+                  <h4 className="text-sm font-extrabold text-white mb-1.5">{t('map.fetchingIframe')}</h4>
                   <p className="text-[11px] text-slate-400 max-w-sm leading-relaxed">
-                    جاري المعالجة...
+                    {t('map.processing')}
                   </p>
                 </div>
               )}
@@ -1303,9 +1297,9 @@ export function ProjectMapViewer({
             <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-slate-50 space-y-3">
               <AlertCircle className="h-10 w-10 text-slate-400" />
               <div className="space-y-1 max-w-xs">
-                <h5 className="font-bold text-slate-700 text-sm">لا يتوفر رابط خارجي لهذا المخطط التفصيلي</h5>
+                <h5 className="font-bold text-slate-700 text-sm">{t('map.noExternalLink')}</h5>
                 <p className="text-xs text-slate-500">
-                  يرجى اعتماد مستند الـ KMZ أو الرابط الخارجي. يمكنك الاعتماد التام على مخطط نقاط ماب المفتوحة البديل.
+                  {t('map.noExternalLinkDesc')}
                 </p>
               </div>
             </div>
@@ -1317,7 +1311,7 @@ export function ProjectMapViewer({
           <div className="absolute inset-0 flex items-center justify-center bg-white/90 z-20">
             <div className="text-center space-y-3">
               <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" />
-              <p className="text-xs text-slate-500 font-bold">جاري تحميل البنية الجغرافية لخريطة الرياض المفتوحة...</p>
+              <p className="text-xs text-slate-500 font-bold">{t('map.loadingTiles')}</p>
             </div>
           </div>
         )}
@@ -1328,7 +1322,7 @@ export function ProjectMapViewer({
         {!isMasterMap ? (
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-700">
-              الاستشاري المشرف:
+              {t('map.supervisingConsultant')}
             </span>
             <span className="text-slate-600 truncate max-w-[200px]">
               {project?.consultant}
@@ -1341,14 +1335,14 @@ export function ProjectMapViewer({
         {isMasterMap ? (
           <div className="flex items-center gap-1.5 text-blue-700 font-bold text-[11px] bg-blue-50 border border-blue-100 px-3 py-1 rounded-lg">
             <Sparkles className="h-3.5 w-3.5 animate-pulse text-indigo-600" />
-            <span>  </span>
+            <span>{t('dash.accordingToPerms')}</span>
           </div>
         ) : (
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-            <span>التصنيف : {project?.classification}</span>
+            <span>{t('map.classification')} {translateDynamic(project?.classification || '')}</span>
             <span className="w-1 h-1 rounded-full bg-slate-300"></span>
-            <span>الحالة: <span className="text-emerald-700 font-bold">{project?.status}</span></span>
+            <span>{t('map.status')} <span className="text-emerald-700 font-bold">{translateDynamic(project?.status || '')}</span></span>
           </div>
         )}
       </div>
@@ -1356,7 +1350,7 @@ export function ProjectMapViewer({
       {/* Auto Analysis Modal */}
       {showAutoAnalysisModal && project && (
         <div className="fixed inset-0 z-[9999] bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-5xl w-full max-h-[92vh] overflow-y-auto border border-slate-200 dark:border-slate-800 shadow-2xl p-4 sm:p-6 text-right font-sans relative" dir="rtl">
+          <div className={`bg-white dark:bg-slate-900 rounded-3xl max-w-5xl w-full max-h-[92vh] overflow-y-auto border border-slate-200 dark:border-slate-800 shadow-2xl p-4 sm:p-6 ${isRtl ? 'text-right' : 'text-left'} font-sans relative`} dir={isRtl ? 'rtl' : 'ltr'}>
             <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="p-3 bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-2xl shadow-md shrink-0">
@@ -1364,11 +1358,11 @@ export function ProjectMapViewer({
                 </div>
                 <div>
                   <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    وحدة 'التحليل التلقائي' للمشروع المختار
+                    {t('map.autoAnalysisTitle')}
                     <Sparkles className="h-4 w-4 text-amber-500 animate-pulse" />
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    المشروع: <span className="font-bold text-blue-600 dark:text-blue-400">{project.name}</span> ({project.operationalNumber || project.id}) • لحساب أطوال الخطوط (LineString) فقط باستعمال مكتبة @turf/length في ذاكرة المتصفح مع استبعاد المضلعات والنقاط.
+                    {t('map.projectLabel')} <span className="font-bold text-blue-600 dark:text-blue-400">{project.name}</span> ({project.operationalNumber || project.id}) • {t('map.autoAnalysisDesc')}
                   </p>
                 </div>
               </div>

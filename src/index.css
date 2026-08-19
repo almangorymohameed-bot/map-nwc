@@ -17,10 +17,17 @@
 
 body {
   font-family: var(--font-sans);
-  direction: rtl;
   background-color: #f8fafc;
   color: #1e293b;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+[dir="rtl"] body {
+  direction: rtl;
+}
+
+[dir="ltr"] body {
+  direction: ltr;
 }
 
 .dark body {
