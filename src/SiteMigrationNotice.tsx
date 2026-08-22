@@ -45,12 +45,9 @@ export const SiteMigrationNotice: React.FC = () => {
         <div className="flex items-center gap-3">
           <NWCLogo />
           <div>
-            <h1 className="text-sm sm:text-base font-extrabold text-white tracking-tight">
+            <h1 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
               نظام الخرائط التفاعلية الموحد
             </h1>
-            <p className="text-[11px] text-slate-400 font-medium">
-              القطاع الأوسط • شركة المياه الوطنية
-            </p>
           </div>
         </div>
 
@@ -175,7 +172,7 @@ export const SiteMigrationNotice: React.FC = () => {
 
       {/* Footer */}
       <footer className="relative z-10 w-full max-w-4xl text-center py-4 text-xs text-slate-500 border-t border-slate-800/60">
-        <p>© {new Date().getFullYear()} شركة المياه الوطنية • القطاع الأوسط • جميع الحقوق محفوظة</p>
+        <p>© {new Date().getFullYear()} نظام الخرائط التفاعلية • جميع الحقوق محفوظة</p>
       </footer>
     </div>
   );
